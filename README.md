@@ -21,6 +21,7 @@ model="gpt-3.5-turbo"
 Esta IA Local se compone de 10 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
 El programa puente (main.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
 Se incluyen dos codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python.
+
 Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
@@ -30,7 +31,7 @@ A continuacion se dan las caracteristicas y detalles del programa principal mas 
 ### Conexion IA Externos (ai_models.py)
 ### Programa de Audio/Video (audio_video.py)
 ### Programa de Creacion/Lectura/Analisis de Archivos Word/Excel/CSV/Python/PDF (io_files.py)
-### Comentarios sobre el programa (readme)
+### Comentarios sobre las limitaciones del programa (readme)
 ### Programa de Calculo Simbolico, Memoria Vectorial y Base De Datos con IA (modules_extra.py)
 ### Programa de Cifrado/Encriptacion de Archivos (security.py)
 ### Programa de Monitoreo del PC (utils.py)
