@@ -28,6 +28,7 @@ A continuacion se dan las caracteristicas y detalles del programa principal mas 
 ### Conexion IA Externos (ai_models.py)
 ### Programa de Audio/Video (audio_video.py)
 ### Programa de Creacion/Lectura/Analisis de Archivos Word/Excel/CSV/Python/PDF (io_files.py)
+### Comentarios sobre el programa (readme)
 ### Programa de Calculo Simbolico, Memoria Vectorial y Base De Datos con IA (modules_extra.py)
 ### Programa de Cifrado/Encriptacion de Archivos (security.py)
 ### Programa de Monitoreo del PC (utils.py)
