@@ -2,6 +2,10 @@
 ## Informacion General
 Esta IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, ChatGPT y analisis activo de Copilot con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI en base a un sistema local PC de las siguientes especificaciones:
 
+PROCESADOR:
+RAM:
+GPU:
+
 ## API
 Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 
