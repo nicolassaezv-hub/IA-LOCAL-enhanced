@@ -1,6 +1,6 @@
 # Copilot (IA-LOCAL)
 ## Informacion General
-Esta IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, ChatGPT y analisis activo de Copilot con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI en base a un sistema local PC de las siguientes especificaciones:
+Esta IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, ChatGPT y analisis activo de Copilot con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI en base a un sistema local PC de las siguientes especificaciones
 
 PROCESADOR:
 
@@ -33,10 +33,14 @@ A continuacion se dan las caracteristicas y detalles del programa principal mas 
 ### Programa de Cifrado/Encriptacion de Archivos (security.py)
 ### Programa de Monitoreo del PC (utils.py)
 ### Programa de Creacion de Grafico CSV y Tabla de DataFrame Pandas (visualization.py)
+### Grafico de Ejemplo
+### Tabla de Ejemplo
 ### Programa de Extraccion/Peticion de Informacion en Internet (web_tools.py)
 
 ## Modulos (Instalados y/o Integrados)
-Aqui el archivo con el listado de modulos Instalados e Integrados https://docs.google.com/spreadsheets/d/1I2JpcZ6_V_WUdXkkYkP7MZ1fgQcPW6y73xBbtZjOfHI/edit?usp=sharing
+Aqui el archivo con el listado de modulos Instalados e Integrados
+ https://docs.google.com/spreadsheets/d/1I2JpcZ6_V_WUdXkkYkP7MZ1fgQcPW6y73xBbtZjOfHI/edit?usp=sharing
+
 ## Actualizacion de Modulos (Semanal)
 ## Ejemplos de Ejecucion con Dataset
 
