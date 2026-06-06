@@ -20,6 +20,7 @@ model="gpt-3.5-turbo"
 ## Estructura
 Esta IA Local se compone de 10 Codigos Python para asegurar eficiencia y rapidez en la ejecucion.
 El programa puente (main.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad. Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
+
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
 ### Programa Puente (main.py + activate.bat)
