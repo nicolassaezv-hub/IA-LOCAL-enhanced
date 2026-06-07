@@ -47,7 +47,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+```
 </details>
 
 ### Memoria de la IA (memory.py + memory.db)
