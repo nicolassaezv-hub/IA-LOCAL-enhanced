@@ -33,7 +33,7 @@ Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecut
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
 
-### Programa Puente (main.py + activate.bat)
+### Programa Puente (main.py + iniciar_astra.bat)
 
 - [main.py](main.py)
 
@@ -247,6 +247,20 @@ if __name__ == "__main__":
 
         print(Fore.YELLOW + "Copilot: " + Style.RESET_ALL + str(respuesta))
 ```
+</details>
+
+- [run_astra.bat](run_astra.bat) → Script de inicio
+
+<details>
+<summary>Ver contenido de run_astra.bat</summary>
+
+```bat
+@echo off
+REM Activar entorno virtual y ejecutar main.py
+call venv\Scripts\activate
+python main.py
+pause
+'''
 </details>
 
 ### Memoria de la IA (memory.py + memory.db)
