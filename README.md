@@ -247,6 +247,7 @@ if __name__ == "__main__":
 
         print(Fore.YELLOW + "Copilot: " + Style.RESET_ALL + str(respuesta))
 ```
+
 </details>
 
 - [run_astra.bat](run_astra.bat) → Script de inicio
