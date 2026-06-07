@@ -257,8 +257,9 @@ if __name__ == "__main__":
 
 ```bat
 @echo off
-REM Activar entorno virtual y ejecutar main.py
-call venv\Scripts\activate
+cd C:\Users\nicol\copilot_wrapper\venv\Scripts
+call activate.bat
+cd ..\astra
 python main.py
 pause
 ```
