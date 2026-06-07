@@ -250,10 +250,10 @@ if __name__ == "__main__":
 
 </details>
 
-- [run_astra.bat](run_astra.bat) → Script de inicio
+- [iniciar_astra.bat](iniciar_astra.bat) → Script de inicio
 
 <details>
-<summary>Ver contenido de run_astra.bat</summary>
+<summary>Ver contenido de iniciar_astra.bat</summary>
 
 ```bat
 @echo off
