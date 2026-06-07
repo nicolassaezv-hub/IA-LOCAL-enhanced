@@ -281,8 +281,6 @@ if __name__ == "__main__":
 
 </details>
 
-- [iniciar_astra.bat](iniciar_astra.bat) → Script de inicio
-
 <details>
 <summary>Ver contenido de iniciar_astra.bat</summary>
 
