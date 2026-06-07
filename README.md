@@ -33,7 +33,9 @@ Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecut
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
 - [main.py](main.py) → Script principal
-
+<details>
+<summary>Ver contenido de main.py</summary>
+ 
 ### Programa Puente (main.py + activate.bat)
 ### Memoria de la IA (memory.py + memory.db)
 ### Conexion IA Externos (ai_models.py)
