@@ -261,7 +261,7 @@ REM Activar entorno virtual y ejecutar main.py
 call venv\Scripts\activate
 python main.py
 pause
-'''
+```
 
 </details>
 
