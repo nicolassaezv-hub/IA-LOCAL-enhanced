@@ -262,6 +262,7 @@ call venv\Scripts\activate
 python main.py
 pause
 '''
+
 </details>
 
 ### Memoria de la IA (memory.py + memory.db)
