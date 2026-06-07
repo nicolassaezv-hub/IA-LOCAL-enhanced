@@ -35,8 +35,15 @@ A continuacion se dan las caracteristicas y detalles del programa principal mas 
 
 ### Programa Puente (main.py + iniciar_astra.bat)
 
-- [main.py](main.py)
+# Main.py
 
+El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos 
+
+- `lee pdf [nombre_archivo]`
+- `lee word [nombre_archivo]`
+- `lee excel [nombre_archivo]`
+- `lee csv [nombre_archivo]`
+- `analiza csv [nombre_archivo]`
 <details>
 <summary>Ver contenido de main.py</summary>
 
