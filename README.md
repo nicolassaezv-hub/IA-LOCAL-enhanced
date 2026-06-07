@@ -296,13 +296,12 @@ pause
 </details>
 
 ### Memoria de la IA (memory.py + memory.db)
-- [main.py](main.py)
 
 <details>
-<summary>Ver contenido de main.py</summary>
+<summary>Ver contenido de memory.py</summary>
 
 ```python
-# main.py
+# mmemory.py
 def main():
     print("Hola desde el main!")
 
@@ -313,13 +312,11 @@ if __name__ == "__main__":
 
 ### Conexion IA Externos (ai_models.py)
 
-- [main.py](main.py)
-
 <details>
-<summary>Ver contenido de main.py</summary>
+<summary>Ver contenido de ai_models.py</summary>
 
 ```python
-# main.py
+# ai_models.py
 def main():
     print("Hola desde el main!")
 
@@ -330,13 +327,11 @@ if __name__ == "__main__":
 
 ### Programa de Audio/Video (audio_video.py)
 
-- [main.py](main.py)
-
 <details>
-<summary>Ver contenido de main.py</summary>
+<summary>Ver contenido de audio_video.py</summary>
 
 ```python
-# main.py
+# audio_video.py
 def main():
     print("Hola desde el main!")
 
@@ -347,13 +342,11 @@ if __name__ == "__main__":
 
 ### Programa de Creacion/Lectura/Analisis de Archivos Word/Excel/CSV/Python/PDF (io_files.py)
 
-- [main.py](main.py)
-
 <details>
-<summary>Ver contenido de main.py</summary>
+<summary>Ver contenido de io_files.py</summary>
 
 ```python
-# main.py
+# io_files.py
 def main():
     print("Hola desde el main!")
 
@@ -365,13 +358,11 @@ if __name__ == "__main__":
 ### Comentarios sobre las limitaciones del programa (readme)
 ### Programa de Calculo Simbolico, Memoria Vectorial y Base De Datos con IA (modules_extra.py)
 
-- [main.py](main.py)
-
 <details>
-<summary>Ver contenido de main.py</summary>
+<summary>Ver contenido de modules_extra.py</summary>
 
 ```python
-# main.py
+# modules_extra.py
 def main():
     print("Hola desde el main!")
 
@@ -382,13 +373,11 @@ if __name__ == "__main__":
 
 ### Programa de Cifrado/Encriptacion de Archivos (security.py)
 
-- [main.py](main.py)
-
 <details>
-<summary>Ver contenido de main.py</summary>
+<summary>Ver contenido de security.py</summary>
 
 ```python
-# main.py
+# security.py
 def main():
     print("Hola desde el main!")
 
@@ -399,13 +388,11 @@ if __name__ == "__main__":
 
 ### Programa de Monitoreo del PC (utils.py)
 
-- [main.py](main.py)
-
 <details>
-<summary>Ver contenido de main.py</summary>
+<summary>Ver contenido de utils.py</summary>
 
 ```python
-# main.py
+# utils.py
 def main():
     print("Hola desde el main!")
 
@@ -416,13 +403,11 @@ if __name__ == "__main__":
 
 ### Programa de Creacion de Grafico CSV y Tabla de DataFrame Pandas (visualization.py)
 
-- [main.py](main.py)
-
 <details>
-<summary>Ver contenido de main.py</summary>
+<summary>Ver contenido de visualization.py</summary>
 
 ```python
-# main.py
+# visualization.py
 def main():
     print("Hola desde el main!")
 
@@ -435,13 +420,11 @@ if __name__ == "__main__":
 ### Tabla de Ejemplo
 ### Programa de Extraccion/Peticion de Informacion en Internet (web_tools.py)
 
-- [main.py](main.py)
-
 <details>
-<summary>Ver contenido de main.py</summary>
+<summary>Ver contenido de web_tools.py</summary>
 
 ```python
-# main.py
+# web_tools.py
 def main():
     print("Hola desde el main!")
 
