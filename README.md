@@ -38,7 +38,7 @@ A continuacion se dan las caracteristicas y detalles del programa principal mas 
 - [main.py](main.py)
 <details>
 <summary>Ver contenido de main.py</summary>
-```python
+
 # Aquí iría el código de main.py
 </details>
 
