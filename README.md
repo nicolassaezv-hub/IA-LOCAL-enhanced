@@ -51,17 +51,159 @@ if __name__ == "__main__":
 </details>
 
 ### Memoria de la IA (memory.py + memory.db)
+- [main.py](main.py)
+
+<details>
+<summary>Ver contenido de main.py</summary>
+
+```python
+# main.py
+def main():
+    print("Hola desde el main!")
+
+if __name__ == "__main__":
+    main()
+```
+</details>
+
 ### Conexion IA Externos (ai_models.py)
+
+- [main.py](main.py)
+
+<details>
+<summary>Ver contenido de main.py</summary>
+
+```python
+# main.py
+def main():
+    print("Hola desde el main!")
+
+if __name__ == "__main__":
+    main()
+```
+</details>
+
 ### Programa de Audio/Video (audio_video.py)
+
+- [main.py](main.py)
+
+<details>
+<summary>Ver contenido de main.py</summary>
+
+```python
+# main.py
+def main():
+    print("Hola desde el main!")
+
+if __name__ == "__main__":
+    main()
+```
+</details>
+
 ### Programa de Creacion/Lectura/Analisis de Archivos Word/Excel/CSV/Python/PDF (io_files.py)
+
+- [main.py](main.py)
+
+<details>
+<summary>Ver contenido de main.py</summary>
+
+```python
+# main.py
+def main():
+    print("Hola desde el main!")
+
+if __name__ == "__main__":
+    main()
+```
+</details>
+
 ### Comentarios sobre las limitaciones del programa (readme)
 ### Programa de Calculo Simbolico, Memoria Vectorial y Base De Datos con IA (modules_extra.py)
+
+- [main.py](main.py)
+
+<details>
+<summary>Ver contenido de main.py</summary>
+
+```python
+# main.py
+def main():
+    print("Hola desde el main!")
+
+if __name__ == "__main__":
+    main()
+```
+</details>
+
 ### Programa de Cifrado/Encriptacion de Archivos (security.py)
+
+- [main.py](main.py)
+
+<details>
+<summary>Ver contenido de main.py</summary>
+
+```python
+# main.py
+def main():
+    print("Hola desde el main!")
+
+if __name__ == "__main__":
+    main()
+```
+</details>
+
 ### Programa de Monitoreo del PC (utils.py)
+
+- [main.py](main.py)
+
+<details>
+<summary>Ver contenido de main.py</summary>
+
+```python
+# main.py
+def main():
+    print("Hola desde el main!")
+
+if __name__ == "__main__":
+    main()
+```
+</details>
+
 ### Programa de Creacion de Grafico CSV y Tabla de DataFrame Pandas (visualization.py)
+
+- [main.py](main.py)
+
+<details>
+<summary>Ver contenido de main.py</summary>
+
+```python
+# main.py
+def main():
+    print("Hola desde el main!")
+
+if __name__ == "__main__":
+    main()
+```
+</details>
+
 ### Grafico de Ejemplo
 ### Tabla de Ejemplo
 ### Programa de Extraccion/Peticion de Informacion en Internet (web_tools.py)
+
+- [main.py](main.py)
+
+<details>
+<summary>Ver contenido de main.py</summary>
+
+```python
+# main.py
+def main():
+    print("Hola desde el main!")
+
+if __name__ == "__main__":
+    main()
+```
+</details>
 
 ## Modulos (Instalados y/o Integrados)
 Aqui el archivo con el listado de modulos Instalados e Integrados
