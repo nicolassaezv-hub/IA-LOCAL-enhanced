@@ -36,8 +36,10 @@ A continuacion se dan las caracteristicas y detalles del programa principal mas 
 ### Programa Puente (main.py + activate.bat)
 
 - [main.py](main.py)
+
 <details>
 <summary>Ver contenido de main.py</summary>
+
 ```python
 # main.py
 def main():
