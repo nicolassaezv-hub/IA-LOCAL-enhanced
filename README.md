@@ -32,7 +32,7 @@ Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecut
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
-- [main.py] → Script principal
+- [main.py](main.py) → Script principal
 
 ### Programa Puente (main.py + activate.bat)
 ### Memoria de la IA (memory.py + memory.db)
