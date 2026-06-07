@@ -47,6 +47,24 @@ El nucleo del esqueleto organiza las entradas del usuario y repone todo en una f
 - `lee excel [nombre_archivo] [directorio]`
 - `lee csv [nombre_archivo] [directorio]`
 - `analiza csv [nombre_archivo] [directorio]`
+- `escribe pdf [nombre_archivo] [contenido del archivo]`
+- `escribe word [nombre_archivo] [contenido del archivo]`
+- `escribe excel [nombre_archivo] [contenido del archivo]`
+- `escribe csv [nombre_archivo] [contenido del archivo]`
+- `grafica csv [nombre_archivo] [directorio]`
+- `tabla [nombre_archivo] [directorio]`
+- `rich [nombre_archivo] [directorio]`
+- `voz a texto`
+- `texto a voz [texto]`
+- `analiza audio [nombre_archivo]`
+- `reproducir audio [nombre_archivo]`
+- `convertir audio [nombre_archivo] [formato_salida]`
+- `descargar audio youtube [URL]`
+- `cifra archivo [nombre_archivo]`
+- `hash pass [contraseña]`
+- `verify pass [contraseña] [hash]`
+- `crear jwt [datos]`
+- `verificar jwt [token]`
 
 </details>
 
