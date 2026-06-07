@@ -31,7 +31,9 @@ Se incluyen dos codigos adicionales para verificar la integridad de los modulos 
 Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
-[main.py](./src/main.py) → Script principal
+
+[main.py](main.py) → Script principal
+
 ### Programa Puente (main.py + activate.bat)
 ### Memoria de la IA (memory.py + memory.db)
 ### Conexion IA Externos (ai_models.py)
