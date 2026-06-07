@@ -32,10 +32,8 @@ Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecut
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
-
+- [main.py](./main.py)
 <details>
- - [main.py](main.py) → Script principal
-
 <summary>Ver contenido de main.py</summary>
 </details>
 
