@@ -41,6 +41,7 @@ El nucleo del esqueleto organiza las entradas del usuario y repone todo en una f
 
 <details>
 <summary>Ver comandos</summary>
+	
 - `lee pdf [nombre_archivo] [directorio]`
 - `lee word [nombre_archivo] [directorio]`
 - `lee excel [nombre_archivo] [directorio]`
