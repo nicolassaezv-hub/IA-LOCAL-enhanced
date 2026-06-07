@@ -1,34 +1,3 @@
-# Mi Proyecto 🚀
-
-## Código Python
-Este repositorio incluye el archivo principal:
-
-- [main.py](main.py) → Script principal
-
-<details>
-<summary>Ver contenido de main.py</summary>
-
-```python
-# main.py
-def main():
-    print("Hola desde el main!")
-
-if __name__ == "__main__":
-    main()
-</details>
-
-### 🔎 Explicación
-- La línea `- [main.py](main.py)` sigue siendo tu enlace directo al archivo en GitHub.  
-- El bloque `<details>` crea el botón desplegable.  
-- El `<summary>` es el texto que aparece como “botón” (ejemplo: *Ver contenido de main.py*).  
-- Dentro del bloque usas el bloque de código con ```python para que se muestre con resaltado de sintaxis.  
-- Al hacer clic en el botón, se expone el **código completo** que hayas pegado dentro del bloque.  
-
-De esta forma tu README muestra tanto el **enlace al archivo** como el **display del código** al expandir el bloque.  
-
-¿Quieres que te prepare un ejemplo extendido con **varios archivos Python** (ej. `main.py`, `utils.py`, `config.py`), cada uno con su propio bloque colapsable en el README?
-
-
 # Copilot (IA-LOCAL)
 ## Informacion General
 Esta IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, ChatGPT y analisis activo de Copilot con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI en base a un sistema local PC de las siguientes especificaciones
@@ -63,13 +32,16 @@ Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecut
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
+
+### Programa Puente (main.py + activate.bat)
+
 - [main.py](./main.py)
 <details>
 <summary>Ver contenido de main.py</summary>
+```python
+# Aquí iría el código de main.py
 </details>
 
-
-### Programa Puente (main.py + activate.bat)
 ### Memoria de la IA (memory.py + memory.db)
 ### Conexion IA Externos (ai_models.py)
 ### Programa de Audio/Video (audio_video.py)
