@@ -75,6 +75,7 @@ El nucleo del esqueleto organiza las entradas del usuario y repone todo en una f
 <summary>Ver contenido de main.py</summary>
 
 ```python
+
 # main.py
 
 from memory import init_db
@@ -356,7 +357,7 @@ def cargar_memoria(limit=10):
 
 </details>
 
-- ### memory.db
+[memory.db]
 
 
 
