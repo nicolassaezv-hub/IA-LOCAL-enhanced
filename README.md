@@ -35,7 +35,7 @@ A continuacion se dan las caracteristicas y detalles del programa principal mas 
 
 # Programa Puente (main.py + iniciar_astra.bat)
 
-### Main.py
+- ### Main.py
 
 El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos 
 
