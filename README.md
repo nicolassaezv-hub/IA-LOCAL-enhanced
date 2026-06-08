@@ -746,13 +746,95 @@ comandos_extra = {
 <summary>Ver contenido de security.py</summary>
 
 ```python
-# security.py
-def main():
-    print("Hola desde el main!")
 
-if __name__ == "__main__":
-    main()
+# security.py
+from cryptography.fernet import Fernet
+import bcrypt
+import jwt
+import paramiko
+from passlib.context import CryptContext
+
+# Configuración de Passlib para hashing de contraseñas
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# === Cifrado de archivos con Fernet ===
+def cifra_archivo(ruta):
+    """Cifra un archivo con Fernet y guarda la versión cifrada."""
+    try:
+        key = Fernet.generate_key()
+        fernet = Fernet(key)
+        with open(ruta, "rb") as f:
+            data = f.read()
+        cifrado = fernet.encrypt(data)
+        salida = ruta + ".cifrado"
+        with open(salida, "wb") as f:
+            f.write(cifrado)
+        return f"Archivo cifrado en {salida}\nClave: {key.decode()}"
+    except Exception as e:
+        return f"Error al cifrar archivo: {e}"
+
+# === Hashing de contraseñas con bcrypt ===
+def hash_password(password: str):
+    """Genera un hash seguro de una contraseña usando bcrypt."""
+    try:
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password.encode(), salt)
+        return hashed.decode()
+    except Exception as e:
+        return f"Error al generar hash: {e}"
+
+def verify_password(password: str, hashed: str):
+    """Verifica una contraseña contra su hash."""
+    try:
+        return bcrypt.checkpw(password.encode(), hashed.encode())
+    except Exception as e:
+        return f"Error al verificar contraseña: {e}"
+
+# === Hashing con Passlib ===
+def passlib_hash(password: str):
+    """Genera un hash usando Passlib."""
+    try:
+        return pwd_context.hash(password)
+    except Exception as e:
+        return f"Error en Passlib hash: {e}"
+
+def passlib_verify(password: str, hashed: str):
+    """Verifica contraseña con Passlib."""
+    try:
+        return pwd_context.verify(password, hashed)
+    except Exception as e:
+        return f"Error en Passlib verify: {e}"
+
+# === Tokens JWT ===
+def crear_jwt(payload: dict, secret: str = "mi_clave_secreta"):
+    """Crea un token JWT con un payload dado."""
+    try:
+        token = jwt.encode(payload, secret, algorithm="HS256")
+        return token
+    except Exception as e:
+        return f"Error al crear JWT: {e}"
+
+def verificar_jwt(token: str, secret: str = "mi_clave_secreta"):
+    """Verifica y decodifica un token JWT."""
+    try:
+        decoded = jwt.decode(token, secret, algorithms=["HS256"])
+        return decoded
+    except Exception as e:
+        return f"Error al verificar JWT: {e}"
+
+# === Ejemplo con Paramiko (SSH) ===
+def paramiko_demo(host="localhost", user="usuario", password="clave"):
+    """Ejemplo simple de conexión SSH con Paramiko (no ejecuta comandos reales)."""
+    try:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # No conectamos realmente, solo mostramos inicialización
+        return "Cliente SSH inicializado con Paramiko."
+    except Exception as e:
+        return f"Error en Paramiko demo: {e}"
+
 ```
+
 </details>
 
 # Programa de Monitoreo del PC (utils.py)
@@ -763,12 +845,90 @@ if __name__ == "__main__":
 <summary>Ver contenido de utils.py</summary>
 
 ```python
-# utils.py
-def main():
-    print("Hola desde el main!")
 
-if __name__ == "__main__":
-    main()
+# utils.py
+import psutil
+from tqdm import tqdm
+import schedule
+import time
+import keyboard
+import mouse
+import arrow
+import orjson
+from filelock import FileLock
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
+def obtener_fecha_arrow():
+    return f"Fecha actual: {arrow.utcnow()}"
+def serializar_orjson(data):
+    return orjson.dumps(data).decode()
+# === Estado del sistema ===
+def system_status():
+    """Devuelve el estado actual de CPU y RAM."""
+    cpu = psutil.cpu_percent(interval=1)
+    ram = psutil.virtual_memory().percent
+    return f"CPU: {cpu}% | RAM: {ram}%"
+
+# === Barra de progreso con tqdm ===
+def barra_progreso(iteraciones=10):
+    """Muestra una barra de progreso simulada."""
+    for i in tqdm(range(iteraciones), desc="Progreso"):
+        time.sleep(0.2)
+    return "Barra de progreso completada."
+
+# === Tareas programadas con schedule ===
+def tarea_programada():
+    """Ejemplo de tarea programada que imprime un mensaje cada minuto."""
+    schedule.every(1).minutes.do(lambda: print("Ejecutando tarea programada..."))
+    return "Tarea programada cada minuto. Usa schedule.run_pending() en tu bucle principal."
+
+# === Control de teclado y ratón ===
+def simular_tecla(tecla="a"):
+    """Simula la pulsación de una tecla."""
+    try:
+        keyboard.write(tecla)
+        return f"Tecla '{tecla}' simulada."
+    except Exception as e:
+        return f"Error al simular tecla: {e}"
+
+def simular_click():
+    """Simula un clic del ratón."""
+    try:
+        mouse.click()
+        return "Clic del ratón simulado."
+    except Exception as e:
+        return f"Error al simular clic: {e}"
+
+# === Bloqueo de archivos con FileLock ===
+def bloquear_archivo(ruta="archivo.txt"):
+    """Bloquea un archivo para evitar acceso concurrente."""
+    try:
+        lock = FileLock(ruta + ".lock")
+        with lock:
+            print("Archivo bloqueado temporalmente.")
+            time.sleep(2)
+        return "Archivo desbloqueado."
+    except Exception as e:
+        return f"Error al bloquear archivo: {e}"
+
+# === Monitoreo de archivos con Watchdog ===
+class MonitorArchivos(FileSystemEventHandler):
+    """Clase para monitorear cambios en archivos."""
+    def on_modified(self, event):
+        print(f"Archivo modificado: {event.src_path}")
+
+def iniciar_monitor(ruta="."):
+    """Inicia un monitor de archivos en la ruta indicada."""
+    try:
+        event_handler = MonitorArchivos()
+        observer = Observer()
+        observer.schedule(event_handler, ruta, recursive=True)
+        observer.start()
+        return f"Monitor iniciado en {ruta}"
+    except Exception as e:
+        return f"Error al iniciar monitor: {e}"
+
 ```
 </details>
 
