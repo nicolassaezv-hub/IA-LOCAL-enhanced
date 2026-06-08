@@ -1,6 +1,6 @@
 @echo off
-cd C:\Users\nicol\copilot_wrapper\venv\Scripts
-call activate.bat
-cd ..\astra
+cd /d C:\Users\nicol\copilot_wrapper\astra
+call ..\venv\Scripts\activate.bat
 python main.py
 pause
+
