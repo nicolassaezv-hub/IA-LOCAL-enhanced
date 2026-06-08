@@ -374,6 +374,7 @@ def main():
 if __name__ == "__main__":
     main()
 ```
+
 </details>
 
 # Programa de Audio/Video (audio_video.py)
