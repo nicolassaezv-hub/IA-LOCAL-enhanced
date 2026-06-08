@@ -503,17 +503,134 @@ if __name__ == "__main__":
 ### Programa de Creacion/Lectura/Analisis de Archivos Word/Excel/CSV/Python/PDF (io_files.py)
 
 - ### io_files.py
-- 
+ 
 <details>
 <summary>Ver contenido de io_files.py</summary>
 
 ```python
-# io_files.py
-def main():
-    print("Hola desde el main!")
 
-if __name__ == "__main__":
-    main()
+# io_files.py
+import PyPDF2
+import docx
+import openpyxl
+import pandas as pd
+import pdfplumber
+from ai_models import ask_openai
+
+def crea_py(ruta, tema):
+    """Genera un archivo Python a partir de un tema."""
+    try:
+        # Pedir a OpenAI que genere código Python sobre el tema
+        codigo = ask_openai(f"Genera un script en Python sobre: {tema}")
+        
+        # Guardar el código en un archivo .py
+        with open(ruta, "w", encoding="utf-8") as f:
+            f.write(codigo)
+        
+        return f"Archivo Python creado en {ruta} con el tema: {tema}"
+    except Exception as e:
+        return f"Error creando archivo Python: {e}"
+
+# === Lectura de archivos ===
+def leer_pdf(ruta_pdf, usar_plumber=False):
+    """Lee un archivo PDF y devuelve su texto (primeros 1000 caracteres)."""
+    try:
+        texto = ""
+        if usar_plumber:
+            with pdfplumber.open(ruta_pdf) as pdf:
+                for pagina in pdf.pages:
+                    texto += pagina.extract_text() or ""
+        else:
+            with open(ruta_pdf, "rb") as f:
+                lector = PyPDF2.PdfReader(f)
+                for pagina in lector.pages:
+                    texto += pagina.extract_text() or ""
+        return texto[:70000]
+    except Exception as e:
+        return f"Error al leer PDF: {e}"
+
+def leer_word(ruta_docx):
+    """Lee un archivo Word (.docx) y devuelve su texto."""
+    try:
+        doc = docx.Document(ruta_docx)
+        texto = "\n".join([p.text for p in doc.paragraphs])
+        return texto[:70000]
+    except Exception as e:
+        return f"Error al leer Word: {e}"
+
+def leer_excel(ruta_xlsx):
+    """Lee un archivo Excel y devuelve su contenido (primeros 1000 caracteres)."""
+    try:
+        wb = openpyxl.load_workbook(ruta_xlsx)
+        hoja = wb.active
+        texto = ""
+        for fila in hoja.iter_rows(values_only=True):
+            texto += " | ".join([str(c) for c in fila if c is not None]) + "\n"
+        return texto[:70000]
+    except Exception as e:
+        return f"Error al leer Excel: {e}"
+
+
+def leer_csv(ruta_csv, analizar=False):
+    try:
+        # Leer todo el CSV completo
+        df = pd.read_csv(ruta_csv, sep=None, engine='python', on_bad_lines='skip')
+
+        if analizar:
+            resumen = f"Columnas: {list(df.columns)}\n"
+            resumen += f"Filas totales: {len(df)}\n\n"
+            resumen += "Estadísticas:\n"
+            resumen += df.describe(include='all').to_string()
+            return resumen
+        else:
+            # Mostrar solo una parte para no saturar la consola
+            return df.head(50).to_string()
+    except Exception as e:
+        return f"Error al leer CSV: {e}"
+# === Escritura de archivos ===
+def escribe_pdf(ruta, texto):
+    """Crea un PDF con texto simple."""
+    from reportlab.pdfgen import canvas
+    import reportlab.lib.pagesizes as psizes
+    try:
+        c = canvas.Canvas(ruta, pagesize=psizes.A4)
+        c.drawString(100, 750, texto)
+        c.save()
+        return f"PDF creado en {ruta}"
+    except Exception as e:
+        return f"Error al crear PDF: {e}"
+
+def escribe_word(ruta, texto):
+    """Crea un archivo Word con texto simple."""
+    try:
+        doc = docx.Document()
+        doc.add_paragraph(texto)
+        doc.save(ruta)
+        return f"Word creado en {ruta}"
+    except Exception as e:
+        return f"Error al crear Word: {e}"
+
+def escribe_excel(ruta, datos):
+    """Crea un archivo Excel a partir de datos separados por comas."""
+    try:
+        wb = openpyxl.Workbook()
+        hoja = wb.active
+        for fila in datos.split("\n"):
+            hoja.append(fila.split(","))
+        wb.save(ruta)
+        return f"Excel creado en {ruta}"
+    except Exception as e:
+        return f"Error al crear Excel: {e}"
+
+def escribe_csv(ruta, datos):
+    """Crea un archivo CSV a partir de texto plano."""
+    try:
+        with open(ruta, "w", newline="", encoding="utf-8") as f:
+            f.write(datos)
+        return f"CSV creado en {ruta}"
+    except Exception as e:
+        return f"Error al crear CSV: {e}"
+
 ```
 </details>
 
@@ -527,12 +644,97 @@ if __name__ == "__main__":
 <summary>Ver contenido de modules_extra.py</summary>
 
 ```python
-# modules_extra.py
-def main():
-    print("Hola desde el main!")
 
-if __name__ == "__main__":
-    main()
+# modules_extra.py
+import numpy as np
+import faiss
+from llama_index.core import Document, VectorStoreIndex
+import sympy as sp
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.orm import declarative_base, sessionmaker
+import redis
+
+# --- Faiss: memoria vectorial ---
+class FaissMemory:
+    def __init__(self, dim=128):
+        self.index = faiss.IndexFlatL2(dim)
+        self.vectors = []
+        self.texts = []
+
+    def add(self, vec, text):
+        self.index.add(np.array([vec]).astype('float32'))
+        self.vectors.append(vec)
+        self.texts.append(text)
+
+    def search(self, vec, k=3):
+        D, I = self.index.search(np.array([vec]).astype('float32'), k)
+        return [(self.texts[i], float(D[0][j])) for j, i in enumerate(I[0])]
+
+# --- LlamaIndex: indexación de documentos ---
+class LlamaMemory:
+    def __init__(self):
+        self.docs = []
+        self.index = None
+
+    def add_doc(self, text):
+        doc = Document(text=text)
+        self.docs.append(doc)
+        self.index = VectorStoreIndex.from_documents(self.docs)
+
+    def query(self, q):
+        if not self.index:
+            return "No hay documentos cargados."
+        query_engine = self.index.as_query_engine()
+        return str(query_engine.query(q))
+
+# --- Sympy: cálculo simbólico ---
+def calcular_integral(expr_str, var_str, a, b):
+    var = sp.Symbol(var_str)
+    expr = sp.sympify(expr_str)
+    resultado = sp.integrate(expr, (var, a, b))
+    return f"Integral de {expr_str} entre {a} y {b} = {resultado}"
+
+# --- SQLAlchemy: base de datos ---
+Base = declarative_base()
+
+class Usuario(Base):
+    __tablename__ = "usuarios"
+    id = Column(Integer, primary_key=True)
+    nombre = Column(String)
+
+def guardar_usuario(nombre):
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    nuevo = Usuario(nombre=nombre)
+    session.add(nuevo)
+    session.commit()
+    return f"Usuario guardado: {nuevo.nombre}"
+
+# --- Redis: memoria clave-valor ---
+def redis_set(clave, valor):
+    r = redis.Redis(host='localhost', port=6379, db=0)
+    r.set(clave, valor)
+    return f"Guardado en Redis: {clave} -> {valor}"
+
+def redis_get(clave):
+    r = redis.Redis(host='localhost', port=6379, db=0)
+    val = r.get(clave)
+    return val.decode("utf-8") if val else "Clave no encontrada"
+
+# --- Diccionario de comandos ---
+comandos_extra = {
+    "faiss add": lambda: "Usa FaissMemory.add(vec,text)",
+    "faiss search": lambda: "Usa FaissMemory.search(vec,k)",
+    "llama add": lambda: "Usa LlamaMemory.add_doc(text)",
+    "llama query": lambda: "Usa LlamaMemory.query(q)",
+    "sympy integral": lambda: calcular_integral("sin(x)", "x", 0, sp.pi),
+    "sqlalchemy usuario": lambda: guardar_usuario("Nico"),
+    "redis set": lambda: redis_set("clave", "Hola desde Redis"),
+    "redis get": lambda: redis_get("clave"),
+}
+
 ```
 </details>
 
