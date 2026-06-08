@@ -296,7 +296,7 @@ pause
 </details>
 
 
-### Memoria de la IA (memory.py + memory.db)
+# Memoria de la IA (memory.py + memory.db)
 
 <details>
 <summary>Ver contenido de memory.py</summary>
@@ -346,7 +346,7 @@ def cargar_memoria(limit=10):
 
 </details>
 
-- ## Memory.db
+- ### Memory.db
 
 Una vez ejecutado el programa principal por primera instancia, automaticamente se creara el archivo memory.db, si no es el caso se modificara y añadira la conversacion con la IA Local.
 
