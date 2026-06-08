@@ -36,40 +36,75 @@ Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecut
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
-# Programa Puente (main.py + iniciar_astra.bat)
-
-- ### main.py
+# Comandos y Programa Puente (main.py + iniciar_astra.bat)
+### Comandos
 
 El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos 
 
 <details>
 <summary>Ver comandos</summary>
-	
-- `lee pdf [nombre_archivo] [directorio]`
-- `lee word [nombre_archivo] [directorio]`
-- `lee excel [nombre_archivo] [directorio]`
-- `lee csv [nombre_archivo] [directorio]`
+
+- `aiohttp demo`    
+- `analiza audio [nombre_archivo]`
+- `analiza codigo [archivos]`      
 - `analiza csv [nombre_archivo] [directorio]`
+- `azure`                                          
+- `barra progreso`            
+- `bloquear archivo <archivo>` 
+- `cifra archivo [nombre_archivo]`
+- `convertir audio [nombre_archivo] [formato_salida]`
+- `crea py <archivo> <contenido>`                    
+- `crear jwt [datos]`
+- `crear pdf <archivo> <texto>`  
+- `descargar audio youtube [URL]`
+- `escribe csv [nombre_archivo] [contenido del archivo]`
+- `escribe excel [nombre_archivo] [contenido del archivo]`
 - `escribe pdf [nombre_archivo] [contenido del archivo]`
 - `escribe word [nombre_archivo] [contenido del archivo]`
-- `escribe excel [nombre_archivo] [contenido del archivo]`
-- `escribe csv [nombre_archivo] [contenido del archivo]`
+- `estado pc`                 
+- `extrae web <url>` 
+- `fastapi demo`     
+- `fecha`                                      
+- `flask demo`           
 - `grafica csv [nombre_archivo] [directorio]`
-- `tabla [nombre_archivo] [directorio]`
-- `rich [nombre_archivo] [directorio]`
-- `voz a texto`
-- `texto a voz [texto]`
-- `analiza audio [nombre_archivo]`
-- `reproducir audio [nombre_archivo]`
-- `convertir audio [nombre_archivo] [formato_salida]`
-- `descargar audio youtube [URL]`
-- `cifra archivo [nombre_archivo]`
+- `grpc`                                             
+- `gui`                                            
 - `hash pass [contraseña]`
-- `verify pass [contraseña] [hash]`
-- `crear jwt [datos]`
+- `httpx demo`      
+- `imagen`                                   
+- `integral`                                  
+- `json`                                      
+- `keras demo`     
+- `lee csv [nombre_archivo] [directorio]`
+- `lee excel [nombre_archivo] [directorio]`
+- `lee pdf [nombre_archivo] [directorio]`
+- `lee word [nombre_archivo] [directorio]`
+- `monitor archivos <ruta>`    
+- `paramiko demo`                   
+- `passlib hash <contraseña>`       
+- `passlib verify <password> <hash>`                                  
+- `reproducir audio [nombre_archivo]`
+- `rich [nombre_archivo] [directorio]`
+- `salir` / `exit` / `quit`                        
+- `simular click`              
+- `simular tecla <tecla>`     
+- `sklearn demo`  
+- `sklearn`                                        
+- `socketio demo`    
+- `tabla [nombre_archivo] [directorio]`
+- `tarea programada`           
+- `tensorflow demo` 
+- `texto a voz [texto]`
+- `torch demo`      
+- `traducir <texto>` 
 - `verificar jwt [token]`
+- `verify pass [contraseña] [hash]`
+- `voz a texto`
+- `youtube <url>`    
 
 </details>
+
+- ### main.py
 
 <details>
 <summary>Ver contenido de main.py</summary>
