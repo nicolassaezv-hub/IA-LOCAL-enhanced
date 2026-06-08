@@ -588,10 +588,16 @@ def descargar_audio_youtube(url):
 ```
 </details>
 
-### Programa de Creacion/Lectura/Analisis de Archivos Word/Excel/CSV/Python/PDF (io_files.py)
+# Programa de Creacion/Lectura/Analisis de Archivos Word/Excel/CSV/Python/PDF (io_files.py)
 
 - ### io_files.py
- 
+
+ El programa io_files brinda una conexion directa a la creacion/analisis de tipo:
+ - DOCX
+ - PDF
+ - PYTHON (.py)
+ - EXCEL
+Tambien se comone de una funcion extra que es la creacion y/o lectura de base de datos CSV con la implementacion del modulo Pandas
 <details>
 <summary>Ver contenido de io_files.py</summary>
 
@@ -724,9 +730,12 @@ def escribe_csv(ruta, datos):
 
 ### Comentarios sobre las limitaciones del programa (readme)
 
+La visualizacion de un archivo analizado por el programa se limita a la cantidad de caracteres que permite el API de ChatGPT. Por tanto se hizo un cambio con tal que el "display" este limitado por 70000 tokens (~280.000 caracteres)
+
 # Programa de Calculo Simbolico, Memoria Vectorial y Base De Datos con IA (modules_extra.py)
 
 - ### modules_extra.py
+El siguiente programa compprende en mayor parte la memoria en base de datos de Redis,Lllama y SQL para el guardado o indexacion de documentos
 
 <details>
 <summary>Ver contenido de modules_extra.py</summary>
@@ -830,6 +839,8 @@ comandos_extra = {
 
 - ### security.py
 
+Security.py encapsula modulos para encriptar archivos con contraseña
+
 <details>
 <summary>Ver contenido de security.py</summary>
 
@@ -928,6 +939,7 @@ def paramiko_demo(host="localhost", user="usuario", password="clave"):
 # Programa de Monitoreo del PC (utils.py)
 
 - ### utils.py
+La implementacion de utils.py ofrece monitoreo continuo del computador, respecto al uso del teclado, desplazamiento coordinado del mouse y monitoreo de archivos por comando
 
 <details>
 <summary>Ver contenido de utils.py</summary>
@@ -1024,6 +1036,8 @@ def iniciar_monitor(ruta="."):
 
 - ### visualization.py
 
+Este programa en particular repasa CSV a forma en grafica tipo imagen .png y la tabulacion de datos
+
 <details>
 <summary>Ver contenido de visualization.py</summary>
 
@@ -1107,6 +1121,8 @@ def crear_pdf(ruta, texto):
 
 - ### web_tools.py
 
+El programa web_tools adhiere herramientas de internet, las mas tipicas siendo destacadas:
+- Extraer
 <details>
 <summary>Ver contenido de web_tools.py</summary>
 
