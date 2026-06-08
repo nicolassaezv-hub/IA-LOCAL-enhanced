@@ -1,5 +1,7 @@
 # Copilot (IA-LOCAL)
+
 ## Informacion General
+
 Esta IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, ChatGPT y analisis activo de Copilot con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI en base a un sistema local PC de las siguientes especificaciones
 
 PROCESADOR:
@@ -14,7 +16,8 @@ GPU:
 
 NVIDIA 1650ti 8GB VRAM 
 
-## API
+# API
+
 Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 
 name: copi
@@ -23,7 +26,8 @@ ID: key_3uC3DbwL1KZFUHJa
 
 model="gpt-3.5-turbo"
 
-## Estructura
+# Estructura
+
 Esta IA Local se compone de 10 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
 El programa puente (main.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
 Se incluyen dos codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python.
@@ -31,7 +35,6 @@ Se incluyen dos codigos adicionales para verificar la integridad de los modulos 
 Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
-
 
 # Programa Puente (main.py + iniciar_astra.bat)
 
@@ -300,7 +303,7 @@ pause
 
 # Memoria de la IA (memory.py + memory.db)
 
-### memory.py
+- ### memory.py
 
 <details>
 <summary>Ver contenido de memory.py</summary>
@@ -359,7 +362,7 @@ Una vez ejecutado el programa principal por primera instancia, automaticamente s
 
 # Conexion IA Externos (ai_models.py)
 
-### ai_models.py
+- ### ai_models.py
 <details>
 <summary>Ver contenido de ai_models.py</summary>
 
@@ -375,7 +378,7 @@ if __name__ == "__main__":
 
 # Programa de Audio/Video (audio_video.py)
 
-### audio_video.py
+- ### audio_video.py
 
 <details>
 <summary>Ver contenido de audio_video.py</summary>
@@ -392,6 +395,8 @@ if __name__ == "__main__":
 
 ### Programa de Creacion/Lectura/Analisis de Archivos Word/Excel/CSV/Python/PDF (io_files.py)
 
+- ### io_files.py
+- 
 <details>
 <summary>Ver contenido de io_files.py</summary>
 
@@ -406,7 +411,10 @@ if __name__ == "__main__":
 </details>
 
 ### Comentarios sobre las limitaciones del programa (readme)
-### Programa de Calculo Simbolico, Memoria Vectorial y Base De Datos con IA (modules_extra.py)
+
+# Programa de Calculo Simbolico, Memoria Vectorial y Base De Datos con IA (modules_extra.py)
+
+- ### modules_extra.py
 
 <details>
 <summary>Ver contenido de modules_extra.py</summary>
@@ -421,7 +429,9 @@ if __name__ == "__main__":
 ```
 </details>
 
-### Programa de Cifrado/Encriptacion de Archivos (security.py)
+# Programa de Cifrado/Encriptacion de Archivos (security.py)
+
+- ### security.py
 
 <details>
 <summary>Ver contenido de security.py</summary>
@@ -436,7 +446,9 @@ if __name__ == "__main__":
 ```
 </details>
 
-### Programa de Monitoreo del PC (utils.py)
+# Programa de Monitoreo del PC (utils.py)
+
+- ### utils.py
 
 <details>
 <summary>Ver contenido de utils.py</summary>
@@ -451,7 +463,9 @@ if __name__ == "__main__":
 ```
 </details>
 
-### Programa de Creacion de Grafico CSV y Tabla de DataFrame Pandas (visualization.py)
+# Programa de Creacion de Grafico CSV y Tabla de DataFrame Pandas (visualization.py)
+
+- ### visualization.py
 
 <details>
 <summary>Ver contenido de visualization.py</summary>
@@ -466,9 +480,12 @@ if __name__ == "__main__":
 ```
 </details>
 
-### Grafico de Ejemplo
-### Tabla de Ejemplo
-### Programa de Extraccion/Peticion de Informacion en Internet (web_tools.py)
+## Grafico de Ejemplo
+## Tabla de Ejemplo
+
+# Programa de Extraccion/Peticion de Informacion en Internet (web_tools.py)
+
+- ### web_tools.py
 
 <details>
 <summary>Ver contenido de web_tools.py</summary>
@@ -484,6 +501,7 @@ if __name__ == "__main__":
 </details>
 
 ## Modulos (Instalados y/o Integrados)
+
 Aqui el archivo con el listado de modulos Instalados e Integrados
  https://docs.google.com/spreadsheets/d/1I2JpcZ6_V_WUdXkkYkP7MZ1fgQcPW6y73xBbtZjOfHI/edit?usp=sharing
 
