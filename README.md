@@ -357,7 +357,7 @@ def cargar_memoria(limit=10):
 
 </details>
 
-[memory.db]
+[memory.db](memory.db)
 
 
 
