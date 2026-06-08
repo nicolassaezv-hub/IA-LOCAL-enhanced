@@ -597,7 +597,8 @@ def descargar_audio_youtube(url):
  - PDF
  - PYTHON (.py)
  - EXCEL
-Tambien se comone de una funcion extra que es la creacion y/o lectura de base de datos CSV con la implementacion del modulo Pandas
+ - 
+Tambien se compone de una funcion extra que es la creacion y/o lectura de base de datos CSV con la implementacion del modulo Pandas
 <details>
 <summary>Ver contenido de io_files.py</summary>
 
