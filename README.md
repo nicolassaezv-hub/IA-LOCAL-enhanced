@@ -35,7 +35,7 @@ A continuacion se dan las caracteristicas y detalles del programa principal mas 
 
 # Programa Puente (main.py + iniciar_astra.bat)
 
-- ### Main.py
+- ### main.py
 
 El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos 
 
@@ -281,7 +281,7 @@ if __name__ == "__main__":
 
 </details>
 
-- ### Iniciar_astra.bat
+- ### iniciar_astra.bat
 
 <details>
 <summary>Ver contenido de iniciar_astra.bat</summary>
@@ -299,6 +299,8 @@ pause
 
 
 # Memoria de la IA (memory.py + memory.db)
+
+### memory.py
 
 <details>
 <summary>Ver contenido de memory.py</summary>
@@ -348,15 +350,16 @@ def cargar_memoria(limit=10):
 
 </details>
 
-- ### Memory.db
+- ### memory.db
 
 Una vez ejecutado el programa principal por primera instancia, automaticamente se creara el archivo memory.db, si no es el caso se modificara y añadira la conversacion con la IA Local.
 
 
 
 
-### Conexion IA Externos (ai_models.py)
+# Conexion IA Externos (ai_models.py)
 
+### ai_models.py
 <details>
 <summary>Ver contenido de ai_models.py</summary>
 
@@ -370,7 +373,9 @@ if __name__ == "__main__":
 ```
 </details>
 
-### Programa de Audio/Video (audio_video.py)
+# Programa de Audio/Video (audio_video.py)
+
+### audio_video.py
 
 <details>
 <summary>Ver contenido de audio_video.py</summary>
