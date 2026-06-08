@@ -1123,7 +1123,13 @@ def crear_pdf(ruta, texto):
 - ### web_tools.py
 
 El programa web_tools adhiere herramientas de internet, las mas tipicas siendo destacadas:
-- Extraer
+
+- Extraer informacion de URL
+- Traduccion de Texto por Google Translate
+- Descargar video de youtube
+- Hacer peticion HTTPX
+- Creacion de Aplicacion FastAPI
+
 <details>
 <summary>Ver contenido de web_tools.py</summary>
 
