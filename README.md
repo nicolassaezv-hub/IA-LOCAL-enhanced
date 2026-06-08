@@ -281,19 +281,6 @@ if __name__ == "__main__":
 
 </details>
 
-<details>
-<summary>Ver contenido de iniciar_astra.bat</summary>
-
-```bat
-@echo off
-cd C:\Users\nicol\copilot_wrapper\venv\Scripts
-call activate.bat
-cd ..\astra
-python main.py
-pause
-```
-
-</details>
 
 ### Memoria de la IA (memory.py + memory.db)
 
@@ -344,6 +331,25 @@ def cargar_memoria(limit=10):
 ```
 
 </details>
+
+- ## Memory.db
+
+Una vez ejecutado el programa principal por primera instancia, automaticamente se creara el archivo memory.db, si no es el caso se modificara y añadira la conversacion con la IA Local.
+
+<details>
+<summary>Ver contenido de iniciar_astra.bat</summary>
+
+```bat
+@echo off
+cd C:\Users\nicol\copilot_wrapper\venv\Scripts
+call activate.bat
+cd ..\astra
+python main.py
+pause
+```
+
+</details>
+
 
 ### Conexion IA Externos (ai_models.py)
 
