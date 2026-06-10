@@ -70,7 +70,7 @@ def process_request(user_input):
         # EJECUCIÓN SIMPLE
         # ------------------------------------------------
 
-        result = executeok(
+        result = execute(
            tool_name,
            *args
         )
