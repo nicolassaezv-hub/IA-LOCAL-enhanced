@@ -22,9 +22,13 @@ def start_redis():
 start_redis()
 
 from modules_extra import comandos_extra
+from tool_registry import TOOLS
+from intent_router import classify_intent
+from astra_agent import process_request
 
 if __name__ == "__main__":
     init_db()
+	print("Tool Registry cargado:", len(TOOLS), "herramientas")
     print(Fore.GREEN + "=== Astra modular final ===" + Style.RESET_ALL)
     while True:
         user_input = input(Fore.CYAN + "Tú: " + Style.RESET_ALL)
@@ -200,6 +204,6 @@ if __name__ == "__main__":
 
         # === Default: OpenAI ===
         else:
-            respuesta = ask_openai(user_input)
+            respuesta = process_request(user_input)
 
         print(Fore.YELLOW + "Copilot: " + Style.RESET_ALL + str(respuesta))
