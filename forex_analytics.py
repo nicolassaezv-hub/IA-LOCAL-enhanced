@@ -429,10 +429,27 @@ class ForexAnalytics:
                 "No dataset loaded. "
                 "Call load_csv() first."
             )
+    from analytics_memory import (
+    analysis_exists,
+    load_forex_analysis,
+    remember_forex_analysis
+)
+
     def analyze_forex_file(filepath):
+
+        if analysis_exists(filepath):
+
+            return load_forex_analysis(filepath)
 
         engine = ForexAnalytics()
 
         engine.load_csv(filepath)
 
-        return engine.generate_report()
+        report = engine.generate_report()
+
+        remember_forex_analysis(
+            filepath,
+            report
+        )
+
+        return report
