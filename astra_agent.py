@@ -17,6 +17,11 @@ herramienta
    ↓
 OpenAI fallback
 """
+from memory_router import (
+    save_chat,
+    get_context
+)
+
 from argument_parser import parse_arguments
 
 from tool_registry import (
@@ -73,6 +78,10 @@ def process_request(user_input):
         result = execute(
            tool_name,
            *args
+        )
+        save_chat(
+           user_input,
+           str(result)
         )
         return result
 
