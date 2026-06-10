@@ -154,22 +154,43 @@ def get_context(limit=10):
     context = {}
 
     try:
-
         context["recent_chat"] = (
             get_recent_chat(limit)
         )
 
     except Exception:
-
         context["recent_chat"] = []
 
+    context["memory_timestamp"] = None
+
     return context
+def delete_temp(key):
 
+    try:
 
+        from modules_extra import redis_delete
+
+        redis_delete(key)
+
+        return True
+
+    except Exception:
+
+        return False
 # ==========================================
 # ESTADO
 # ==========================================
+def search_memory(query, k=5):
 
+    try:
+
+        results = query_document(query)
+
+        return results
+
+    except Exception:
+
+        return []
 def memory_status():
 
     return {
