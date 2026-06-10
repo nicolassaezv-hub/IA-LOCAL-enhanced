@@ -20,9 +20,10 @@ OpenAI fallback
 from argument_parser import parse_arguments
 
 from tool_registry import (
-    tool_exists,
-    execute_tool
+    tool_exists
 )
+
+from tool_executor import execute
 
 from intent_router import (
     analyze_request
@@ -69,7 +70,7 @@ def process_request(user_input):
         # EJECUCIÓN SIMPLE
         # ------------------------------------------------
 
-        result = execute_tool(
+        result = executeok(
            tool_name,
            *args
         )
