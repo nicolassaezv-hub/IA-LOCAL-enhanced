@@ -17,6 +17,7 @@ herramienta
    ↓
 OpenAI fallback
 """
+from argument_parser import parse_arguments
 
 from tool_registry import (
     tool_exists,
@@ -42,7 +43,10 @@ def process_request(user_input):
 
         intent = analysis["intent"]
         tool_name = analysis["tool"]
-
+        args = parse_arguments(
+           intent,
+           user_input
+        )   
         print(f"[ASTRA] Intent detectado: {intent}")
 
         # ------------------------------------------------
@@ -65,8 +69,10 @@ def process_request(user_input):
         # EJECUCIÓN SIMPLE
         # ------------------------------------------------
 
-        result = execute_tool(tool_name)
-
+        result = execute_tool(
+           tool_name,
+           *args
+        )
         return result
 
     except Exception as e:
