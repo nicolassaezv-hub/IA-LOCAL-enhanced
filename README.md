@@ -28,7 +28,7 @@ model="gpt-3.5-turbo"
 
 # Estructura
 
-Esta IA Local se compone de ?? codigos Python para asegurar eficiencia y rapidez en la ejecucion.
+Esta IA Local se compone de 25 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
 El programa puente (main.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
 Se incluyen dos codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python.
 
