@@ -61,6 +61,7 @@ if __name__ == "__main__":
             partes = user_input.split(" ", 2)
             respuesta = crea_py(partes[1], partes[2])
         elif user_input == "integral":
+            show_progress("Calculating Integral", 1)
             print(calcular_integral("x**2", "x", 0, 1))
 
         elif user_input == "sklearn":
@@ -125,8 +126,10 @@ if __name__ == "__main__":
 
         # === Web Tools ===
         elif user_input.startswith("extrae web"):
+            show_progress("Extracting Website Content", 3)
             respuesta = extrae_web(user_input.split(" ",2)[-1])
         elif user_input.startswith("traducir"):
+            show_progress("Translating Content", 2)
             respuesta = traducir(user_input.split(" ",2)[-1])
         elif user_input.startswith("youtube"):
             respuesta = descargar_youtube(user_input.split(" ",2)[-1])
