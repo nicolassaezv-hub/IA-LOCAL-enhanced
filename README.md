@@ -6,27 +6,27 @@ Esta IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, ChatGPT y ana
 
 PROCESADOR:
 
-Intel(R) Core (TM) I5-10300H CPU @2.5GHz
+- Intel(R) Core (TM) I5-10300H CPU @2.5GHz
 
 RAM:
 
-16GB RAM
+- 16GB RAM
 
-Se le asigna un max de 10GB de RAM a la IA
+Se le asigna un máximo de 10GB de RAM a la IA
 
 GPU:
 
-NVIDIA 1650ti 8GB VRAM 
+- NVIDIA 1650ti 8GB VRAM 
 
 # API
 
 Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 
-name: copi
+- name: copi
 
-ID: key_3uC3DbwL1KZFUHJa
+- ID: key_3uC3DbwL1KZFUHJa
 
-model="gpt-3.5-turbo"
+- model="gpt-3.5-turbo"
 
 # Estructura
 
