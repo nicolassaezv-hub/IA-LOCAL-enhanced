@@ -8,6 +8,11 @@ from audio_video import voz_a_texto, texto_a_voz, analiza_audio, reproducir_audi
 from visualization import grafica_csv, mostrar_tabla, mostrar_rich, crear_pdf, procesar_imagen_skimage, mostrar_gui_pyqt
 from security import cifra_archivo, hash_password, verify_password, passlib_hash, passlib_verify, crear_jwt, verificar_jwt, paramiko_demo
 from utils import system_status as utils_status, barra_progreso, tarea_programada, simular_tecla, simular_click, bloquear_archivo, iniciar_monitor, obtener_fecha_arrow, serializar_orjson
+from progress_utils import (
+    show_progress,
+    progress_steps,
+    progress_iterator
+)
 import subprocess
 from colorama import Fore, Style
 def start_redis():
