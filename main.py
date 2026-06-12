@@ -89,10 +89,13 @@ if __name__ == "__main__":
         elif user_input.startswith("lee word"):
             respuesta = leer_word(user_input.split(" ",2)[-1])
         elif user_input.startswith("lee excel"):
+			show_progress("Reading Excel File", 2)
             respuesta = leer_excel(user_input.split(" ",2)[-1])
         elif user_input.startswith("lee csv"):
+			show_progress("Reading CSV", 2)
             respuesta = leer_csv(user_input.split(" ",2)[-1])
         elif user_input.startswith("analiza csv"):
+			show_progress("Reading CSV", 2)
             respuesta = leer_csv(user_input.split(" ",2)[-1], analizar=True)
         elif user_input.startswith("escribe pdf"):
             partes = user_input.split(" ",2)
