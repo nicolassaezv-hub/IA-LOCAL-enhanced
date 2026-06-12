@@ -12,6 +12,8 @@ RAM:
 
 16GB RAM
 
+Se le asigna un max de 10GB de RAM a la IA
+
 GPU:
 
 NVIDIA 1650ti 8GB VRAM 
