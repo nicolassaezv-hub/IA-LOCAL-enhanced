@@ -13,7 +13,7 @@ def show_progress(task_name="Processing", duration=2):
         duration (int|float): Approximate duration in seconds.
     """
 
-    print(f"\n[ASTRA] {task_name}")
+    print(f"\n[ASTRA PROCESS] {task_name}")
 
     for _ in tqdm(
         range(100),
