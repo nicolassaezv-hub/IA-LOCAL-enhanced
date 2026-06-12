@@ -123,6 +123,11 @@ from audio_video import voz_a_texto, texto_a_voz, analiza_audio, reproducir_audi
 from visualization import grafica_csv, mostrar_tabla, mostrar_rich, crear_pdf, procesar_imagen_skimage, mostrar_gui_pyqt
 from security import cifra_archivo, hash_password, verify_password, passlib_hash, passlib_verify, crear_jwt, verificar_jwt, paramiko_demo
 from utils import system_status as utils_status, barra_progreso, tarea_programada, simular_tecla, simular_click, bloquear_archivo, iniciar_monitor, obtener_fecha_arrow, serializar_orjson
+from progress_utils import (
+    show_progress,
+    progress_steps,
+    progress_iterator
+)
 import subprocess
 from colorama import Fore, Style
 def start_redis():
@@ -137,9 +142,13 @@ def start_redis():
 start_redis()
 
 from modules_extra import comandos_extra
+from tool_registry import TOOLS
+from intent_router import classify_intent
+from astra_agent import process_request
 
 if __name__ == "__main__":
     init_db()
+	print("Tool Registry cargado:", len(TOOLS), "herramientas")
     print(Fore.GREEN + "=== Astra modular final ===" + Style.RESET_ALL)
     while True:
         user_input = input(Fore.CYAN + "Tú: " + Style.RESET_ALL)
@@ -195,10 +204,13 @@ if __name__ == "__main__":
         elif user_input.startswith("lee word"):
             respuesta = leer_word(user_input.split(" ",2)[-1])
         elif user_input.startswith("lee excel"):
+			show_progress("Reading Excel File", 2)
             respuesta = leer_excel(user_input.split(" ",2)[-1])
         elif user_input.startswith("lee csv"):
+			show_progress("Reading CSV", 2)
             respuesta = leer_csv(user_input.split(" ",2)[-1])
         elif user_input.startswith("analiza csv"):
+			show_progress("Reading CSV", 2)
             respuesta = leer_csv(user_input.split(" ",2)[-1], analizar=True)
         elif user_input.startswith("escribe pdf"):
             partes = user_input.split(" ",2)
@@ -315,9 +327,11 @@ if __name__ == "__main__":
 
         # === Default: OpenAI ===
         else:
-            respuesta = ask_openai(user_input)
+            respuesta = process_request(user_input)
 
         print(Fore.YELLOW + "Copilot: " + Style.RESET_ALL + str(respuesta))
+
+
 ```
 
 </details>
