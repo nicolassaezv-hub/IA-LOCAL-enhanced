@@ -521,8 +521,12 @@ def market_history(symbol):
 
     symbol = normalize_symbol(symbol)
 
-    return get_history(symbol)
+    reports = get_history(symbol)
 
+    return "\n\n".join(
+        report.to_text()
+        for report in reports
+    )
 
 def compare_market_history(
     symbol,
