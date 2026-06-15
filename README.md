@@ -337,7 +337,6 @@ if __name__ == "__main__":
 
         print(Fore.YELLOW + "Copilot: " + Style.RESET_ALL + str(respuesta))
 
-
 ```
 
 </details>
