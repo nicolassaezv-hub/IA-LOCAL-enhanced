@@ -42,11 +42,27 @@ IMAGE_EXT = (
     ".bmp",
     ".webp"
 )
-
+from forex.market_universe import find_market
 
 # ==========================================
 # BUSQUEDA DE ARCHIVOS
 # ==========================================
+
+def extract_market_symbol(text: str):
+
+    text = text.upper()
+
+    for token in text.split():
+
+        market = find_market(token)
+
+        if market:
+            return market
+
+    market = find_market(text)
+
+    return market
+    
 
 def extract_filename(text):
 
