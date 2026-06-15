@@ -42,7 +42,18 @@ INTENT_PATTERNS = {
         "investiga",
         "busca informacion",
     ],
-
+    "forex_analysis": [
+        "forex",
+        "analyze forex",
+        "analyse forex",
+        "eurusd",
+        "eur/usd",
+        "gbpusd",
+        "usdjpy",
+        "market analysis",
+        "analyze pair",
+        "analiza forex",
+    ],
     "audio_analysis": [
         "analiza audio",
         "analizar audio",
@@ -123,7 +134,9 @@ def classify_intent(text):
 # ==========================================
 
 INTENT_TO_TOOL = {
-
+    
+    "forex_analysis": "forex_analyze",
+    
     "document_read": "leer_pdf",
 
     "document_summary": "leer_pdf",
