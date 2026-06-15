@@ -78,7 +78,7 @@ def paramiko_demo(host="localhost", user="usuario", password="clave"):
     """Ejemplo simple de conexión SSH con Paramiko (no ejecuta comandos reales)."""
     try:
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
         # No conectamos realmente, solo mostramos inicialización
         return "Cliente SSH inicializado con Paramiko."
     except Exception as e:
