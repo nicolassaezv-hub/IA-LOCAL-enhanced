@@ -52,6 +52,11 @@ def extract_market_symbol(text: str):
 
     text = text.upper()
 
+    market = find_market(text)
+
+    if market:
+        return market
+
     for token in text.split():
 
         market = find_market(token)
@@ -59,10 +64,7 @@ def extract_market_symbol(text: str):
         if market:
             return market
 
-    market = find_market(text)
-
-    return market
-    
+    return None
 
 def extract_filename(text):
 
