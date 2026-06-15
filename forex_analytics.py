@@ -486,10 +486,11 @@ def analyze_market_file(
         symbol=symbol,
         market_type=get_market_type(symbol),
         trend=trend,
-        confidence=max(
-            bullish,
-            bearish
-        ),
+        confidence = validate_confidence(
+            max(
+                bullish,
+                bearish
+            ),
         technical_analysis = f"""
         RSI:
         {analytics.get('rsi')}
