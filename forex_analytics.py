@@ -449,10 +449,13 @@ class ForexAnalytics:
     # ====================================================
 
 def analyze_market_file(
-    filepath: str,
-    symbol: str
+    filepath: str = None,
+    symbol: str = None
 ):
-
+    if symbol is None:
+        symbol = filepath
+        filepath = None
+        
     symbol = normalize_symbol(symbol)
     
     if not is_supported_market(symbol):
