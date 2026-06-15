@@ -232,11 +232,14 @@ def parse_arguments(intent, text):
         return extract_translation_text(text)
 
     elif intent == "forex_analysis":
+
         market = extract_market_symbol(text)
+
         if market:
             return [market]
+
         return []
-        
+
     elif intent == "web_search":
 
         return extract_url(text)
