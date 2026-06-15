@@ -143,7 +143,7 @@ TOOLS = {
     "leer_word": leer_word,
     "leer_excel": leer_excel,
     "leer_csv": leer_csv,
-    "analisis_forex": analyze_market_file,
+    "forex_analyze": analyze_market_file,
     "escribe_pdf": escribe_pdf,
     "escribe_word": escribe_word,
     "escribe_excel": escribe_excel,
