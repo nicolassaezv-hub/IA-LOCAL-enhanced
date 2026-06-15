@@ -43,6 +43,15 @@ from forex.forex_memory import (
     
 class ForexAnalytics:
 
+    def _check_loaded(self):
+
+        if self.df is None:
+
+            raise ValueError(
+                "No dataset loaded. "
+                "Call load_csv() first."
+            )
+    
     def __init__(self):
 
         self.df = None
