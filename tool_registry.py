@@ -71,10 +71,13 @@ from audio_video import (
 )
 
 from forex_analytics import (
-    analyze_forex_file
+    market_history,
+    compare_market_history
 )
 
-from forex_analytics import analyze_market_file
+from forex.forex_memory import (
+    list_saved_markets
+)
 
 # ==========================================
 # VISUALIZATION
