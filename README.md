@@ -371,7 +371,6 @@ Una vez ejecutado el programa principal por primera instancia, automaticamente s
 ```python
 
 # memory.py
-
 import sqlite3
 import time
 
