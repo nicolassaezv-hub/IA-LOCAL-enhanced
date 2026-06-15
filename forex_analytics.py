@@ -465,7 +465,12 @@ def analyze_market_file(
         )
 
     engine = ForexAnalytics()
-
+    if filepath is None:
+        return (
+            f"{symbol} recognized successfully. "
+            f"No dataset provided for analysis."
+        )
+            
     engine.load_csv(filepath)
 
     analytics = engine.generate_report()
@@ -526,9 +531,6 @@ def analyze_market_file(
 
     return report.to_text()
 
-from forex.market_universe import (
-    is_supported_market
-)
 
 def market_history(symbol):
 
