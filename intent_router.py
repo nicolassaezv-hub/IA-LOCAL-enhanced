@@ -42,6 +42,7 @@ INTENT_PATTERNS = {
         "investiga",
         "busca informacion",
     ],
+    
     "forex_analysis": [
         "forex",
         "analyze forex",
@@ -54,6 +55,26 @@ INTENT_PATTERNS = {
         "analyze pair",
         "analiza forex",
     ],
+    
+    "forex_history": [
+        "history",
+        "show history",
+        "market history",
+        "analysis history",
+    ],
+
+    "forex_compare": [
+        "compare analyses",
+        "compare reports",
+        "compare history",
+    ],
+
+    "forex_markets": [
+        "list markets",
+        "saved markets",
+        "analyzed markets",
+    ],
+    
     "audio_analysis": [
         "analiza audio",
         "analizar audio",
@@ -136,6 +157,12 @@ def classify_intent(text):
 INTENT_TO_TOOL = {
     
     "forex_analysis": "forex_analyze",
+
+    "forex_history": "forex_history",
+
+    "forex_compare": "forex_compare",
+
+    "forex_markets": "forex_markets",
     
     "document_read": "leer_pdf",
 
