@@ -24,10 +24,15 @@ from sklearn.preprocessing import StandardScaler
 
 from forex.market_universe import (
     normalize_symbol,
-    get_market_type
+    get_market_type,
+    is_supported_market
 )
 
 from forex.forex_report import ForexReport
+
+from forex.forex_models import (
+    validate_confidence
+)
 
 from forex.forex_memory import (
     save_analysis,
@@ -440,6 +445,12 @@ def analyze_market_file(
 ):
 
     symbol = normalize_symbol(symbol)
+    
+    if not is_supported_market(symbol):
+        
+        raise ValueError(
+            f"Unsupported market: {symbol}"
+        )
 
     engine = ForexAnalytics()
 
@@ -504,10 +515,6 @@ def analyze_market_file(
 from forex.market_universe import (
     is_supported_market
 )
-if not is_supported_market(symbol):
-    raise ValueError(
-        f"Unsupported market: {symbol}"
-    )
 
 def market_history(symbol):
 
