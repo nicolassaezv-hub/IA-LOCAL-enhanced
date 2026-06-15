@@ -70,6 +70,10 @@ from audio_video import (
     descargar_audio_youtube
 )
 
+from forex_analytics import (
+    analyze_forex_file
+)
+
 # ==========================================
 # VISUALIZATION
 # ==========================================
@@ -263,8 +267,6 @@ def execute_tool(name, *args, **kwargs):
 
     except Exception as e:
         return f"Error ejecutando {name}: {e}"
-
-from forex_analytics import analyze_forex_file
 
 TOOLS["forex_analyze"] = analyze_forex_file
 
