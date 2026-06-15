@@ -538,6 +538,7 @@ def sklearn_demo():
         return f"Train size: {len(X_train)}, Test size: {len(X_test)}"
     except Exception as e:
         return f"Error en Scikit-learn demo: {e}"
+
 ```
 
 </details>
@@ -639,7 +640,6 @@ def descargar_audio_youtube(url):
         return f"Audio descargado: {yt.title}"
     except Exception as e:
         return f"Error al descargar audio de YouTube: {e}"
-
 
 ```
 </details>
