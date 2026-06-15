@@ -2,7 +2,9 @@
 
 ## Informacion General
 
-Esta IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, ChatGPT y analisis activo de Copilot con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI en base a un sistema local PC de las siguientes especificaciones
+Esta IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, ChatGPT y analisis activo de Copilot con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI con fijacion en procesamiento de archivos y analisis intensivo de datasets del area del mercado FOREX (Divisas y Materias Primas).
+
+Todo, en base a un sistema local PC de las siguientes especificaciones
 
 PROCESADOR:
 
@@ -30,8 +32,9 @@ Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 
 # Estructura
 
-Esta IA Local se compone de 26 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
+Esta IA Local se compone de mas de 20 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
 El programa puente (main.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
+
 Se incluyen dos codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python.
 
 Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
