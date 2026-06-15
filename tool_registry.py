@@ -140,13 +140,16 @@ from modules_extra import (
 # ==========================================
 
 TOOLS = {
-
+    # ---------- FOREX --------- #
+    "forex_history" = market_history,
+    "forex_compare" = compare_market_history,
+    "forex_markets" = list_saved_markets,
+    "forex_analyze": analyze_market_file,
     # ---------- IO ----------
     "leer_pdf": leer_pdf,
     "leer_word": leer_word,
     "leer_excel": leer_excel,
     "leer_csv": leer_csv,
-    "forex_analyze": analyze_market_file,
     "escribe_pdf": escribe_pdf,
     "escribe_word": escribe_word,
     "escribe_excel": escribe_excel,
@@ -272,8 +275,6 @@ def execute_tool(name, *args, **kwargs):
 
     except Exception as e:
         return f"Error ejecutando {name}: {e}"
-
-TOOLS["forex_analyze"] = analyze_forex_file
 
 def registry_stats():
     """
