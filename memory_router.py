@@ -83,6 +83,19 @@ def get_temp(key):
         return None
 
 
+def delete_temp(key):
+
+    try:
+
+        from modules_extra import redis_delete
+        redis_delete(key)
+        return True
+
+    except Exception:
+
+        return False
+
+
 # ==========================================
 # FAISS
 # ==========================================
@@ -145,41 +158,6 @@ def query_document(question):
         return str(e)
 
 
-# ==========================================
-# CONTEXTO GENERAL
-# ==========================================
-
-def get_context(limit=10):
-
-    context = {}
-
-    try:
-        context["recent_chat"] = (
-            get_recent_chat(limit)
-        )
-
-    except Exception:
-        context["recent_chat"] = []
-
-    context["memory_timestamp"] = None
-
-    return context
-def delete_temp(key):
-
-    try:
-
-        from modules_extra import redis_delete
-
-        redis_delete(key)
-
-        return True
-
-    except Exception:
-
-        return False
-# ==========================================
-# ESTADO
-# ==========================================
 def search_memory(query, k=5):
 
     try:
@@ -191,6 +169,35 @@ def search_memory(query, k=5):
     except Exception:
 
         return []
+
+
+# ==========================================
+# CONTEXTO GENERAL
+# ==========================================
+
+def get_context(limit=10):
+
+    context = {}
+
+    try:
+
+        context["recent_chat"] = (
+            get_recent_chat(limit)
+        )
+
+    except Exception:
+
+        context["recent_chat"] = []
+
+    context["memory_timestamp"] = None
+
+    return context
+
+
+# ==========================================
+# ESTADO
+# ==========================================
+
 def memory_status():
 
     return {
