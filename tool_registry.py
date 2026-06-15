@@ -141,9 +141,9 @@ from modules_extra import (
 
 TOOLS = {
     # ---------- FOREX --------- #
-    "forex_history" = market_history,
-    "forex_compare" = compare_market_history,
-    "forex_markets" = list_saved_markets,
+    "forex_history" : market_history,
+    "forex_compare" : compare_market_history,
+    "forex_markets" : list_saved_markets,
     "forex_analyze": analyze_market_file,
     # ---------- IO ----------
     "leer_pdf": leer_pdf,
