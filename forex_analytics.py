@@ -479,9 +479,19 @@ def analyze_market_file(
             bullish,
             bearish
         ),
-        technical_analysis=str(
-            analytics
-        ),
+        technical_analysis = f"""
+        RSI:
+        {analytics.get('rsi')}
+
+        MACD:
+        {analytics.get('macd')}
+
+        Volatility:
+        {analytics.get('volatility')}
+
+        Trend:
+        {analytics.get('trend')}
+        """,
         ai_summary=(
             f"{symbol} analyzed successfully."
         )
@@ -491,6 +501,13 @@ def analyze_market_file(
 
     return report.to_text()
 
+from forex.market_universe import (
+    is_supported_market
+)
+if not is_supported_market(symbol):
+    raise ValueError(
+        f"Unsupported market: {symbol}"
+    )
 
 def market_history(symbol):
 
