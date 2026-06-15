@@ -486,24 +486,25 @@ def analyze_market_file(
         symbol=symbol,
         market_type=get_market_type(symbol),
         trend=trend,
-        confidence = validate_confidence(
+        confidence=validate_confidence(
             max(
                 bullish,
                 bearish
-            ),
-        technical_analysis = f"""
-        RSI:
-        {analytics.get('rsi')}
+            )
+        ),
+        technical_analysis=f"""
+    RSI:
+    {analytics.get('rsi')}
 
-        MACD:
-        {analytics.get('macd')}
+    MACD:
+    {analytics.get('macd')}
 
-        Volatility:
-        {analytics.get('volatility')}
+    Volatility:
+    {analytics.get('volatility')}
 
-        Trend:
-        {analytics.get('trend')}
-        """,
+    Trend:
+    {analytics.get('trend')}
+    """,
         ai_summary=(
             f"{symbol} analyzed successfully."
         )
