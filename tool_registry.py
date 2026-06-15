@@ -71,6 +71,7 @@ from audio_video import (
 )
 
 from forex_analytics import (
+    analyze_market_file,
     market_history,
     compare_market_history
 )
