@@ -22,6 +22,96 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
+from forex.market_universe import (
+    normalize_symbol,
+    get_market_type
+)
+
+from forex.forex_report import ForexReport
+
+from forex.forex_memory import (
+    save_analysis,
+    get_history,
+    compare_last_reports
+)
+
+def analyze_market_file(
+    filepath: str,
+    symbol: str
+):
+
+    symbol = normalize_symbol(symbol)
+
+    engine = ForexAnalytics()
+
+    engine.load_csv(filepath)
+
+    analytics = engine.generate_report()
+
+    trend_data = analytics.get(
+        "trend",
+        {}
+    )
+
+    bullish = trend_data.get(
+        "bullish_ratio",
+        0
+    )
+
+    bearish = trend_data.get(
+        "bearish_ratio",
+        0
+    )
+
+    if bullish > bearish:
+        trend = "bullish"
+
+    elif bearish > bullish:
+        trend = "bearish"
+
+    else:
+        trend = "neutral"
+
+    report = ForexReport(
+        symbol=symbol,
+        market_type=get_market_type(symbol),
+        trend=trend,
+        confidence=max(
+            bullish,
+            bearish
+        ),
+        technical_analysis=str(
+            analytics
+        ),
+        ai_summary=(
+            f"{symbol} analyzed successfully."
+        )
+    )
+
+    save_analysis(report)
+
+    return report.to_text()
+
+
+def market_history(symbol):
+
+    symbol = normalize_symbol(symbol)
+
+    return get_history(symbol)
+
+
+def compare_market_history(
+    symbol,
+    num_reports=5
+):
+
+    symbol = normalize_symbol(symbol)
+
+    return compare_last_reports(
+        symbol,
+        num_reports
+    )
+    
 
 class ForexAnalytics:
 
