@@ -535,9 +535,13 @@ def analyze_market_file(
 def market_history(symbol):
 
     symbol = normalize_symbol(symbol)
-
+    
     reports = get_history(symbol)
-
+    
+    if not reports:
+        
+        return f"No history found for {symbol}"
+        
     return "\n\n".join(
         report.to_text()
         for report in reports
