@@ -452,25 +452,35 @@ def analyze_market_file(
     filepath: str = None,
     symbol: str = None
 ):
+    """
+    Analyze a forex/commodity dataset and save the report.
+
+    Supports:
+        analyze_market_file("EUR/USD")
+        analyze_market_file("data.csv", "EUR/USD")
+    """
+
+    # Allow analyze_market_file("EUR/USD")
     if symbol is None:
         symbol = filepath
         filepath = None
-        
+
     symbol = normalize_symbol(symbol)
-    
+
     if not is_supported_market(symbol):
-        
         raise ValueError(
             f"Unsupported market: {symbol}"
         )
 
-    engine = ForexAnalytics()
+    # Market recognized but no dataset provided
     if filepath is None:
         return (
             f"{symbol} recognized successfully. "
             f"No dataset provided for analysis."
         )
-            
+
+    engine = ForexAnalytics()
+
     engine.load_csv(filepath)
 
     analytics = engine.generate_report()
@@ -499,6 +509,13 @@ def analyze_market_file(
     else:
         trend = "neutral"
 
+    technical_analysis = (
+        f"RSI:\n{analytics.get('rsi')}\n\n"
+        f"MACD:\n{analytics.get('macd')}\n\n"
+        f"Volatility:\n{analytics.get('volatility')}\n\n"
+        f"Trend:\n{analytics.get('trend')}"
+    )
+
     report = ForexReport(
         symbol=symbol,
         market_type=get_market_type(symbol),
@@ -509,19 +526,7 @@ def analyze_market_file(
                 bearish
             )
         ),
-        technical_analysis=f"""
-    RSI:
-    {analytics.get('rsi')}
-
-    MACD:
-    {analytics.get('macd')}
-
-    Volatility:
-    {analytics.get('volatility')}
-
-    Trend:
-    {analytics.get('trend')}
-    """,
+        technical_analysis=technical_analysis,
         ai_summary=(
             f"{symbol} analyzed successfully."
         )
