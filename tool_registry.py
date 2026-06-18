@@ -80,6 +80,25 @@ from forex.forex_memory import (
     list_saved_markets
 )
 
+from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
+def run_forex_analysis(filepath: str, mode: str = "full"):
+
+    """
+    Runs full forex ML pipeline:
+    - feature engineering
+    - dataset building
+    - prediction
+    - optional backtest
+    """
+
+    pipeline = ForexIntegratedPipeline()
+
+    result = pipeline.run(
+        filepath=filepath,
+        mode=mode
+    )
+
+    return result
 # ==========================================
 # VISUALIZATION
 # ==========================================
@@ -146,6 +165,7 @@ TOOLS = {
     "forex_compare" : compare_market_history,
     "forex_markets" : list_saved_markets,
     "forex_analyze": analyze_market_file,
+    "run_forex_analysis" : run_forex_analysis
     # ---------- IO ----------
     "leer_pdf": leer_pdf,
     "leer_word": leer_word,
