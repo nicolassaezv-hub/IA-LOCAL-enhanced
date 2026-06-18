@@ -18,12 +18,15 @@ class DatasetBuilder:
         )
 
         self.df["hour"] = self.df["timestamp"].dt.hour
-        self.df["day_of_week"] = self.df["timestamp"].dt.dayofweek
+
+        self.df["day_of_week"] = (
+            self.df["timestamp"].dt.dayofweek
+        )
 
         return self
 
     # -----------------------------
-    # ENCODE SESSION
+    # SESSION ENCODING
     # -----------------------------
     def encode_session(self):
 
@@ -42,14 +45,14 @@ class DatasetBuilder:
         return self
 
     # -----------------------------
-    # ENCODE PAIR (IMPORTANT)
+    # PAIR ENCODING
     # -----------------------------
     def encode_pair(self):
 
-        pairs = self.df["pair"].unique()
+        unique_pairs = self.df["pair"].unique()
 
         pair_map = {
-            p: i for i, p in enumerate(pairs)
+            p: i for i, p in enumerate(unique_pairs)
         }
 
         self.df["pair"] = (
@@ -78,26 +81,33 @@ class DatasetBuilder:
     def build_X(self):
 
         features = [
+
             # OHLCV
             "open", "high", "low", "close",
             "volume", "spread",
 
-            # indicators
+            # indicators (already computed)
             "RSI_14",
             "MACD", "MACD_signal", "MACD_hist",
             "ATR_14",
-            "EMA20", "EMA50", "EMA200",
-            "BB_upper", "BB_lower",
 
-            # derived
-            "returns",
+            # trend
+            "EMA20", "EMA50", "EMA200",
+
+            # volatility
             "volatility_24h",
 
-            # encoded context
+            # Bollinger Bands
+            "BB_upper", "BB_lower",
+
+            # returns
+            "returns",
+
+            # encoded categorical
             "session",
             "pair",
 
-            # time
+            # time features
             "hour",
             "day_of_week"
         ]
@@ -105,9 +115,9 @@ class DatasetBuilder:
         return self.df[features]
 
     # -----------------------------
-    # BUILD Y
+    # BUILD y
     # -----------------------------
-    def build_y(self, horizon=1):
+    def build_y(self):
 
         return self.df["target"]
 
@@ -122,6 +132,10 @@ class DatasetBuilder:
         self.create_target(horizon)
 
         X = self.build_X()
-        y = self.build_y(horizon)
+        y = self.build_y()
 
-        return X.dropna(), y.dropna()
+        # Clean NaNs caused by shifting / indicators
+        X = X.replace([np.inf, -np.inf], np.nan).dropna()
+        y = y.loc[X.index]
+
+        return X, y
