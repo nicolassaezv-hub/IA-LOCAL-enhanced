@@ -23,6 +23,16 @@ from forex.forex_memory import (
 )
 
 from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
+FOREX_PIPELINE = ForexIntegratedPipeline()
+def run_forex_analysis(
+    filepath: str,
+    mode: str = "full"
+):
+
+    return FOREX_PIPELINE.run(
+        filepath=filepath,
+        mode=mode
+    )
 def run_forex_analysis(filepath: str, mode: str = "full"):
 
     """
@@ -184,7 +194,9 @@ def execute_tool(name, *args, **kwargs):
         return tool(*args, **kwargs)
 
     except Exception as e:
-        return f"Error ejecutando {name}: {e}"
+        raise RuntimeError(
+            f"Error ejecutando {name}: {e}"
+        )
 
 def registry_stats():
     """
