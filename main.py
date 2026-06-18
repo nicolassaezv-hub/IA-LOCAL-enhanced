@@ -56,7 +56,7 @@ if __name__ == "__main__":
                 except Exception as e:
                     print(f"Error analizando {archivo}: {e}")
 
-	     # === IO Files ===
+	    # === IO Files ===
         elif user_input.startswith("crea py"):
             partes = user_input.split(" ", 2)
             respuesta = crea_py(partes[1], partes[2])
