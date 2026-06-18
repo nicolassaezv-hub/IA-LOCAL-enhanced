@@ -1,46 +1,36 @@
-import os
-import joblib
 import numpy as np
 import pandas as pd
+
+from .model_storage import ModelStorage
 
 
 class ForexPredictor:
 
-    def __init__(
-        self,
-        model_path="models/xgb_forex.pkl"
-    ):
+    def __init__(self):
 
-        self.model_path = model_path
+        self.storage = ModelStorage()
         self.model = None
 
     # -----------------------------
-    # LOAD MODEL
+    # LOAD MODEL (SAFE)
     # -----------------------------
-    def load(self):
-
-        if not os.path.exists(self.model_path):
-
-            raise FileNotFoundError(
-                f"Model not found at {self.model_path}. Train first."
-            )
-
-        self.model = joblib.load(self.model_path)
-
-        return self
-
-    # -----------------------------
-    # SINGLE PREDICTION
-    # -----------------------------
-    def predict_single(self, X: pd.DataFrame):
+    def load_model(self):
 
         if self.model is None:
 
-            self.load()
+            self.model = self.storage.load_latest()
 
-        pred = self.model.predict(X)[0]
+        return self.model
 
-        prob = self.model.predict_proba(X)[0]
+    # -----------------------------
+    # CORE SINGLE PREDICTION
+    # -----------------------------
+    def predict(self, X: pd.DataFrame):
+
+        model = self.load_model()
+
+        pred = model.predict(X)[0]
+        prob = model.predict_proba(X)[0]
 
         confidence = float(np.max(prob))
 
@@ -57,30 +47,23 @@ class ForexPredictor:
         }
 
     # -----------------------------
-    # LATEST ROW PREDICTION
-    # (for real-time use in Astra)
+    # LATEST ROW (REAL TIME USAGE)
     # -----------------------------
     def predict_latest(self, df: pd.DataFrame):
 
-        if self.model is None:
-
-            self.load()
-
         latest = df.tail(1)
 
-        return self.predict_single(latest)
+        return self.predict(latest)
 
     # -----------------------------
     # BATCH PREDICTION
     # -----------------------------
     def predict_batch(self, X: pd.DataFrame):
 
-        if self.model is None:
+        model = self.load_model()
 
-            self.load()
-
-        preds = self.model.predict(X)
-        probs = self.model.predict_proba(X)
+        preds = model.predict(X)
+        probs = model.predict_proba(X)
 
         results = []
 
@@ -97,3 +80,17 @@ class ForexPredictor:
             })
 
         return results
+
+    # -----------------------------
+    # ASTRA-READY SUMMARY OUTPUT
+    # -----------------------------
+    def predict_summary(self, X: pd.DataFrame, pair=None):
+
+        result = self.predict_latest(X)
+
+        return {
+            "pair": pair,
+            "signal": result["direction"],
+            "confidence": round(result["confidence"], 4),
+            "raw_prediction": result["prediction"]
+        }
