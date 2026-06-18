@@ -22,6 +22,16 @@ from forex.forex_memory import (
     list_saved_markets
 )
 
+def registry_stats():
+    """
+    Estadísticas del registro.
+    """
+
+    return {
+        "total_tools": len(TOOLS),
+        "tools": list_tools()
+    }
+
 from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
 FOREX_PIPELINE = ForexIntegratedPipeline()
 def run_forex_analysis(
@@ -33,24 +43,7 @@ def run_forex_analysis(
         filepath=filepath,
         mode=mode
     )
-def run_forex_analysis(filepath: str, mode: str = "full"):
 
-    """
-    Runs full forex ML pipeline:
-    - feature engineering
-    - dataset building
-    - prediction
-    - optional backtest
-    """
-
-    pipeline = ForexIntegratedPipeline()
-
-    result = pipeline.run(
-        filepath=filepath,
-        mode=mode
-    )
-
-    return result
 
 =======================================
 # REGISTRO CENTRAL
@@ -135,7 +128,6 @@ TOOLS = {
     "json": serializar_orjson,
 
     # ---------- IA ----------
-    "ask_openai": ask_openai,
     "torch_demo": torch_demo,
     "tensorflow_demo": tensorflow_demo,
     "keras_demo": keras_demo,
@@ -198,12 +190,3 @@ def execute_tool(name, *args, **kwargs):
             f"Error ejecutando {name}: {e}"
         )
 
-def registry_stats():
-    """
-    Estadísticas del registro.
-    """
-
-    return {
-        "total_tools": len(TOOLS),
-        "tools": list_tools()
-    }
