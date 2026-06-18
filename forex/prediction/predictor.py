@@ -19,7 +19,7 @@ class ForexPredictor:
         if self.model is None:
 
             self.model = self.storage.load_latest()
-
+            
         return self.model
 
     # -----------------------------
