@@ -8,67 +8,9 @@ Objetivos:
 - Facilitar agentes futuros.
 - Mantener compatibilidad con el esqueleto actual.
 """
-
-# ==========================================
-# IO FILES
-# ==========================================
-
-from io_files import (
-    leer_pdf,
-    leer_word,
-    leer_excel,
-    leer_csv,
-    escribe_pdf,
-    escribe_word,
-    escribe_excel,
-    escribe_csv,
-    crea_py
-)
-
-# ==========================================
-# AI MODELS
-# ==========================================
-
-from ai_models import (
-    ask_openai,
-    system_status,
-    torch_demo,
-    tensorflow_demo,
-    keras_demo,
-    sklearn_demo,
-    calcular_integral,
-    entrenar_modelo_sklearn
-)
-
-# ==========================================
-# WEB TOOLS
-# ==========================================
-
-from web_tools import (
-    extrae_web,
-    traducir,
-    descargar_youtube,
-    httpx_demo,
-    aiohttp_demo,
-    socketio_demo,
-    fastapi_demo,
-    flask_demo,
-    subir_archivo_azure,
-    consumir_api_grpc
-)
-
-# ==========================================
-# AUDIO VIDEO
-# ==========================================
-
-from audio_video import (
-    voz_a_texto,
-    texto_a_voz,
-    analiza_audio,
-    reproducir_audio,
-    convertir_audio,
-    descargar_audio_youtube
-)
+def ask_openai_tool(*args, **kwargs):
+    from ai_models import ask_openai
+    return ask_openai(*args, **kwargs)
 
 from forex_analytics import (
     analyze_market_file,
@@ -99,73 +41,20 @@ def run_forex_analysis(filepath: str, mode: str = "full"):
     )
 
     return result
-# ==========================================
-# VISUALIZATION
-# ==========================================
 
-from visualization import (
-    grafica_csv,
-    mostrar_tabla,
-    mostrar_rich,
-    crear_pdf,
-    procesar_imagen_skimage,
-    mostrar_gui_pyqt
-)
-
-# ==========================================
-# SECURITY
-# ==========================================
-
-from security import (
-    cifra_archivo,
-    hash_password,
-    verify_password,
-    passlib_hash,
-    passlib_verify,
-    crear_jwt,
-    verificar_jwt,
-    paramiko_demo
-)
-
-# ==========================================
-# UTILS
-# ==========================================
-
-from utils import (
-    system_status as utils_status,
-    barra_progreso,
-    tarea_programada,
-    simular_tecla,
-    simular_click,
-    bloquear_archivo,
-    iniciar_monitor,
-    obtener_fecha_arrow,
-    serializar_orjson
-)
-
-# ==========================================
-# MODULES EXTRA
-# ==========================================
-
-from modules_extra import (
-    FaissMemory,
-    LlamaMemory,
-    redis_set,
-    redis_get,
-    guardar_usuario
-)
-
-# ==========================================
+=======================================
 # REGISTRO CENTRAL
 # ==========================================
 
 TOOLS = {
     # ---------- FOREX --------- #
+    "ask_openai": ask_openai_tool,
     "forex_history" : market_history,
     "forex_compare" : compare_market_history,
     "forex_markets" : list_saved_markets,
     "forex_analyze": analyze_market_file,
-    "run_forex_analysis" : run_forex_analysis
+    "run_forex_analysis" : run_forex_analysis,
+    "registry_stats": registry_stats,
     # ---------- IO ----------
     "leer_pdf": leer_pdf,
     "leer_word": leer_word,
