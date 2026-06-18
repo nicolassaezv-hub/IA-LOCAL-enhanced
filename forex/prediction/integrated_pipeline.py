@@ -69,7 +69,7 @@ class ForexIntegratedPipeline:
 
             return {
                 "type": "full_analysis",
-
+                "rows_processed": len(df),
                 "prediction": prediction,
 
                 "backtest": backtest,
