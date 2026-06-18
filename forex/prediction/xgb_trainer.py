@@ -1,22 +1,21 @@
-import os
-import joblib
 import numpy as np
 
 from xgboost import XGBClassifier
 from sklearn.metrics import accuracy_score, classification_report
 
+from .model_storage import ModelStorage
+
 
 class ForexXGBTrainer:
 
-    def __init__(
-        self,
-        model_path="models/xgb_forex.pkl"
-    ):
+    def __init__(self):
 
-        self.model_path = model_path
+        # Storage system (versioned models)
+        self.storage = ModelStorage()
 
+        # Core model
         self.model = XGBClassifier(
-            n_estimators=400,
+            n_estimators=500,
             max_depth=6,
             learning_rate=0.05,
             subsample=0.8,
@@ -25,51 +24,64 @@ class ForexXGBTrainer:
             eval_metric="logloss"
         )
 
+        self.best_score = 0
+        self.best_model = None
+
     # -----------------------------
-    # TIME-SAFE SPLIT (VERY IMPORTANT)
+    # TIME-BASED SPLIT (NO LEAKAGE)
     # -----------------------------
-    def train_test_split_time(self, X, y, train_ratio=0.8):
+    def train_test_split(self, X, y, train_ratio=0.8):
 
-        split_index = int(len(X) * train_ratio)
+        split = int(len(X) * train_ratio)
 
-        X_train = X.iloc[:split_index]
-        X_test = X.iloc[split_index:]
+        X_train = X.iloc[:split]
+        X_test = X.iloc[split:]
 
-        y_train = y.iloc[:split_index]
-        y_test = y.iloc[split_index:]
+        y_train = y.iloc[:split]
+        y_test = y.iloc[split:]
 
         return X_train, X_test, y_train, y_test
 
     # -----------------------------
     # TRAIN MODEL
     # -----------------------------
-    def train(self, X, y):
+    def train(self, X, y, save=True):
 
         X_train, X_test, y_train, y_test = (
-            self.train_test_split_time(X, y)
+            self.train_test_split(X, y)
         )
 
-        self.model.fit(
-            X_train,
-            y_train
-        )
+        print("\n[XGB TRAINER] Training model...")
 
-        predictions = self.model.predict(X_test)
+        self.model.fit(X_train, y_train)
 
-        acc = accuracy_score(
-            y_test,
-            predictions
-        )
+        preds = self.model.predict(X_test)
 
-        print("\n=== XGBOOST RESULTS ===")
+        acc = accuracy_score(y_test, preds)
+
+        print("\n=== MODEL PERFORMANCE ===")
         print(f"Accuracy: {acc:.4f}\n")
 
-        print(
-            classification_report(
-                y_test,
-                predictions
-            )
-        )
+        print(classification_report(y_test, preds))
+
+        # Track best model
+        if acc > self.best_score:
+
+            self.best_score = acc
+            self.best_model = self.model
+
+            print("[XGB TRAINER] New BEST model found ✔")
+
+            if save:
+
+                self.storage.save_model(
+                    model=self.model,
+                    name="xgb_forex_best"
+                )
+
+        else:
+
+            print("[XGB TRAINER] Model not better than best.")
 
         return acc
 
@@ -95,55 +107,17 @@ class ForexXGBTrainer:
         return ranking
 
     # -----------------------------
-    # SAVE MODEL
+    # SAVE BEST MODEL MANUALLY
     # -----------------------------
-    def save_model(self):
+    def save_best(self):
 
-        os.makedirs(
-            os.path.dirname(self.model_path),
-            exist_ok=True
-        )
+        if self.best_model is None:
 
-        joblib.dump(
-            self.model,
-            self.model_path
-        )
-
-        print(
-            f"\nModel saved at {self.model_path}"
-        )
-
-    # -----------------------------
-    # LOAD MODEL
-    # -----------------------------
-    def load_model(self):
-
-        if not os.path.exists(self.model_path):
-
-            raise FileNotFoundError(
-                "Model not found. Train first."
+            raise ValueError(
+                "No model trained yet."
             )
 
-        self.model = joblib.load(
-            self.model_path
+        return self.storage.save_model(
+            self.best_model,
+            name="xgb_forex_best_manual"
         )
-
-        print(
-            "Model loaded successfully."
-        )
-
-    # -----------------------------
-    # PREDICT SINGLE STEP
-    # -----------------------------
-    def predict(self, X):
-
-        prediction = self.model.predict(X)
-
-        probability = self.model.predict_proba(X)
-
-        return {
-            "prediction": int(prediction[0]),
-            "confidence": float(
-                np.max(probability[0])
-            )
-        }
