@@ -1,12 +1,30 @@
-1H Format
- OHLC
- Volume
- Spread
- RSI_14
- MACD, MACD_signal, MACD_hist
- ATR_14
- EMA20, EMA50, EMA200
- Bollinger Bands
- Returns
- Volatility_24h
- Session (Tokyo/London/NewYork)
+"""
+Forex Prediction Module (XGBoost Layer)
+
+This package handles:
+- Dataset building
+- Model training (XGBoost)
+- Prediction inference
+- Optional feature engineering
+
+It is fully independent from Astra core logic.
+"""
+
+# Core ML pipeline
+from .dataset_builder import DatasetBuilder
+from .xgb_trainer import ForexXGBTrainer
+from .predictor import ForexPredictor
+
+# Optional (only if you use it actively)
+try:
+    from .feature_engineering import build_features
+except ImportError:
+    build_features = None
+
+
+__all__ = [
+    "DatasetBuilder",
+    "ForexXGBTrainer",
+    "ForexPredictor",
+    "build_features"
+]
