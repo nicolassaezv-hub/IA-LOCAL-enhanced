@@ -33,7 +33,7 @@ from astra_agent import process_request
 
 if __name__ == "__main__":
     init_db()
-	print("Tool Registry cargado:", len(TOOLS), "herramientas")
+    print("Tool Registry cargado:", len(TOOLS), "herramientas")
     print(Fore.GREEN + "=== Astra modular final ===" + Style.RESET_ALL)
     while True:
         user_input = input(Fore.CYAN + "Tú: " + Style.RESET_ALL)
