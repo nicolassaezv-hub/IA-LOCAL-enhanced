@@ -3,7 +3,7 @@ from openai import OpenAI
 import psutil
 from memory import cargar_memoria, guardar_memoria
 
-# Librerías de IA/ML que ya tienes instaladass
+# Librerías de IA/ML que ya tienes instaladass wow
 import torch
 import tensorflow as tf
 import keras
