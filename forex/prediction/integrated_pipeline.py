@@ -21,7 +21,7 @@ class ForexIntegratedPipeline:
         # 1. Load data
         df = pd.read_csv(filepath)
 
-        # 2. Feature engineering (optional but recommended)
+        # 2. Feature engineering
         df = build_features(df)
 
         # 3. Build dataset
@@ -34,12 +34,16 @@ class ForexIntegratedPipeline:
         # -------------------------
         if mode == "predict":
 
-            result = self.predictor.predict_latest(X)
+            prediction = self.predictor.predict_latest(X)
 
             return {
                 "type": "prediction",
-                "signal": result["direction"],
-                "confidence": result["confidence"]
+                "prediction": prediction,
+                "interpretation": (
+                    "Strong trend signal"
+                    if prediction["confidence"] > 0.70
+                    else "Weak/uncertain signal"
+                )
             }
 
         # -------------------------
@@ -47,11 +51,11 @@ class ForexIntegratedPipeline:
         # -------------------------
         elif mode == "backtest":
 
-            result = self.backtester.run(X)
+            backtest = self.backtester.run(X)
 
             return {
                 "type": "backtest",
-                "results": result
+                "results": backtest
             }
 
         # -------------------------
@@ -60,12 +64,36 @@ class ForexIntegratedPipeline:
         elif mode == "full":
 
             prediction = self.predictor.predict_latest(X)
+
             backtest = self.backtester.run(X)
 
             return {
                 "type": "full_analysis",
+
                 "prediction": prediction,
-                "backtest": backtest
+
+                "backtest": backtest,
+
+                "insight": {
+
+                    "market_quality": (
+                        "high"
+                        if backtest["win_rate"] > 0.55
+                        else "low"
+                    ),
+
+                    "risk_level": (
+                        "high"
+                        if backtest["max_drawdown"] > 0.20
+                        else "controlled"
+                    ),
+
+                    "model_reliability": (
+                        "good"
+                        if prediction["confidence"] > 0.65
+                        else "weak"
+                    )
+                }
             }
 
         else:
