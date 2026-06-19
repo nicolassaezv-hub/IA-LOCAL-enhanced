@@ -112,11 +112,11 @@ class ForexAnalytics:
 
         self._check_loaded()
 
-        if "Session" not in self.df.columns:
+        if "session" not in self.df.columns:
 
             return {
                 "error":
-                    "Session column not found"
+                    "session column not found"
             }
 
         report = {}
@@ -131,12 +131,12 @@ class ForexAnalytics:
                     int(len(data)),
 
                 "avg_volume":
-                    float(data["Volume"].mean())
+                    float(data["volume"].mean())
                     if "volume" in data.columns
                     else None,
 
                 "avg_spread":
-                    float(data["Spread"].mean())
+                    float(data["spread"].mean())
                     if "spread" in data.columns
                     else None,
 
@@ -144,7 +144,7 @@ class ForexAnalytics:
                     float(
                         data["volatility_24h"].mean()
                     )
-                    if "Volatility_24h"
+                    if "volatility_24h"
                     in data.columns
                     else None
             }
