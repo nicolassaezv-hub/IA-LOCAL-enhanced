@@ -121,7 +121,7 @@ class ForexAnalytics:
 
         report = {}
 
-        grouped = self.df.groupby("Session")
+        grouped = self.df.groupby("session")
 
         for session, data in grouped:
 
