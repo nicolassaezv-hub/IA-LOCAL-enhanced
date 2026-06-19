@@ -66,6 +66,7 @@ import keyboard
 import mouse
 import pytube
 from deep_translator import GoogleTranslator
+from web_tools import traducir
 # Configurar ruta de Tesseract si es necesario
 # pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
