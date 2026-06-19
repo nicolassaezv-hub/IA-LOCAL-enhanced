@@ -83,20 +83,20 @@ if __name__ == "__main__":
 
         elif user_input == "json":
             print(serializar_orjson({"msg": "ok"}))
-	
+    
         elif user_input.startswith("lee pdf"):
             respuesta = leer_pdf(user_input.split(" ",2)[-1])
         elif user_input.startswith("lee word"):
             respuesta = leer_word(user_input.split(" ",2)[-1])
         elif user_input.startswith("lee excel"):
-			show_progress("Reading Excel File", 2)
-			respuesta = leer_excel(user_input.split(" ",2)[-1])
+            show_progress("Reading Excel File", 2)
+            respuesta = leer_excel(user_input.split(" ",2)[-1])
         elif user_input.startswith("lee csv"):
-			show_progress("Reading CSV", 2)
-			respuesta = leer_csv(user_input.split(" ",2)[-1])
+            show_progress("Reading CSV", 2)
+            respuesta = leer_csv(user_input.split(" ",2)[-1])
         elif user_input.startswith("analiza csv"):
-			show_progress("Reading CSV", 2)
-			respuesta = leer_csv(user_input.split(" ",2)[-1], analizar=True)
+            show_progress("Reading CSV", 2)
+            respuesta = leer_csv(user_input.split(" ",2)[-1], analizar=True)
         elif user_input.startswith("escribe pdf"):
             partes = user_input.split(" ",2)
             respuesta = escribe_pdf(partes[1], partes[2])
