@@ -128,17 +128,17 @@ class ForexAnalytics:
 
                 "avg_volume":
                     float(data["Volume"].mean())
-                    if "Volume" in data.columns
+                    if "volume" in data.columns
                     else None,
 
                 "avg_spread":
                     float(data["Spread"].mean())
-                    if "Spread" in data.columns
+                    if "spread" in data.columns
                     else None,
 
                 "avg_volatility":
                     float(
-                        data["Volatility_24h"].mean()
+                        data["volatility_24h"].mean()
                     )
                     if "Volatility_24h"
                     in data.columns
@@ -247,14 +247,14 @@ class ForexAnalytics:
 
         self._check_loaded()
 
-        if "Volatility_24h" not in self.df.columns:
+        if "volatility_24h" not in self.df.columns:
 
             return {
                 "error":
-                    "Volatility_24h missing"
+                    "volatility_24h missing"
             }
 
-        vol = self.df["Volatility_24h"]
+        vol = self.df["volatility_24h"]
 
         return {
 
@@ -360,7 +360,7 @@ class ForexAnalytics:
 
             "Returns",
 
-            "Volatility_24h",
+            "volatility_24h",
 
             "ATR_14"
         ]
