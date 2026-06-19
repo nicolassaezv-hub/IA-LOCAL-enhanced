@@ -55,8 +55,7 @@ if __name__ == "__main__":
                     print(f"Copilot ({archivo}): {respuesta}")
                 except Exception as e:
                     print(f"Error analizando {archivo}: {e}")
-
-	    # === IO Files ===
+        # === IO Files ===
         elif user_input.startswith("crea py"):
             partes = user_input.split(" ", 2)
             respuesta = crea_py(partes[1], partes[2])
@@ -91,13 +90,13 @@ if __name__ == "__main__":
             respuesta = leer_word(user_input.split(" ",2)[-1])
         elif user_input.startswith("lee excel"):
 			show_progress("Reading Excel File", 2)
-            respuesta = leer_excel(user_input.split(" ",2)[-1])
+			respuesta = leer_excel(user_input.split(" ",2)[-1])
         elif user_input.startswith("lee csv"):
 			show_progress("Reading CSV", 2)
-            respuesta = leer_csv(user_input.split(" ",2)[-1])
+			respuesta = leer_csv(user_input.split(" ",2)[-1])
         elif user_input.startswith("analiza csv"):
 			show_progress("Reading CSV", 2)
-            respuesta = leer_csv(user_input.split(" ",2)[-1], analizar=True)
+			respuesta = leer_csv(user_input.split(" ",2)[-1], analizar=True)
         elif user_input.startswith("escribe pdf"):
             partes = user_input.split(" ",2)
             respuesta = escribe_pdf(partes[1], partes[2])
