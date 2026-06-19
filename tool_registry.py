@@ -149,14 +149,17 @@ def registry_stats():
         "tools": list_tools()
     }
 
-from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
-FOREX_PIPELINE = ForexIntegratedPipeline()
+_FOREX_PIPELINE = None
+
 def run_forex_analysis(
     filepath: str,
     mode: str = "full"
 ):
-
-    return FOREX_PIPELINE.run(
+    global _FOREX_PIPELINE
+    if _FOREX_PIPELINE is None:
+        from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
+        _FOREX_PIPELINE = ForexIntegratedPipeline()
+    return _FOREX_PIPELINE.run(
         filepath=filepath,
         mode=mode
     )

@@ -4,23 +4,18 @@ import docx
 import openpyxl
 import pandas as pd
 import pdfplumber
-from ai_models import ask_openai
 
 def crea_py(ruta, tema):
     """Genera un archivo Python a partir de un tema."""
     try:
-        # Pedir a OpenAI que genere código Python sobre el tema
+        from ai_models import ask_openai
         codigo = ask_openai(f"Genera un script en Python sobre: {tema}")
-        
-        # Guardar el código en un archivo .py
         with open(ruta, "w", encoding="utf-8") as f:
             f.write(codigo)
-        
         return f"Archivo Python creado en {ruta} con el tema: {tema}"
     except Exception as e:
         return f"Error creando archivo Python: {e}"
 
-# === Lectura de archivos ===
 def leer_pdf(ruta_pdf, usar_plumber=False):
     """Lee un archivo PDF y devuelve su texto (primeros 1000 caracteres)."""
     try:
@@ -59,12 +54,9 @@ def leer_excel(ruta_xlsx):
     except Exception as e:
         return f"Error al leer Excel: {e}"
 
-
 def leer_csv(ruta_csv, analizar=False):
     try:
-        # Leer todo el CSV completo
         df = pd.read_csv(ruta_csv, sep=None, engine='python', on_bad_lines='skip')
-
         if analizar:
             resumen = f"Columnas: {list(df.columns)}\n"
             resumen += f"Filas totales: {len(df)}\n\n"
@@ -72,11 +64,10 @@ def leer_csv(ruta_csv, analizar=False):
             resumen += df.describe(include='all').to_string()
             return resumen
         else:
-            # Mostrar solo una parte para no saturar la consola
             return df.head(50).to_string()
     except Exception as e:
         return f"Error al leer CSV: {e}"
-# === Escritura de archivos ===
+
 def escribe_pdf(ruta, texto):
     """Crea un PDF con texto simple."""
     from reportlab.pdfgen import canvas
