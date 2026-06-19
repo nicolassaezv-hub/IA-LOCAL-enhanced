@@ -1,21 +1,21 @@
 """
-Forex Prediction Module (XGBoost Layer)
+Forex Prediction Module
 
-This package handles:
-- Dataset building
-- Model training (XGBoost)
-- Prediction inference
-- Optional feature engineering
+Handles dataset building, feature engineering, model training
+(XGBoost + LightGBM + RandomForest ensemble), hyperparameter
+tuning via Optuna, prediction inference, and backtesting.
 
-It is fully independent from Astra core logic.
+Fully independent from Astra core logic.
 """
 
-# Core ML pipeline
-from .dataset_builder import DatasetBuilder
-from .xgb_trainer import ForexXGBTrainer
-from .predictor import ForexPredictor
+from .dataset_builder        import DatasetBuilder
+from .xgb_trainer            import ForexEnsembleTrainer, ForexXGBTrainer
+from .predictor              import ForexPredictor
+from .integrated_pipeline    import ForexIntegratedPipeline
+from .hyperparameter_tuner   import ForexHyperparameterTuner
+from .csv_adapter            import adapt_csv, check_compatibility
+from .multi_pair_scanner     import MultiPairScanner
 
-# Optional (only if you use it actively)
 try:
     from .feature_engineering import build_features
 except ImportError:
@@ -24,7 +24,13 @@ except ImportError:
 
 __all__ = [
     "DatasetBuilder",
+    "ForexEnsembleTrainer",
     "ForexXGBTrainer",
     "ForexPredictor",
-    "build_features"
+    "ForexIntegratedPipeline",
+    "ForexHyperparameterTuner",
+    "adapt_csv",
+    "check_compatibility",
+    "MultiPairScanner",
+    "build_features",
 ]

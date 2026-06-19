@@ -52,19 +52,120 @@ def _print_result(respuesta):
 # ═══════════════════════════════════════════════════════════
 
 def _forex_train(csv_path: str):
-    """Train XGBoost model on a CSV dataset."""
+    """Train ensemble model (XGBoost + LightGBM + RandomForest) on a CSV dataset."""
     from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
-    print(Fore.CYAN + f"\n[ASTRA] Training XGBoost on: {csv_path}")
+    print(Fore.CYAN + f"\n[ASTRA] Training Ensemble Model on: {csv_path}" + Style.RESET_ALL)
     pipeline = ForexIntegratedPipeline()
-    return pipeline.train(csv_path)
+    result = pipeline.train(csv_path)
+    if isinstance(result, dict):
+        pair = result.get("pair", "?")
+        acc  = result.get("accuracy", 0)
+        prec = result.get("precision", 0)
+        rows = result.get("rows_trained", 0)
+        out  = (
+            f"\n{Fore.GREEN}╔══ TRAINING COMPLETE ══╗{Style.RESET_ALL}\n"
+            f"  Pair       : {pair}\n"
+            f"  Rows used  : {rows}\n"
+            f"  Accuracy   : {acc:.2%}\n"
+            f"  Precision  : {prec:.2%}\n"
+        )
+        print(out)
+        return ""
+    return result
 
 
 def _forex_predict(csv_path: str):
-    """Run prediction using trained model on a CSV."""
+    """Run prediction using trained ensemble model on a CSV."""
     from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
     show_progress("Running Forex Prediction", 2)
     pipeline = ForexIntegratedPipeline()
-    return pipeline.predict(csv_path)
+    result = pipeline.predict(csv_path)
+    if isinstance(result, dict):
+        return _format_signal(result)
+    return result
+
+
+def _forex_tune(csv_path: str):
+    """Run Optuna hyperparameter search (~50 trials) then auto-train."""
+    from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
+    print(Fore.CYAN + f"\n[ASTRA] Optuna Hyperparameter Search on: {csv_path}" + Style.RESET_ALL)
+    print(Fore.YELLOW + "  This takes 5–15 min. Best params will be saved and auto-loaded next train." + Style.RESET_ALL)
+    pipeline = ForexIntegratedPipeline()
+    result = pipeline.tune(csv_path)
+    if isinstance(result, dict):
+        pair   = result.get("pair", "?")
+        trials = result.get("best_trial", "?")
+        score  = result.get("best_score", 0)
+        out    = (
+            f"\n{Fore.GREEN}╔══ TUNING COMPLETE ══╗{Style.RESET_ALL}\n"
+            f"  Pair        : {pair}\n"
+            f"  Best trial  : {trials}\n"
+            f"  Best score  : {score:.4f}\n"
+            f"  Params saved: models/forex/params/best_params_{pair}.json\n"
+        )
+        print(out)
+        return ""
+    return result
+
+
+def _forex_multi(csv_path: str):
+    """Consensus signal across multiple horizons (5/10/20 candles)."""
+    from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
+    show_progress("Multi-Horizon Prediction", 3)
+    pipeline = ForexIntegratedPipeline()
+    result = pipeline.run(csv_path, mode="multi_horizon")
+    if isinstance(result, dict):
+        return _format_signal(result.get("consensus", result))
+    return result
+
+
+def _forex_scan(folder_or_files: str):
+    """Scan all CSVs in a folder and rank BUY/SELL/HOLD signals."""
+    from forex.prediction.multi_pair_scanner import MultiPairScanner
+    show_progress("Scanning All Pairs", 2)
+    scanner = MultiPairScanner()
+    paths   = [p.strip() for p in folder_or_files.split(",") if p.strip()]
+    if len(paths) == 1 and not paths[0].lower().endswith(".csv"):
+        report = scanner.scan_folder(paths[0])
+    else:
+        report = scanner.scan(paths)
+    scanner.print_report(report)
+    return scanner.astra_summary(report)
+
+
+def _format_signal(result: dict) -> str:
+    """Pretty-print a BUY/SELL/HOLD signal dict."""
+    action   = result.get("action",         "HOLD")
+    pair     = result.get("pair",           "?")
+    conf     = result.get("confidence",     0)
+    strength = result.get("signal_strength",0)
+    regime   = result.get("regime",         "unknown")
+    adx      = result.get("adx",            0)
+    rows     = result.get("rows_processed", 0)
+    reason   = result.get("hold_reason",    "")
+
+    _COLOR = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}
+    _ICON  = {"BUY": "▲ BUY",  "SELL": "▼ SELL", "HOLD": "─ HOLD"}
+    color  = _COLOR.get(action, Fore.WHITE)
+    icon   = _ICON.get(action, action)
+
+    bar_filled = int(strength / 10)
+    bar        = "█" * bar_filled + "░" * (10 - bar_filled)
+
+    lines = [
+        f"\n{color}╔══ ASTRA FOREX SIGNAL ══╗{Style.RESET_ALL}",
+        f"  Signal     : {color}{icon}{Style.RESET_ALL}",
+        f"  Pair       : {pair}",
+        f"  Confidence : {conf:.2f}",
+        f"  Strength   : [{bar}] {strength:.1f}/100",
+        f"  ADX        : {adx:.1f}",
+        f"  Regime     : {regime}",
+        f"  Rows       : {rows}",
+    ]
+    if reason:
+        lines.append(f"  Hold reason: {reason}")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _forex_backtest(csv_path: str):
@@ -78,7 +179,7 @@ def _forex_backtest(csv_path: str):
 def _forex_full(csv_path: str):
     """Train + predict + backtest all in one run."""
     from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
-    print(Fore.CYAN + f"\n[ASTRA] Full Forex Analysis Pipeline: {csv_path}")
+    print(Fore.CYAN + f"\n[ASTRA] Full Forex Analysis Pipeline: {csv_path}" + Style.RESET_ALL)
     pipeline = ForexIntegratedPipeline()
     return pipeline.run(csv_path, mode="full")
 
@@ -127,10 +228,13 @@ def _ayuda():
 ╚══════════════════════════════════════════════════════════════╝{Style.RESET_ALL}
 
 {Fore.CYAN}── FOREX ──────────────────────────────────────────────────────{Style.RESET_ALL}
-  train forex <csv>              Train XGBoost model on your CSV
-  predict forex <csv>            Predict direction from trained model
+  tune forex <csv>               Hyperparameter search (Optuna, 5-15 min) then train
+  train forex <csv>              Train ensemble model (XGB + LGBM + RF) on CSV
+  predict forex <csv>            Predict BUY/SELL/HOLD signal from trained model
+  multi forex <csv>              Consensus signal across 3 horizons (5/10/20 candles)
   backtest forex <csv>           Backtest model on held-out data
   full forex <csv>               Train + Predict + Backtest in one shot
+  scan forex <folder>            Scan all CSVs in folder, rank signals by strength
   analiza forex <csv> <symbol>   Full technical report (RSI/MACD/EMA...)
   lista mercados                 Show all supported pairs & commodities
   historial forex <symbol>       View saved analysis history
@@ -238,6 +342,15 @@ if __name__ == "__main__":
             elif user_input.lower() in ["ayuda", "help", "?"]:
                 respuesta = _ayuda()
 
+            # ── FOREX: TUNE (Optuna) ─────────────────────────
+            elif user_input.startswith("tune forex "):
+                csv_path = user_input[len("tune forex "):].strip()
+                respuesta = _forex_tune(csv_path)
+
+            elif user_input.startswith("afinar forex "):
+                csv_path = user_input[len("afinar forex "):].strip()
+                respuesta = _forex_tune(csv_path)
+
             # ── FOREX: TRAINING ──────────────────────────────
             elif user_input.startswith("train forex "):
                 csv_path = user_input[len("train forex "):].strip()
@@ -255,6 +368,24 @@ if __name__ == "__main__":
             elif user_input.startswith("predecir forex "):
                 csv_path = user_input[len("predecir forex "):].strip()
                 respuesta = _forex_predict(csv_path)
+
+            # ── FOREX: MULTI-HORIZON ─────────────────────────
+            elif user_input.startswith("multi forex "):
+                csv_path = user_input[len("multi forex "):].strip()
+                respuesta = _forex_multi(csv_path)
+
+            elif user_input.startswith("multihorizonte forex "):
+                csv_path = user_input[len("multihorizonte forex "):].strip()
+                respuesta = _forex_multi(csv_path)
+
+            # ── FOREX: SCAN FOLDER ───────────────────────────
+            elif user_input.startswith("scan forex "):
+                target = user_input[len("scan forex "):].strip()
+                respuesta = _forex_scan(target)
+
+            elif user_input.startswith("escanear forex "):
+                target = user_input[len("escanear forex "):].strip()
+                respuesta = _forex_scan(target)
 
             # ── FOREX: BACKTEST ──────────────────────────────
             elif user_input.startswith("backtest forex "):

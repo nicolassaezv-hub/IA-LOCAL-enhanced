@@ -28,7 +28,7 @@
 
 ASTRA is a local AI-powered modular system with **66 registered tools**. It combines:
 
-- **Forex ML pipeline** — XGBoost model that learns from your OHLCV data and predicts price direction
+- **Forex ML pipeline** — Ensemble of XGBoost + LightGBM + RandomForest that learns from your OHLCV data and outputs BUY/SELL/HOLD signals with confidence scores
 - **Technical analytics** — RSI, MACD, EMA, ATR, Bollinger Bands, volatility, session analysis, market regime detection
 - **Document tools** — read and write PDF, Word, Excel, CSV
 - **Web tools** — scraping, translation, YouTube download
@@ -78,49 +78,94 @@ Type any command and press Enter. Type `salir` or `exit` to quit.
 
 ## 4. Forex Prediction Pipeline
 
-This is ASTRA's most powerful feature. The pipeline uses **XGBoost** (gradient boosting) to learn from historical OHLCV data and predict whether the next candle will close higher (bullish) or lower (bearish).
+This is ASTRA's most powerful feature. The pipeline uses a **three-model ensemble** (XGBoost + LightGBM + RandomForest with soft-voting and isotonic calibration) to learn from historical OHLCV data and output a **BUY / SELL / HOLD** signal with a confidence score and signal strength.
 
-### Workflow — Do This in Order
+### CSV Auto-Adapter — No Manual Preparation Needed
 
-#### Step 1 — Train the model
+ASTRA now accepts your CSV exactly as exported from your broker or data provider. It automatically:
+
+- Renames columns to the internal format (`rsi_14` → `RSI_14`, `ema_150` → `EMA200`, etc.)
+- Infers the **trading pair** from the filename (e.g. `usd_jpy_dataset.csv` → `USDJPY`)
+- Derives the **trading session** from the timestamp hour (Tokyo / London / NewYork)
+- Computes `returns` fresh from close prices
+- Drops NaN warm-up rows automatically
+
+**You never need to edit your CSV manually.** Just point ASTRA at the file.
+
+To preview what the adapter will do before running:
+```
+Tú: check_compatibility data/usd_jpy_dataset.csv
+```
+
+---
+
+### Recommended Workflow
+
+#### Step 0 (first time only) — Hyperparameter Tuning
+
+```
+tune forex data/eurusd_h1.csv
+```
+
+Runs **Optuna** (~50 trials, ~5–15 min) to find the optimal model parameters for your specific pair and data. Best parameters are saved to `models/forex/params/best_params_EURUSD.json` and loaded automatically on every future `train forex` run.
+
+Do this once per pair. Skip if you're in a hurry — the defaults are already solid.
+
+#### Step 1 — Train the ensemble
 
 ```
 train forex data/eurusd_h1.csv
 ```
 
 What happens:
-- Loads your CSV
-- Applies feature engineering (lag features, rolling stats, price structure, momentum, market regime)
-- Builds target labels (next candle up/down)
-- Splits data 80% train / 20% test (time-ordered — no lookahead leakage)
-- Trains XGBoost with 500 trees, learning rate 0.05, early stopping at 30 rounds
-- Auto-balances bullish/bearish classes
-- Prints accuracy, precision, recall, F1 per class
-- Shows top-10 feature importance ranking
-- Saves model to `models/forex/latest_model.pkl`
+- Loads and normalizes your CSV automatically
+- Applies 15+ feature engineering steps: ADX, Stochastic, Williams %R, OBV, Bollinger squeeze, candlestick patterns, EMA crossover signals, extended RSI features, lag features, rolling stats
+- Builds a **risk/reward-aware target** — a trade is labelled BUY only if price hits Take Profit (1.5× ATR) before Stop Loss (1× ATR) within 10 candles, not just next-candle direction
+- Trains XGBoost + LightGBM + RandomForest in soft-voting ensemble
+- Applies isotonic calibration for well-calibrated probability estimates
+- Saves models to `models/forex/`
 
-You only need to train once per dataset. After training, the model persists.
+Output:
+```
+╔══ TRAINING COMPLETE ══╗
+  Pair       : EURUSD
+  Rows used  : 14280
+  Accuracy   : 64.3%
+  Precision  : 68.1%
+```
 
-#### Step 2 — Predict on new data
+#### Step 2 — Predict BUY / SELL / HOLD
 
 ```
 predict forex data/eurusd_new.csv
 ```
 
-Output example:
-```json
-{
-  "type": "prediction",
-  "rows_processed": 1420,
-  "signal": "bullish",
-  "confidence": 0.7312,
-  "interpretation": "Strong signal — act with care"
-}
+Output:
+```
+╔══ ASTRA FOREX SIGNAL ══╗
+  Signal     : ▲ BUY
+  Pair       : EURUSD
+  Confidence : 0.71
+  Strength   : [███████░░░] 71.0/100
+  ADX        : 31.2
+  Regime     : moderate trend
+  Rows       : 1420
 ```
 
-Confidence > 0.70 = strong signal. Below = wait for confirmation.
+Signal rules:
+- **BUY / SELL** — only shown when confidence ≥ 0.62 **AND** ADX ≥ 22 (trending market). Both gates must pass.
+- **HOLD** — shown when confidence is below threshold or market is ranging. The hold reason is displayed.
+- Confidence > 0.70 = strong signal. Below 0.62 = wait.
 
-#### Step 3 — Backtest the model
+#### Step 3 — Multi-Horizon Consensus (optional, stronger signal)
+
+```
+multi forex data/eurusd_h1.csv
+```
+
+Runs predictions across **three time horizons** (5, 10, and 20 candles ahead) and returns a consensus signal. When all three horizons agree, the signal is more reliable. Ideal before entering a swing trade.
+
+#### Step 4 — Backtest
 
 ```
 backtest forex data/eurusd_h1.csv
@@ -134,13 +179,58 @@ Output includes:
 - `max_drawdown` — worst peak-to-trough loss
 - `total_return` and `total_return_pct`
 
-#### Step 4 (optional) — Full pipeline in one shot
+#### Step 5 (optional) — Full pipeline in one shot
 
 ```
 full forex data/eurusd_h1.csv
 ```
 
 Runs train + predict + backtest together. Best for a first look at a new dataset.
+
+---
+
+### Scan Multiple Pairs at Once
+
+```
+scan forex data/
+```
+
+Scans every CSV file in the `data/` folder, runs the prediction pipeline on each pair, and prints a ranked signal report:
+
+```
+======================================================================
+  ASTRA MULTI-PAIR SIGNAL REPORT
+  Scanned: 4 pairs  |  BUY: 1  SELL: 1  HOLD: 2
+======================================================================
+  ▲  USDJPY       BUY    conf=0.71  str=[████████░░] 79.3  adx= 31.2  moderate trend
+  ▼  XAUUSD       SELL   conf=0.67  str=[██████░░░░] 62.1  adx= 25.8  moderate trend
+  ─  EURUSD       HOLD   conf=0.54  str=[████░░░░░░] 41.0  adx= 18.1  ranging
+  ─  GBPUSD       HOLD   conf=0.51  str=[███░░░░░░░] 32.7  adx= 14.3  ranging
+======================================================================
+  ▲ BEST BUY  → USDJPY  (confidence=0.71, strength=79.3)
+  ▼ BEST SELL → XAUUSD  (confidence=0.67, strength=62.1)
+```
+
+You can also pass specific files separated by commas:
+```
+scan forex data/usdjpy.csv, data/eurusd.csv, data/xauusd.csv
+```
+
+---
+
+### Command Summary
+
+| Command | What it does |
+|---|---|
+| `tune forex <csv>` | Optuna hyperparameter search — run once per pair (~5–15 min) |
+| `train forex <csv>` | Train ensemble model (XGB + LGBM + RF) |
+| `predict forex <csv>` | Get BUY/SELL/HOLD signal |
+| `multi forex <csv>` | Consensus signal across 3 horizons |
+| `backtest forex <csv>` | Backtest on held-out data |
+| `full forex <csv>` | Train + Predict + Backtest in one shot |
+| `scan forex <folder>` | Scan all CSVs in folder, rank all signals |
+
+Spanish aliases work for all commands: `entrenar forex`, `predecir forex`, `afinar forex`, `escanear forex`, `multihorizonte forex`.
 
 ---
 
@@ -587,48 +677,40 @@ This means GPT knows the context of your session and can answer follow-up questi
 
 ## 14. CSV Format Guide for Forex
 
-For the ML prediction pipeline (`train forex`, `predict forex`, `backtest forex`), your CSV must contain these columns:
+**ASTRA accepts your CSV as-is** — the built-in adapter normalizes column names, infers the pair from the filename, and derives missing fields automatically. You do not need to rename columns or pre-process anything.
 
-### Required Columns
+### What the Adapter Handles Automatically
 
-| Column | Description | Example |
+| Your CSV column | What ASTRA uses it as | Note |
 |---|---|---|
-| `timestamp` | Datetime of the candle | `2024-01-15 08:00:00` |
-| `open` | Opening price | `1.08542` |
-| `high` | High price | `1.08680` |
-| `low` | Low price | `1.08490` |
-| `close` | Closing price | `1.08621` |
-| `volume` | Volume (tick or lot) | `12540` |
-| `spread` | Bid-ask spread in pips | `0.8` |
-| `RSI_14` | RSI with period 14 | `54.3` |
-| `MACD` | MACD line | `0.00042` |
-| `MACD_signal` | Signal line | `0.00031` |
-| `MACD_hist` | MACD histogram | `0.00011` |
-| `ATR_14` | Average True Range, 14 periods | `0.00085` |
-| `EMA20` | Exponential MA 20 | `1.08410` |
-| `EMA50` | Exponential MA 50 | `1.08200` |
-| `EMA200` | Exponential MA 200 | `1.07900` |
-| `volatility_24h` | Rolling 24h volatility | `0.00062` |
-| `BB_upper` | Bollinger Band upper | `1.09010` |
-| `BB_lower` | Bollinger Band lower | `1.07830` |
-| `returns` | Log return: ln(close/prev_close) | `0.00073` |
-| `session` | Trading session | `London` |
-| `pair` | Currency pair | `EUR/USD` |
+| `timestamp` | `timestamp` | Required |
+| `open`, `high`, `low`, `close`, `volume` | same | Required — core OHLCV |
+| `rsi_14` | `RSI_14` | Auto-renamed |
+| `macd` | `MACD` | Auto-renamed |
+| `macd_signal` | `MACD_signal` | Auto-renamed |
+| `macd_histogram` | `MACD_hist` | Auto-renamed |
+| `atr_14` | `ATR_14` | Auto-renamed |
+| `ema_20` | `EMA20` | Auto-renamed |
+| `ema_50` | `EMA50` | Auto-renamed |
+| `ema_150` or `ema_200` | `EMA200` | Auto-renamed (ema_150 used as proxy) |
+| `bollinger_upper_20` | `BB_upper` | Auto-renamed |
+| `bollinger_lower_20` | `BB_lower` | Auto-renamed |
+| `volatility_20` | `volatility_24h` | Auto-renamed |
+| `spread` | `spread` | Filled with 0 if missing |
+| `returns` | computed from `close` | Always recomputed fresh |
+| `session` | computed from timestamp hour | Always derived automatically |
+| `pair` | inferred from filename | e.g. `usd_jpy_data.csv` → `USDJPY` |
 
-### Session Values
+### Minimum Requirements
 
-The `session` column must be one of: `Tokyo`, `London`, `NewYork`
+- **Mandatory columns:** `timestamp`, `open`, `high`, `low`, `close`, `volume`
+- **Strongly recommended:** RSI, MACD, ATR, EMA20/50 (ASTRA can still run without them but signal quality drops)
+- **Minimum rows:** 50 for training, 25 for prediction (1000+ strongly recommended for reliable results)
 
-### Minimum Rows
+### Typical Broker Export (MT4/MT5 style)
 
-- Training: at least **50 rows** recommended (more is better — 1000+ for reliable results)
-- Prediction: at least **25 rows** (for lag features and rolling calculations)
+If your broker exports raw OHLCV only (no indicators), you can add them with `pandas-ta` before feeding to ASTRA:
 
-### How to Prepare Your CSV
-
-Most brokers and data providers export OHLCV data in MT4/MT5 format. You can compute the indicators with any tool (TradingView Pine Script, pandas-ta, ta-lib, etc.) and add them as columns before feeding to ASTRA.
-
-Example with pandas-ta:
 ```python
 import pandas as pd
 import pandas_ta as ta
@@ -638,13 +720,11 @@ df.ta.rsi(length=14, append=True)
 df.ta.macd(fast=12, slow=26, signal=9, append=True)
 df.ta.ema(length=20, append=True)
 df.ta.ema(length=50, append=True)
-df.ta.ema(length=200, append=True)
+df.ta.ema(length=150, append=True)   # ema_150 is used as EMA200 proxy
 df.ta.atr(length=14, append=True)
 df.ta.bbands(length=20, append=True)
-df["returns"] = df["close"].pct_change().apply(lambda x: __import__("math").log(1 + x))
-df["pair"] = "EUR/USD"
-df["session"] = "London"   # or compute based on hour
 df.to_csv("eurusd_ready.csv", index=False)
+# No need to add pair, session, or returns — ASTRA derives them automatically
 ```
 
 ---
@@ -653,12 +733,14 @@ df.to_csv("eurusd_ready.csv", index=False)
 
 ### Forex ML
 
-1. **Use at least 2000+ candles** for training — XGBoost needs enough data to learn patterns. H1 bars: 2 years ≈ 17,000 rows. M15 bars: 6 months ≈ 16,000 rows.
-2. **Retrain regularly** — markets evolve. Retrain monthly or when drawdown exceeds 15%.
-3. **Check feature importance** — the trainer prints which features matter most. If RSI_14 ranks very low, your RSI data may be incorrect.
-4. **Confidence threshold** — only act on signals with confidence > 0.65. Confidence < 0.55 is essentially random.
-5. **Backtest on clean data** — use data from a different time period than training data for the most honest backtest.
-6. **Profit factor > 1.5** means the model is consistently earning more than it loses on the test set.
+1. **Use at least 2000+ candles** for training — the ensemble needs enough data to learn patterns. H1 bars: 2 years ≈ 17,000 rows. M15 bars: 6 months ≈ 16,000 rows.
+2. **Run `tune forex` once per pair before training** — Optuna finds better hyperparameters than defaults in most cases. Best params persist across sessions, so you only pay the 5–15 min cost once.
+3. **Confidence threshold** — only act on signals with confidence ≥ 0.62 **and** ADX ≥ 22. ASTRA enforces this automatically — if either gate fails you get HOLD, not a false signal.
+4. **Use `multi forex` for higher-conviction entries** — when all 3 horizons agree, the signal is more reliable. Use `predict forex` for a faster check.
+5. **Use `scan forex` to find opportunities** — instead of checking pairs one by one, point it at your data folder and it ranks all pairs by signal strength in one run.
+6. **Retrain regularly** — markets evolve. Retrain monthly or when drawdown exceeds 15%.
+7. **Backtest on clean data** — use data from a different time period than training for the most honest backtest.
+8. **Profit factor > 1.5** means the model is consistently earning more than it loses on the test set.
 
 ### GPT Integration
 
