@@ -65,8 +65,7 @@ import dearpygui.dearpygui as dpg
 import keyboard
 import mouse
 import pytube
-from googletrans import Translator
-
+from deep_translator import GoogleTranslator
 # Configurar ruta de Tesseract si es necesario
 # pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
@@ -333,7 +332,10 @@ if __name__ == "__main__":
             texto = user_input.split(" ",2)[-1]
             traductor = Translator()
             try:
-                respuesta = traductor.translate(texto, dest="en").text
+                respuesta = traducir(
+                    texto,
+                    "en"
+                )
             except Exception as e:
                 respuesta = f"Error al traducir: {e}"
 
