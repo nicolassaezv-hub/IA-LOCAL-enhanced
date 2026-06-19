@@ -66,7 +66,11 @@ class ForexAnalytics:
         self.filepath = filepath
 
         self.df = pd.read_csv(filepath)
-
+        self.df.columns = (
+            self.df.columns
+            .str.strip()
+            .str.lower()
+        )
         return {
             "status": "loaded",
             "rows": len(self.df),
