@@ -1296,8 +1296,11 @@ def flask_demo():
 
 ```
 </details>
+
 ## CSVs Disponibles para Analisis y Prediccion Forex
+
  (UPDATED 23/06/2026) https://drive.google.com/drive/folders/16K6FPgHz6k_FQ6SBYFvOv-7XwaQXsRLm?usp=sharing
+ 
 ## Modulos (Instalados y/o Integrados)
 
 Aqui el archivo con el listado de modulos Instalados e Integrados
