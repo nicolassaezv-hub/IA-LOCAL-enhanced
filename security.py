@@ -1,16 +1,44 @@
-# security.py
-from cryptography.fernet import Fernet
-import bcrypt
-import jwt
-import paramiko
-from passlib.context import CryptContext
+try:
+    from cryptography.fernet import Fernet
+    HAS_CRYPTOGRAPHY = True
+except ImportError:
+    Fernet = None
+    HAS_CRYPTOGRAPHY = False
 
-# Configuración de Passlib para hashing de contraseñas
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+try:
+    import bcrypt
+    HAS_BCRYPT = True
+except ImportError:
+    bcrypt = None
+    HAS_BCRYPT = False
 
-# === Cifrado de archivos con Fernet ===
+try:
+    import jwt
+    HAS_JWT = True
+except ImportError:
+    jwt = None
+    HAS_JWT = False
+
+try:
+    import paramiko
+    HAS_PARAMIKO = True
+except ImportError:
+    paramiko = None
+    HAS_PARAMIKO = False
+
+try:
+    from passlib.context import CryptContext
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    HAS_PASSLIB = True
+except ImportError:
+    CryptContext = None
+    pwd_context = None
+    HAS_PASSLIB = False
+
+
 def cifra_archivo(ruta):
-    """Cifra un archivo con Fernet y guarda la versión cifrada."""
+    if not HAS_CRYPTOGRAPHY:
+        return "cryptography no disponible. Instale: pip install cryptography"
     try:
         key = Fernet.generate_key()
         fernet = Fernet(key)
@@ -24,9 +52,10 @@ def cifra_archivo(ruta):
     except Exception as e:
         return f"Error al cifrar archivo: {e}"
 
-# === Hashing de contraseñas con bcrypt ===
+
 def hash_password(password: str):
-    """Genera un hash seguro de una contraseña usando bcrypt."""
+    if not HAS_BCRYPT:
+        return "bcrypt no disponible. Instale: pip install bcrypt"
     try:
         salt = bcrypt.gensalt()
         hashed = bcrypt.hashpw(password.encode(), salt)
@@ -34,52 +63,60 @@ def hash_password(password: str):
     except Exception as e:
         return f"Error al generar hash: {e}"
 
+
 def verify_password(password: str, hashed: str):
-    """Verifica una contraseña contra su hash."""
+    if not HAS_BCRYPT:
+        return "bcrypt no disponible. Instale: pip install bcrypt"
     try:
         return bcrypt.checkpw(password.encode(), hashed.encode())
     except Exception as e:
         return f"Error al verificar contraseña: {e}"
 
-# === Hashing con Passlib ===
+
 def passlib_hash(password: str):
-    """Genera un hash usando Passlib."""
+    if not HAS_PASSLIB:
+        return "passlib no disponible. Instale: pip install passlib"
     try:
         return pwd_context.hash(password)
     except Exception as e:
         return f"Error en Passlib hash: {e}"
 
+
 def passlib_verify(password: str, hashed: str):
-    """Verifica contraseña con Passlib."""
+    if not HAS_PASSLIB:
+        return "passlib no disponible. Instale: pip install passlib"
     try:
         return pwd_context.verify(password, hashed)
     except Exception as e:
         return f"Error en Passlib verify: {e}"
 
-# === Tokens JWT ===
+
 def crear_jwt(payload: dict, secret: str = "mi_clave_secreta"):
-    """Crea un token JWT con un payload dado."""
+    if not HAS_JWT:
+        return "PyJWT no disponible. Instale: pip install PyJWT"
     try:
         token = jwt.encode(payload, secret, algorithm="HS256")
         return token
     except Exception as e:
         return f"Error al crear JWT: {e}"
 
+
 def verificar_jwt(token: str, secret: str = "mi_clave_secreta"):
-    """Verifica y decodifica un token JWT."""
+    if not HAS_JWT:
+        return "PyJWT no disponible. Instale: pip install PyJWT"
     try:
         decoded = jwt.decode(token, secret, algorithms=["HS256"])
         return decoded
     except Exception as e:
         return f"Error al verificar JWT: {e}"
 
-# === Ejemplo con Paramiko (SSH) ===
+
 def paramiko_demo(host="localhost", user="usuario", password="clave"):
-    """Ejemplo simple de conexión SSH con Paramiko (no ejecuta comandos reales)."""
+    if not HAS_PARAMIKO:
+        return "paramiko no disponible. Instale: pip install paramiko"
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        # No conectamos realmente, solo mostramos inicialización
         return "Cliente SSH inicializado con Paramiko."
     except Exception as e:
         return f"Error en Paramiko demo: {e}"

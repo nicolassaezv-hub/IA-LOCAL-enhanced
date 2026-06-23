@@ -1,78 +1,371 @@
-# astra.py
-
 import os
 import logging
+import time
+import sqlite3
+import csv
 
-# Desactivar todos los logs de Kivy
 os.environ["KIVY_NO_CONSOLELOG"] = "1"
 logging.getLogger("kivy").disabled = True
 logging.getLogger("kivy").setLevel(logging.CRITICAL)
 
-import time
-import sqlite3
+try:
+    import openai
+    HAS_OPENAI = True
+except ImportError:
+    openai = None
+    HAS_OPENAI = False
 
-import openai
-import psutil
-import PyPDF2
-import docx
-import openpyxl
-import speech_recognition as sr
-import pyttsx3
-import pyautogui
-import mss
-import pytesseract
-import pygetwindow as gw
-from PIL import Image
-import csv
-import pandas as pd
+try:
+    import psutil
+    HAS_PSUTIL = True
+except ImportError:
+    psutil = None
+    HAS_PSUTIL = False
 
-# Nuevos módulos instalados
-import reportlab.lib.pagesizes as psizes
-from reportlab.pdfgen import canvas
-import matplotlib.pyplot as plt
-import seaborn as sns
-import requests
-from bs4 import BeautifulSoup
-from cryptography.fernet import Fernet
-import schedule
-import pdfplumber
-import pydub
-import skimage
-import imageio
-import librosa
-import sounddevice as sd
-import torch
-import tensorflow as tf
-import keras
-import httpx
-import aiohttp
-import websocket
-import flask
-import fastapi
-import bcrypt
-import paramiko
-import jwt
-import keyring
-from colorama import Fore, Style
-from rich.console import Console
-from tabulate import tabulate
-import json5
-import yaml
-import h5py
-import PyQt5
-import kivy
-import dearpygui.dearpygui as dpg
-import keyboard
-import mouse
-import pytube
-from deep_translator import GoogleTranslator
-from web_tools import traducir
-# Configurar ruta de Tesseract si es necesario
-# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+try:
+    import PyPDF2
+    HAS_PYPDF2 = True
+except ImportError:
+    PyPDF2 = None
+    HAS_PYPDF2 = False
 
-# Cliente OpenAI con tu API key
-openai.api_key = os.getenv("OPENAI_API_KEY")
-# === Configuración de memoria con SQLite ===
+try:
+    import docx
+    HAS_DOCX = True
+except ImportError:
+    docx = None
+    HAS_DOCX = False
+
+try:
+    import openpyxl
+    HAS_OPENPYXL = True
+except ImportError:
+    openpyxl = None
+    HAS_OPENPYXL = False
+
+try:
+    import speech_recognition as sr
+    HAS_SR = True
+except ImportError:
+    sr = None
+    HAS_SR = False
+
+try:
+    import pyttsx3
+    HAS_PYTTSX3 = True
+except ImportError:
+    pyttsx3 = None
+    HAS_PYTTSX3 = False
+
+try:
+    import pyautogui
+    HAS_PYAUTOGUI = True
+except ImportError:
+    pyautogui = None
+    HAS_PYAUTOGUI = False
+
+try:
+    import mss
+    HAS_MSS = True
+except ImportError:
+    mss = None
+    HAS_MSS = False
+
+try:
+    import pytesseract
+    HAS_TESSERACT = True
+except ImportError:
+    pytesseract = None
+    HAS_TESSERACT = False
+
+try:
+    import pygetwindow as gw
+    HAS_PYGETWINDOW = True
+except ImportError:
+    gw = None
+    HAS_PYGETWINDOW = False
+
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    Image = None
+    HAS_PIL = False
+
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    pd = None
+    HAS_PANDAS = False
+
+try:
+    import reportlab.lib.pagesizes as psizes
+    from reportlab.pdfgen import canvas
+    HAS_REPORTLAB = True
+except ImportError:
+    psizes = None
+    canvas = None
+    HAS_REPORTLAB = False
+
+try:
+    import matplotlib.pyplot as plt
+    HAS_MPL = True
+except ImportError:
+    plt = None
+    HAS_MPL = False
+
+try:
+    import seaborn as sns
+    HAS_SNS = True
+except ImportError:
+    sns = None
+    HAS_SNS = False
+
+try:
+    import requests
+    from bs4 import BeautifulSoup
+    HAS_REQUESTS = True
+except ImportError:
+    requests = None
+    BeautifulSoup = None
+    HAS_REQUESTS = False
+
+try:
+    from cryptography.fernet import Fernet
+    HAS_CRYPTOGRAPHY = True
+except ImportError:
+    Fernet = None
+    HAS_CRYPTOGRAPHY = False
+
+try:
+    import schedule
+    HAS_SCHEDULE = True
+except ImportError:
+    schedule = None
+    HAS_SCHEDULE = False
+
+try:
+    import pdfplumber
+    HAS_PDFPLUMBER = True
+except ImportError:
+    pdfplumber = None
+    HAS_PDFPLUMBER = False
+
+try:
+    import pydub
+    HAS_PYDUB = True
+except ImportError:
+    pydub = None
+    HAS_PYDUB = False
+
+try:
+    import skimage
+    HAS_SKIMAGE = True
+except ImportError:
+    skimage = None
+    HAS_SKIMAGE = False
+
+try:
+    import imageio
+    HAS_IMAGEIO = True
+except ImportError:
+    imageio = None
+    HAS_IMAGEIO = False
+
+try:
+    import librosa
+    HAS_LIBROSA = True
+except ImportError:
+    librosa = None
+    HAS_LIBROSA = False
+
+try:
+    import sounddevice as sd
+    HAS_SD = True
+except ImportError:
+    sd = None
+    HAS_SD = False
+
+try:
+    import torch
+    HAS_TORCH = True
+except ImportError:
+    torch = None
+    HAS_TORCH = False
+
+try:
+    import tensorflow as tf
+    HAS_TF = True
+except ImportError:
+    tf = None
+    HAS_TF = False
+
+try:
+    import keras
+    HAS_KERAS = True
+except ImportError:
+    keras = None
+    HAS_KERAS = False
+
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    httpx = None
+    HAS_HTTPX = False
+
+try:
+    import aiohttp
+    HAS_AIOHTTP = True
+except ImportError:
+    aiohttp = None
+    HAS_AIOHTTP = False
+
+try:
+    import websocket
+    HAS_WEBSOCKET = True
+except ImportError:
+    websocket = None
+    HAS_WEBSOCKET = False
+
+try:
+    import flask
+    HAS_FLASK = True
+except ImportError:
+    flask = None
+    HAS_FLASK = False
+
+try:
+    import fastapi
+    HAS_FASTAPI = True
+except ImportError:
+    fastapi = None
+    HAS_FASTAPI = False
+
+try:
+    import bcrypt
+    HAS_BCRYPT = True
+except ImportError:
+    bcrypt = None
+    HAS_BCRYPT = False
+
+try:
+    import paramiko
+    HAS_PARAMIKO = True
+except ImportError:
+    paramiko = None
+    HAS_PARAMIKO = False
+
+try:
+    import jwt
+    HAS_JWT = True
+except ImportError:
+    jwt = None
+    HAS_JWT = False
+
+try:
+    import keyring
+    HAS_KEYRING = True
+except ImportError:
+    keyring = None
+    HAS_KEYRING = False
+
+try:
+    from colorama import Fore, Style
+    HAS_COLORAMA = True
+except ImportError:
+    class _ForeStub:
+        GREEN = CYAN = YELLOW = RED = WHITE = ""
+    class _StyleStub:
+        RESET_ALL = ""
+    Fore = _ForeStub()
+    Style = _StyleStub()
+    HAS_COLORAMA = False
+
+try:
+    from rich.console import Console
+    _rich_console = Console()
+    HAS_RICH = True
+except ImportError:
+    _rich_console = None
+    HAS_RICH = False
+
+try:
+    from tabulate import tabulate
+    HAS_TABULATE = True
+except ImportError:
+    tabulate = None
+    HAS_TABULATE = False
+
+try:
+    import yaml
+    HAS_YAML = True
+except ImportError:
+    yaml = None
+    HAS_YAML = False
+
+try:
+    import h5py
+    HAS_H5PY = True
+except ImportError:
+    h5py = None
+    HAS_H5PY = False
+
+try:
+    import PyQt5
+    HAS_PYQT5 = True
+except ImportError:
+    PyQt5 = None
+    HAS_PYQT5 = False
+
+try:
+    import kivy
+    HAS_KIVY = True
+except ImportError:
+    kivy = None
+    HAS_KIVY = False
+
+try:
+    import dearpygui.dearpygui as dpg
+    HAS_DPG = True
+except ImportError:
+    dpg = None
+    HAS_DPG = False
+
+try:
+    import keyboard
+    HAS_KEYBOARD = True
+except Exception:
+    keyboard = None
+    HAS_KEYBOARD = False
+
+try:
+    import mouse
+    HAS_MOUSE = True
+except Exception:
+    mouse = None
+    HAS_MOUSE = False
+
+try:
+    import pytube
+    HAS_PYTUBE = True
+except ImportError:
+    pytube = None
+    HAS_PYTUBE = False
+
+try:
+    from deep_translator import GoogleTranslator
+    HAS_DEEP_TRANSLATOR = True
+except ImportError:
+    GoogleTranslator = None
+    HAS_DEEP_TRANSLATOR = False
+
+
+if HAS_OPENAI:
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+
+
 def init_db():
     conn = sqlite3.connect("memoria.db")
     c = conn.cursor()
@@ -85,6 +378,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 def guardar_memoria(user_input, ai_response):
     conn = sqlite3.connect("memoria.db")
     c = conn.cursor()
@@ -92,6 +386,7 @@ def guardar_memoria(user_input, ai_response):
               (user_input, ai_response, time.ctime()))
     conn.commit()
     conn.close()
+
 
 def cargar_memoria(limit=10):
     conn = sqlite3.connect("memoria.db")
@@ -104,14 +399,18 @@ def cargar_memoria(limit=10):
         memoria += f"Tú: {u}\nCopilot: {a}\n"
     return memoria
 
-# === Funciones auxiliares ===
+
 def system_status():
+    if not HAS_PSUTIL:
+        return "Estado del sistema no disponible."
     cpu = psutil.cpu_percent(interval=1)
     ram = psutil.virtual_memory().percent
     return f"CPU: {cpu}% | RAM: {ram}%"
 
-# === Lectura de archivos ===
+
 def leer_pdf(ruta_pdf):
+    if not HAS_PYPDF2:
+        return "PyPDF2 no disponible."
     try:
         with open(ruta_pdf, "rb") as f:
             lector = PyPDF2.PdfReader(f)
@@ -122,7 +421,10 @@ def leer_pdf(ruta_pdf):
     except Exception as e:
         return f"Error al leer PDF: {e}"
 
+
 def leer_word(ruta_docx):
+    if not HAS_DOCX:
+        return "python-docx no disponible."
     try:
         doc = docx.Document(ruta_docx)
         texto = "\n".join([p.text for p in doc.paragraphs])
@@ -130,7 +432,10 @@ def leer_word(ruta_docx):
     except Exception as e:
         return f"Error al leer Word: {e}"
 
+
 def leer_excel(ruta_xlsx):
+    if not HAS_OPENPYXL:
+        return "openpyxl no disponible."
     try:
         wb = openpyxl.load_workbook(ruta_xlsx)
         hoja = wb.active
@@ -141,13 +446,14 @@ def leer_excel(ruta_xlsx):
     except Exception as e:
         return f"Error al leer Excel: {e}"
 
+
 def leer_csv(ruta_csv, analizar=False):
+    if not HAS_PANDAS:
+        return "pandas no disponible."
     try:
         df = pd.read_csv(ruta_csv)
         if analizar:
-            resumen = f"Columnas: {list(df.columns)}\n"
-            resumen += f"Filas totales: {len(df)}\n\n"
-            resumen += "Estadísticas:\n"
+            resumen = f"Columnas: {list(df.columns)}\nFilas totales: {len(df)}\n\nEstadísticas:\n"
             resumen += df.describe(include="all").to_string()
             return resumen[:1500]
         else:
@@ -155,20 +461,28 @@ def leer_csv(ruta_csv, analizar=False):
     except Exception as e:
         return f"Error al leer CSV: {e}"
 
-# === Escritura de archivos ===
+
 def escribe_pdf(ruta, texto):
+    if not HAS_REPORTLAB:
+        return "ReportLab no disponible."
     c = canvas.Canvas(ruta, pagesize=psizes.A4)
     c.drawString(100, 750, texto)
     c.save()
     return f"PDF creado en {ruta}"
 
+
 def escribe_word(ruta, texto):
+    if not HAS_DOCX:
+        return "python-docx no disponible."
     doc = docx.Document()
     doc.add_paragraph(texto)
     doc.save(ruta)
     return f"Word creado en {ruta}"
 
+
 def escribe_excel(ruta, datos):
+    if not HAS_OPENPYXL:
+        return "openpyxl no disponible."
     wb = openpyxl.Workbook()
     hoja = wb.active
     for fila in datos.split("\n"):
@@ -176,30 +490,44 @@ def escribe_excel(ruta, datos):
     wb.save(ruta)
     return f"Excel creado en {ruta}"
 
+
 def escribe_csv(ruta, datos):
     with open(ruta, "w", newline="", encoding="utf-8") as f:
         f.write(datos)
     return f"CSV creado en {ruta}"
 
-# === Graficar CSV ===
-def grafica_csv(ruta):
-    df = pd.read_csv(ruta)
-    plt.figure(figsize=(8,6))
-    sns.histplot(df[df.columns[0]], kde=True)
-    plt.savefig("grafico.png")
-    return "Gráfico guardado como grafico.png"
 
-# === Scraping web ===
-def extrae_web(url):
+def grafica_csv(ruta):
+    if not HAS_PANDAS or not HAS_MPL:
+        return "pandas/matplotlib no disponibles."
     try:
-        r = requests.get(url)
+        df = pd.read_csv(ruta)
+        plt.figure(figsize=(8, 6))
+        if HAS_SNS:
+            sns.histplot(df[df.columns[0]], kde=True)
+        else:
+            plt.hist(df[df.columns[0]].dropna())
+        plt.savefig("grafico.png")
+        plt.close()
+        return "Gráfico guardado como grafico.png"
+    except Exception as e:
+        return f"Error al graficar: {e}"
+
+
+def extrae_web(url):
+    if not HAS_REQUESTS:
+        return "requests no disponible."
+    try:
+        r = requests.get(url, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
         return soup.get_text()[:1000]
     except Exception as e:
         return f"Error al extraer web: {e}"
 
-# === Cifrado de archivos ===
+
 def cifra_archivo(ruta):
+    if not HAS_CRYPTOGRAPHY:
+        return "cryptography no disponible."
     try:
         key = Fernet.generate_key()
         fernet = Fernet(key)
@@ -212,145 +540,41 @@ def cifra_archivo(ruta):
     except Exception as e:
         return f"Error al cifrar archivo: {e}"
 
-# === Conversación con IA con memoria ===
-def ask_openai(user_message):
-    memoria = cargar_memoria(limit=10)
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role":"system","content":"You are Copilot integrated in a local wrapper."},
-            {"role":"user","content":f"Memoria previa:\n{memoria}\n\nNueva entrada:\n{user_message}\n\nEstado del PC: {system_status()}"}
-        ]
-    )
-    reply = response.choices[0].message.content
-    guardar_memoria(user_message, reply)
-    return reply
 
-# === Bucle principal ===
+def ask_openai(user_message):
+    if not HAS_OPENAI:
+        return "openai no disponible. Configure OPENAI_API_KEY e instale: pip install openai"
+    try:
+        memoria = cargar_memoria(limit=10)
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are Copilot integrated in a local wrapper."},
+                {"role": "user", "content": f"Memoria previa:\n{memoria}\n\nNueva entrada:\n{user_message}\n\nEstado del PC: {system_status()}"}
+            ]
+        )
+        reply = response.choices[0].message.content
+        guardar_memoria(user_message, reply)
+        return reply
+    except Exception as e:
+        return f"Error al comunicarse con OpenAI: {e}"
+
+
 if __name__ == "__main__":
     init_db()
-    print(Fore.GREEN + "=== Astra extendida con nuevas funciones ===" + Style.RESET_ALL)
+    print(Fore.GREEN + "=== ASTRA — Sistema AI Modular ===" + Style.RESET_ALL)
     while True:
-        user_input = input(Fore.CYAN + "Tú: " + Style.RESET_ALL)
-
-        if user_input.lower() in ["salir","exit","quit"]:
+        try:
+            user_input = input(Fore.CYAN + "Tú: " + Style.RESET_ALL).strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nSaliendo...")
             break
 
-        elif user_input.startswith("lee pdf"):
-            ruta = user_input.split(" ",2)[-1]
-            respuesta = leer_pdf(ruta)
-    
-        elif user_input.startswith("lee word"):
-            ruta = user_input.split(" ",2)[-1]
-            respuesta = leer_word(ruta)
-
-        elif user_input.startswith("lee excel"):
-            ruta = user_input.split(" ",2)[-1]
-            respuesta = leer_excel(ruta)
-
-        elif user_input.startswith("lee csv"):
-            ruta = user_input.split(" ",2)[-1]
-            respuesta = leer_csv(ruta)
-
-        elif user_input.startswith("analiza csv"):
-            ruta = user_input.split(" ",2)[-1]
-            respuesta = leer_csv(ruta, analizar=True)
-
-        elif user_input.startswith("analiza codigo"):
-            import ast
-            try:
-                with open("astra.py", "r", encoding="utf-8") as f:
-                    code = f.read()
-
-                tree = ast.parse(code)
-                functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
-                print("Funciones encontradas en astra.py:", functions)
-
-                response = openai.ChatCompletion.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": "Eres un asistente que revisa código Python y da recomendaciones de mejora."},
-                        {"role": "user", "content": f"Analiza este código y dame sugerencias:\n{code}"}
-                    ]
-                )
-                respuesta = response.choices[0].message.content
-            except Exception as e:
-                respuesta = f"Error al analizar el código: {e}"
-
-        elif user_input.startswith("escribe pdf"):
-            partes = user_input.split(" ",2)
-            ruta, texto = partes[1], partes[2]
-            respuesta = escribe_pdf(ruta, texto)
-
-        elif user_input.startswith("escribe word"):
-            partes = user_input.split(" ",2)
-            ruta, texto = partes[1], partes[2]
-            respuesta = escribe_word(ruta, texto)
-
-        elif user_input.startswith("escribe excel"):
-            partes = user_input.split(" ",2)
-            ruta, datos = partes[1], partes[2]
-            respuesta = escribe_excel(ruta, datos)
-
-        elif user_input.startswith("escribe csv"):
-            partes = user_input.split(" ",2)
-            ruta, datos = partes[1], partes[2]
-            respuesta = escribe_csv(ruta, datos)
-
-        elif user_input.startswith("grafica csv"):
-            ruta = user_input.split(" ",2)[-1]
-            respuesta = grafica_csv(ruta)
-
-        elif user_input.startswith("extrae web"):
-            url = user_input.split(" ",2)[-1]
-            respuesta = extrae_web(url)
-
-        elif user_input.startswith("cifra archivo"):
-            ruta = user_input.split(" ",2)[-1]
-            respuesta = cifra_archivo(ruta)
-
-        elif user_input.startswith("voz a texto"):
-            recognizer = sr.Recognizer()
-            with sr.Microphone() as source:
-                print("Habla ahora...")
-                audio = recognizer.listen(source)
-            try:
-                respuesta = recognizer.recognize_google(audio, language="es-ES")
-            except Exception as e:
-                respuesta = f"Error al reconocer voz: {e}"
-
-        elif user_input.startswith("texto a voz"):
-            engine = pyttsx3.init()
-            texto = user_input.split(" ",2)[-1]
-            engine.say(texto)
-            engine.runAndWait()
-            respuesta = "Texto leído en voz alta."
-
+        if user_input.lower() in ["salir", "exit", "quit"]:
+            break
         elif user_input.startswith("estado pc"):
-            respuesta = system_status()
-
-        elif user_input.startswith("traducir"):
-            texto = user_input.split(" ",2)[-1]
-            traductor = Translator()
-            try:
-                respuesta = traducir(
-                    texto,
-                    "en"
-                )
-            except Exception as e:
-                respuesta = f"Error al traducir: {e}"
-
-        elif user_input.startswith("youtube"):
-            url = user_input.split(" ",2)[-1]
-            try:
-                yt = pytube.YouTube(url)
-                stream = yt.streams.get_highest_resolution()
-                stream.download()
-                respuesta = f"Video descargado: {yt.title}"
-            except Exception as e:
-                respuesta = f"Error al descargar video: {e}"
-
+            print(system_status())
+        elif user_input.startswith("extrae web "):
+            print(extrae_web(user_input[11:]))
         else:
-            respuesta = ask_openai(user_input)
-
-        print(Fore.YELLOW + "Copilot: " + Style.RESET_ALL + respuesta)
+            print(ask_openai(user_input))

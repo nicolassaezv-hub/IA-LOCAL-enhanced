@@ -1,12 +1,17 @@
-# io_files.py
 import PyPDF2
 import docx
 import openpyxl
 import pandas as pd
-import pdfplumber
+
+try:
+    import pdfplumber
+    HAS_PDFPLUMBER = True
+except ImportError:
+    pdfplumber = None
+    HAS_PDFPLUMBER = False
+
 
 def crea_py(ruta, tema):
-    """Genera un archivo Python a partir de un tema."""
     try:
         from ai_models import ask_openai
         codigo = ask_openai(f"Genera un script en Python sobre: {tema}")
@@ -16,11 +21,11 @@ def crea_py(ruta, tema):
     except Exception as e:
         return f"Error creando archivo Python: {e}"
 
+
 def leer_pdf(ruta_pdf, usar_plumber=False):
-    """Lee un archivo PDF y devuelve su texto (primeros 1000 caracteres)."""
     try:
         texto = ""
-        if usar_plumber:
+        if usar_plumber and HAS_PDFPLUMBER:
             with pdfplumber.open(ruta_pdf) as pdf:
                 for pagina in pdf.pages:
                     texto += pagina.extract_text() or ""
@@ -33,8 +38,8 @@ def leer_pdf(ruta_pdf, usar_plumber=False):
     except Exception as e:
         return f"Error al leer PDF: {e}"
 
+
 def leer_word(ruta_docx):
-    """Lee un archivo Word (.docx) y devuelve su texto."""
     try:
         doc = docx.Document(ruta_docx)
         texto = "\n".join([p.text for p in doc.paragraphs])
@@ -42,8 +47,8 @@ def leer_word(ruta_docx):
     except Exception as e:
         return f"Error al leer Word: {e}"
 
+
 def leer_excel(ruta_xlsx):
-    """Lee un archivo Excel y devuelve su contenido (primeros 1000 caracteres)."""
     try:
         wb = openpyxl.load_workbook(ruta_xlsx)
         hoja = wb.active
@@ -53,6 +58,7 @@ def leer_excel(ruta_xlsx):
         return texto[:70000]
     except Exception as e:
         return f"Error al leer Excel: {e}"
+
 
 def leer_csv(ruta_csv, analizar=False):
     try:
@@ -68,20 +74,22 @@ def leer_csv(ruta_csv, analizar=False):
     except Exception as e:
         return f"Error al leer CSV: {e}"
 
+
 def escribe_pdf(ruta, texto):
-    """Crea un PDF con texto simple."""
-    from reportlab.pdfgen import canvas
-    import reportlab.lib.pagesizes as psizes
     try:
+        from reportlab.pdfgen import canvas
+        import reportlab.lib.pagesizes as psizes
         c = canvas.Canvas(ruta, pagesize=psizes.A4)
         c.drawString(100, 750, texto)
         c.save()
         return f"PDF creado en {ruta}"
+    except ImportError:
+        return "reportlab no disponible. Instale: pip install reportlab"
     except Exception as e:
         return f"Error al crear PDF: {e}"
 
+
 def escribe_word(ruta, texto):
-    """Crea un archivo Word con texto simple."""
     try:
         doc = docx.Document()
         doc.add_paragraph(texto)
@@ -90,8 +98,8 @@ def escribe_word(ruta, texto):
     except Exception as e:
         return f"Error al crear Word: {e}"
 
+
 def escribe_excel(ruta, datos):
-    """Crea un archivo Excel a partir de datos separados por comas."""
     try:
         wb = openpyxl.Workbook()
         hoja = wb.active
@@ -102,8 +110,8 @@ def escribe_excel(ruta, datos):
     except Exception as e:
         return f"Error al crear Excel: {e}"
 
+
 def escribe_csv(ruta, datos):
-    """Crea un archivo CSV a partir de texto plano."""
     try:
         with open(ruta, "w", newline="", encoding="utf-8") as f:
             f.write(datos)

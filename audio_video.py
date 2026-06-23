@@ -1,27 +1,64 @@
-# audio_video.py
-import speech_recognition as sr
-import pyttsx3
-import librosa
-import sounddevice as sd
-import pydub
 import numpy as np
-import pytube
 
-# === Voz a texto ===
+try:
+    import speech_recognition as sr
+    HAS_SR = True
+except ImportError:
+    sr = None
+    HAS_SR = False
+
+try:
+    import pyttsx3
+    HAS_PYTTSX3 = True
+except ImportError:
+    pyttsx3 = None
+    HAS_PYTTSX3 = False
+
+try:
+    import librosa
+    HAS_LIBROSA = True
+except ImportError:
+    librosa = None
+    HAS_LIBROSA = False
+
+try:
+    import sounddevice as sd
+    HAS_SD = True
+except ImportError:
+    sd = None
+    HAS_SD = False
+
+try:
+    import pydub
+    HAS_PYDUB = True
+except ImportError:
+    pydub = None
+    HAS_PYDUB = False
+
+try:
+    import pytube
+    HAS_PYTUBE = True
+except ImportError:
+    pytube = None
+    HAS_PYTUBE = False
+
+
 def voz_a_texto():
-    """Convierte voz en texto usando el micrófono y Google Speech Recognition."""
-    recognizer = sr.Recognizer()
-    with sr.Microphone() as source:
-        print("Habla ahora...")
-        audio = recognizer.listen(source)
+    if not HAS_SR:
+        return "Reconocimiento de voz no disponible en este sistema (speech_recognition no instalado)."
     try:
+        recognizer = sr.Recognizer()
+        with sr.Microphone() as source:
+            print("Habla ahora...")
+            audio = recognizer.listen(source)
         return recognizer.recognize_google(audio, language="es-ES")
     except Exception as e:
         return f"Error al reconocer voz: {e}"
 
-# === Texto a voz ===
+
 def texto_a_voz(texto):
-    """Convierte texto en voz usando pyttsx3."""
+    if not HAS_PYTTSX3:
+        return "Texto a voz no disponible en este sistema (pyttsx3 no instalado)."
     try:
         engine = pyttsx3.init()
         engine.say(texto)
@@ -30,9 +67,10 @@ def texto_a_voz(texto):
     except Exception as e:
         return f"Error al convertir texto a voz: {e}"
 
-# === Análisis de audio con Librosa ===
+
 def analiza_audio(ruta_audio):
-    """Analiza un archivo de audio con Librosa y devuelve duración y tempo estimado."""
+    if not HAS_LIBROSA:
+        return "Análisis de audio no disponible en este sistema (librosa no instalado)."
     try:
         y, sr_lib = librosa.load(ruta_audio)
         duracion = librosa.get_duration(y=y, sr=sr_lib)
@@ -41,9 +79,10 @@ def analiza_audio(ruta_audio):
     except Exception as e:
         return f"Error al analizar audio: {e}"
 
-# === Reproducción de audio con SoundDevice ===
+
 def reproducir_audio(ruta_audio):
-    """Reproduce un archivo de audio usando SoundDevice."""
+    if not HAS_LIBROSA or not HAS_SD:
+        return "Reproducción de audio no disponible en este sistema."
     try:
         y, sr_lib = librosa.load(ruta_audio, sr=None)
         sd.play(y, sr_lib)
@@ -52,9 +91,10 @@ def reproducir_audio(ruta_audio):
     except Exception as e:
         return f"Error al reproducir audio: {e}"
 
-# === Conversión de audio con Pydub ===
+
 def convertir_audio(ruta_audio, formato="mp3"):
-    """Convierte un archivo de audio a otro formato usando Pydub."""
+    if not HAS_PYDUB:
+        return "Conversión de audio no disponible en este sistema (pydub no instalado)."
     try:
         audio = pydub.AudioSegment.from_file(ruta_audio)
         salida = ruta_audio.rsplit(".", 1)[0] + f".{formato}"
@@ -63,9 +103,10 @@ def convertir_audio(ruta_audio, formato="mp3"):
     except Exception as e:
         return f"Error al convertir audio: {e}"
 
-# === Descarga de YouTube (solo audio) ===
+
 def descargar_audio_youtube(url):
-    """Descarga solo el audio de un video de YouTube."""
+    if not HAS_PYTUBE:
+        return "Descarga de YouTube no disponible en este sistema (pytube no instalado)."
     try:
         yt = pytube.YouTube(url)
         stream = yt.streams.filter(only_audio=True).first()

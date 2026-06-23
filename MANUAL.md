@@ -1,783 +1,334 @@
-# ASTRA — User Manual
-## Complete Guide to Getting the Most Out of Your AI System
+# ASTRA — Manual de Usuario
+**Sistema AI Modular · Consultor PYME · v2.0**
 
 ---
 
-## Table of Contents
+## PARTE 1 — INSTALACIÓN Y ARRANQUE
 
-1. [What is ASTRA?](#1-what-is-astra)
-2. [Requirements & Setup](#2-requirements--setup)
-3. [Starting ASTRA](#3-starting-astra)
-4. [Forex Prediction Pipeline](#4-forex-prediction-pipeline)
-5. [Document Commands](#5-document-commands)
-6. [Web Tools](#6-web-tools)
-7. [AI & Machine Learning Demos](#7-ai--machine-learning-demos)
-8. [Security & Cryptography](#8-security--cryptography)
-9. [Visualization](#9-visualization)
-10. [System & Utilities](#10-system--utilities)
-11. [Memory & Database](#11-memory--database)
-12. [Audio & Video](#12-audio--video)
-13. [GPT Fallback (Free Chat)](#13-gpt-fallback-free-chat)
-14. [CSV Format Guide for Forex](#14-csv-format-guide-for-forex)
-15. [Tips for Full Potential](#15-tips-for-full-potential)
-16. [Limitations in Hosted Mode](#16-limitations-in-hosted-mode)
+### Requisitos previos
+- Python 3.10 o superior
+- pip actualizado: `python -m pip install --upgrade pip`
+- Una API key de **Groq** (gratis): https://console.groq.com → API Keys → Create API Key
 
 ---
 
-## 1. What is ASTRA?
+### Instalación en Windows (recomendado: entorno virtual)
 
-ASTRA is a local AI-powered modular system with **66 registered tools**. It combines:
+```cmd
+:: 1. Clonar / descargar el proyecto y entrar a la carpeta
+cd ruta\al\proyecto
 
-- **Forex ML pipeline** — Ensemble of XGBoost + LightGBM + RandomForest that learns from your OHLCV data and outputs BUY/SELL/HOLD signals with confidence scores
-- **Technical analytics** — RSI, MACD, EMA, ATR, Bollinger Bands, volatility, session analysis, market regime detection
-- **Document tools** — read and write PDF, Word, Excel, CSV
-- **Web tools** — scraping, translation, YouTube download
-- **Security utilities** — bcrypt hashing, JWT tokens, Fernet encryption
-- **AI models** — PyTorch, TensorFlow, Keras, Scikit-learn running locally
-- **GPT integration** — any unrecognized input is sent to OpenAI's GPT for free-form response
+:: 2. Crear entorno virtual
+python -m venv venv
 
-Type `ayuda` at any time to see the command reference.
+:: 3. Activar el entorno virtual
+venv\Scripts\activate.bat          (CMD)
+.\venv\Scripts\Activate.ps1        (PowerShell)
+
+:: 4. Instalar dependencias
+pip install -r artifacts\astra\requirements.txt
+
+:: 5. Configurar la API key de Groq (una sola vez)
+setx GROQ_API_KEY "gsk_tu_key_aqui"
+:: Cierra y vuelve a abrir el terminal para que tome efecto
+
+:: 6. Lanzar ASTRA
+cd artifacts\astra
+python main.py
+```
+
+> **Alternativa a setx**: crea un archivo `.env` dentro de `artifacts\astra\` con:
+> ```
+> GROQ_API_KEY=gsk_tu_key_aqui
+> ```
+> Luego instala `pip install python-dotenv` y añade al inicio de `main.py`:
+> ```python
+> from dotenv import load_dotenv; load_dotenv()
+> ```
 
 ---
 
-## 2. Requirements & Setup
+### Instalación en Linux / Replit
 
-### Required
+```bash
+# 1. Instalar dependencias
+pip install -r artifacts/astra/requirements.txt
 
-| Item | Details |
+# 2. La API key ya está configurada en Replit Secrets como GROQ_API_KEY
+#    (no se necesita ningún paso extra en Replit)
+
+# 3. Lanzar ASTRA
+cd artifacts/astra && python main.py
+```
+
+En Replit el workflow **"ASTRA AI"** hace el paso 3 automáticamente al abrir el proyecto.
+
+---
+
+### Diagnóstico antes de arrancar (opcional pero útil)
+
+```bash
+cd artifacts/astra
+python check_startup.py
+```
+
+Resultado esperado:
+- Phase 2: 35 paquetes OK, 0 critical failures
+- Phase 3: 18/18 módulos OK
+- Phase 4: 12/12 módulos Forex/BI OK
+- Phase 5: 4/4 smoke tests OK
+- Final: `No critical issues found`
+
+Los `WARN` (torch, tensorflow, redis, librosa…) son **opcionales** — no bloquean el arranque.
+
+---
+
+### Instalar paquetes opcionales (si los necesitas)
+
+```bash
+pip install torch           # PyTorch — deep learning
+pip install tensorflow      # TensorFlow
+pip install redis           # cliente Redis
+pip install scikit-image    # procesamiento de imagen
+pip install librosa         # análisis de audio
+pip install python-dotenv   # carga .env automáticamente
+```
+
+---
+
+## PARTE 2 — COMANDOS DISPONIBLES
+
+Una vez dentro del asistente (prompt `Tú:`), escribe en lenguaje natural.
+El archivo CSV/Excel puede estar en cualquier ruta relativa a `artifacts/astra/`.
+
+---
+
+### Branch 1 — Núcleo: Documentos, Seguridad y Sistema
+
+#### Lectura de archivos
+| Comando | Qué hace |
 |---|---|
-| **OpenAI API Key** | Add as secret `OPENAI_API_KEY`. Without it, chat/GPT commands return an error, but all other tools work fine. |
-| **CSV data** | For Forex ML features, your CSV must have specific columns (see Section 14). |
+| `lee pdf informe.pdf` | Lee y extrae texto de un PDF |
+| `lee word documento.docx` | Lee un documento Word |
+| `lee excel tabla.xlsx` | Lee un Excel |
+| `lee csv datos.csv` | Lee un CSV |
 
-### Optional
-
-| Item | Details |
+#### Web y traducción
+| Comando | Qué hace |
 |---|---|
-| Redis | For `redis set` / `redis get` commands. Not required to run. |
-| Microphone/speakers | For `voz a texto` / `texto a voz` — not available in hosted/cloud mode. |
+| `traduce Hola mundo al inglés` | Traduce texto al idioma indicado |
+| `extrae web https://ejemplo.com` | Scraping y extracción de texto de una URL |
 
----
-
-## 3. Starting ASTRA
-
-ASTRA starts automatically via the **"Start application"** workflow. You will see:
-
-```
-╔══════════════════════════════════════════╗
-║        ASTRA  —  Modular AI System       ║
-║  Forex · ML · Security · Documents · Web ║
-╚══════════════════════════════════════════╝
-  66 tools loaded  |  type 'ayuda' for commands
-
-Tú: _
-```
-
-Type any command and press Enter. Type `salir` or `exit` to quit.
-
----
-
-## 4. Forex Prediction Pipeline
-
-This is ASTRA's most powerful feature. The pipeline uses a **three-model ensemble** (XGBoost + LightGBM + RandomForest with soft-voting and isotonic calibration) to learn from historical OHLCV data and output a **BUY / SELL / HOLD** signal with a confidence score and signal strength.
-
-### CSV Auto-Adapter — No Manual Preparation Needed
-
-ASTRA now accepts your CSV exactly as exported from your broker or data provider. It automatically:
-
-- Renames columns to the internal format (`rsi_14` → `RSI_14`, `ema_150` → `EMA200`, etc.)
-- Infers the **trading pair** from the filename (e.g. `usd_jpy_dataset.csv` → `USDJPY`)
-- Derives the **trading session** from the timestamp hour (Tokyo / London / NewYork)
-- Computes `returns` fresh from close prices
-- Drops NaN warm-up rows automatically
-
-**You never need to edit your CSV manually.** Just point ASTRA at the file.
-
-To preview what the adapter will do before running:
-```
-Tú: check_compatibility data/usd_jpy_dataset.csv
-```
-
----
-
-### Recommended Workflow
-
-#### Step 0 (first time only) — Hyperparameter Tuning
-
-```
-tune forex data/eurusd_h1.csv
-```
-
-Runs **Optuna** (~50 trials, ~5–15 min) to find the optimal model parameters for your specific pair and data. Best parameters are saved to `models/forex/params/best_params_EURUSD.json` and loaded automatically on every future `train forex` run.
-
-Do this once per pair. Skip if you're in a hurry — the defaults are already solid.
-
-#### Step 1 — Train the ensemble
-
-```
-train forex data/eurusd_h1.csv
-```
-
-What happens:
-- Loads and normalizes your CSV automatically
-- Applies 15+ feature engineering steps: ADX, Stochastic, Williams %R, OBV, Bollinger squeeze, candlestick patterns, EMA crossover signals, extended RSI features, lag features, rolling stats
-- Builds a **risk/reward-aware target** — a trade is labelled BUY only if price hits Take Profit (1.5× ATR) before Stop Loss (1× ATR) within 10 candles, not just next-candle direction
-- Trains XGBoost + LightGBM + RandomForest in soft-voting ensemble
-- Applies isotonic calibration for well-calibrated probability estimates
-- Saves models to `models/forex/`
-
-Output:
-```
-╔══ TRAINING COMPLETE ══╗
-  Pair       : EURUSD
-  Rows used  : 14280
-  Accuracy   : 64.3%
-  Precision  : 68.1%
-```
-
-#### Step 2 — Predict BUY / SELL / HOLD
-
-```
-predict forex data/eurusd_new.csv
-```
-
-Output:
-```
-╔══ ASTRA FOREX SIGNAL ══╗
-  Signal     : ▲ BUY
-  Pair       : EURUSD
-  Confidence : 0.71
-  Strength   : [███████░░░] 71.0/100
-  ADX        : 31.2
-  Regime     : moderate trend
-  Rows       : 1420
-```
-
-Signal rules:
-- **BUY / SELL** — only shown when confidence ≥ 0.62 **AND** ADX ≥ 22 (trending market). Both gates must pass.
-- **HOLD** — shown when confidence is below threshold or market is ranging. The hold reason is displayed.
-- Confidence > 0.70 = strong signal. Below 0.62 = wait.
-
-#### Step 3 — Multi-Horizon Consensus (optional, stronger signal)
-
-```
-multi forex data/eurusd_h1.csv
-```
-
-Runs predictions across **three time horizons** (5, 10, and 20 candles ahead) and returns a consensus signal. When all three horizons agree, the signal is more reliable. Ideal before entering a swing trade.
-
-#### Step 4 — Backtest
-
-```
-backtest forex data/eurusd_h1.csv
-```
-
-Runs the model on the **held-out test portion** (last 20% of data — never seen during training). Simulates trading with 1% risk per trade, confidence-scaled position sizing.
-
-Output includes:
-- `win_rate` — percentage of profitable trades
-- `profit_factor` — ratio of total wins to total losses (> 1.0 is profitable)
-- `max_drawdown` — worst peak-to-trough loss
-- `total_return` and `total_return_pct`
-
-#### Step 5 (optional) — Full pipeline in one shot
-
-```
-full forex data/eurusd_h1.csv
-```
-
-Runs train + predict + backtest together. Best for a first look at a new dataset.
-
----
-
-### Scan Multiple Pairs at Once
-
-```
-scan forex data/
-```
-
-Scans every CSV file in the `data/` folder, runs the prediction pipeline on each pair, and prints a ranked signal report:
-
-```
-======================================================================
-  ASTRA MULTI-PAIR SIGNAL REPORT
-  Scanned: 4 pairs  |  BUY: 1  SELL: 1  HOLD: 2
-======================================================================
-  ▲  USDJPY       BUY    conf=0.71  str=[████████░░] 79.3  adx= 31.2  moderate trend
-  ▼  XAUUSD       SELL   conf=0.67  str=[██████░░░░] 62.1  adx= 25.8  moderate trend
-  ─  EURUSD       HOLD   conf=0.54  str=[████░░░░░░] 41.0  adx= 18.1  ranging
-  ─  GBPUSD       HOLD   conf=0.51  str=[███░░░░░░░] 32.7  adx= 14.3  ranging
-======================================================================
-  ▲ BEST BUY  → USDJPY  (confidence=0.71, strength=79.3)
-  ▼ BEST SELL → XAUUSD  (confidence=0.67, strength=62.1)
-```
-
-You can also pass specific files separated by commas:
-```
-scan forex data/usdjpy.csv, data/eurusd.csv, data/xauusd.csv
-```
-
----
-
-### Command Summary
-
-| Command | What it does |
+#### Seguridad
+| Comando | Qué hace |
 |---|---|
-| `tune forex <csv>` | Optuna hyperparameter search — run once per pair (~5–15 min) |
-| `train forex <csv>` | Train ensemble model (XGB + LGBM + RF) |
-| `predict forex <csv>` | Get BUY/SELL/HOLD signal |
-| `multi forex <csv>` | Consensus signal across 3 horizons |
-| `backtest forex <csv>` | Backtest on held-out data |
-| `full forex <csv>` | Train + Predict + Backtest in one shot |
-| `scan forex <folder>` | Scan all CSVs in folder, rank all signals |
+| `hash password mipassword` | Genera hash bcrypt seguro |
+| `cifrar archivo secreto.txt` | Cifra un archivo con clave AES |
+| `crear jwt` | Genera un token JWT firmado |
 
-Spanish aliases work for all commands: `entrenar forex`, `predecir forex`, `afinar forex`, `escanear forex`, `multihorizonte forex`.
-
----
-
-### Technical Analytics (no model needed)
-
-```
-analiza forex data/eurusd.csv EUR/USD
-```
-
-Generates a full technical report including:
-- Dataset profile (rows, columns, missing values)
-- Session breakdown (Tokyo / London / New York volume, spread, volatility)
-- RSI analysis (mean, max, min, overbought/oversold counts)
-- MACD (bullish/bearish periods, histogram average)
-- Volatility stats (mean, std, max, min)
-- EMA trend (bullish/bearish candle ratios: EMA20 > EMA50 > EMA200)
-- Market regime clustering (KMeans on returns + ATR + volatility)
-- Report is **automatically saved** to `data/forex_analytics/`
-
-You can also pass just the symbol name if the market is already in memory:
-```
-analiza forex EUR/USD
-```
-
----
-
-### Market & History Commands
-
-| Command | What it does |
+#### Sistema
+| Comando | Qué hace |
 |---|---|
-| `lista mercados` | Show all 27 Forex pairs and 20 commodities supported |
-| `mercados analizados` | List all markets that have been analyzed and saved |
-| `historial forex EUR/USD` | Show all past analysis reports for EUR/USD |
-| `compara forex EUR/USD` | Compare the last 5 reports for EUR/USD side-by-side |
-
-Supported pair aliases (no slash needed):
-`eurusd`, `gbpusd`, `usdjpy`, `audusd`, `nzdusd`, `usdcad`, `usdchf`, `eurjpy`, `gbpjpy`, `eurgbp` and more.
-
-Commodity aliases: `brent`, `wti`, `natgas`, `robusta`, `feeder cattle`, etc.
+| `estado pc` | CPU, RAM, disco y uptime |
+| `ayuda` | Lista todos los comandos disponibles |
 
 ---
 
-## 5. Document Commands
+### Branch 2 — Análisis Forex
 
-### Read Files
+El sistema reconoce 41 pares: EUR/USD, GBP/USD, USD/JPY, BTC/USD, commodities, etc.
 
-| Command | Example |
+| Comando | Qué hace |
 |---|---|
-| `lee pdf <path>` | `lee pdf reports/quarterly.pdf` |
-| `lee word <path>` | `lee word notes/meeting.docx` |
-| `lee excel <path>` | `lee excel data/budget.xlsx` |
-| `lee csv <path>` | `lee csv data/prices.csv` |
-| `analiza csv <path>` | `analiza csv data/prices.csv` |
+| `analiza forex eurusd datos.csv` | Análisis técnico completo: RSI, MACD, EMA, CCI, MFI, ROC, volatilidad, señal ML |
+| `forex eurusd` | Reconoce el par y muestra estado del mercado |
+| `history eurusd` | Historial de análisis guardados para ese par |
+| `compare history eurusd` | Compara los últimos reportes guardados |
+| `list markets` | Lista todos los mercados analizados hasta ahora |
 
-`lee csv` shows the first 50 rows. `analiza csv` shows full column stats (mean, std, min, max, count, nulls).
+#### Indicadores técnicos incluidos en el análisis
 
-### Write Files
-
-| Command | Example |
+| Grupo | Indicadores |
 |---|---|
-| `escribe pdf <path> <text>` | `escribe pdf output/report.pdf "Quarterly Results 2025"` |
-| `escribe word <path> <text>` | `escribe word output/notes.docx "Meeting notes from June"` |
-| `escribe excel <path> <data>` | `escribe excel output/data.xlsx "Name,Score\nAlice,95\nBob,87"` |
-| `escribe csv <path> <data>` | `escribe csv output/log.csv "time,value\n12:00,100"` |
-
-### Generate Python Script with GPT
-
-```
-crea py output/scraper.py "a web scraper that gets news headlines"
-```
-
-Sends the topic to GPT, gets Python code back, saves it as a `.py` file.
+| Momentum | RSI-14, Williams %R, Estocástico (14,3) |
+| Tendencia | MACD (12/26/9), EMA 20/50/150, ADX-14, cruce EMA |
+| Volatilidad | ATR-14, Bollinger Bands (20), ATR relativo |
+| Ciclo / extremos | **CCI-20** — sobrecompra/sobreventa sin límite |
+| Volumen | OBV, **MFI-14** — RSI ponderado por volumen |
+| Momentum % | **ROC-10** — cambio normalizado, comparable entre pares |
+| Patrones vela | Doji, Hammer, Shooting Star, Engulfing alcista/bajista |
 
 ---
 
-## 6. Web Tools
+### Branch 3 — Business Intelligence (BI Engine)
 
-### Scrape a Webpage
+| Comando | Qué hace |
+|---|---|
+| `analiza negocio ventas.csv` | KPIs financieros + health score + alertas automáticas |
+| `kpis reporte.xlsx` | Análisis de KPIs sobre un Excel |
+| `analisis completo negocio.csv` | Diagnóstico completo: KPIs + señal ML + recomendaciones |
+| `consulta empresa datos.xlsx` | Modo consultor PYME básico |
+| `entrena negocio historico.csv` | Entrena modelo ML sobre datos históricos de negocio |
 
-```
-extrae web https://example.com
-```
-
-Returns the first 1000 characters of visible text from the page.
-
-### Translate Text
-
-```
-traducir Hola mundo, esto es ASTRA en acción
-```
-
-Auto-detects source language, translates to English. To specify a different target:
-modify the command to use `deep_translator.GoogleTranslator(target="es")` in `web_tools.py`.
-
-### Download YouTube Video
-
-```
-youtube https://www.youtube.com/watch?v=XXXXXXXXXXX
-```
-
-Downloads the highest resolution stream to the current directory.
-
-### Framework Demos
-
-These initialize framework objects without starting servers — useful to verify the libraries work:
-
-```
-httpx demo
-aiohttp demo
-socketio demo
-fastapi demo
-flask demo
-```
+El archivo debe tener columnas como `revenue`/`ingresos`, `expenses`/`gastos`, `date`/`fecha`.
+Formatos soportados: `.csv`, `.xlsx`, `.xls`
 
 ---
 
-## 7. AI & Machine Learning Demos
+### Branch 4 — Consultor PYME Avanzado
 
-These run locally — no API key needed.
+Los cuatro módulos del consultor estratégico. Todos generan narración automática de **Llama-3.3-70B** al finalizar.
 
-### PyTorch
-
+#### `diagnóstico pyme`
 ```
-torch demo
+diagnóstico pyme ventas.csv
 ```
-Creates two tensors `[1,2,3]` and `[4,5,6]`, multiplies them element-wise. Output: `[4, 10, 18]`. Confirms PyTorch is running on CPU.
+Genera un **Scorecard Multidimensional** con tres dimensiones independientes:
+- **Salud Financiera** (40%): márgenes bruto/neto, ratio de gastos, saldo mínimo
+- **Salud de Crecimiento** (35%): CAGR, tendencia MoM, YoY
+- **Nivel de Riesgo** (25%): volatilidad, concentración, estabilidad
 
-### TensorFlow
-
-```
-tensorflow demo
-```
-Creates constant tensors and adds them. Confirms TF is installed and running.
-
-### Keras
-
-```
-keras demo
-```
-Builds a Sequential model with Dense layers. Confirms Keras can construct neural networks.
-
-### Scikit-learn
-
-```
-sklearn demo
-```
-Splits a small dataset 80/20, confirms train/test sizes. Quick sanity check.
-
-### Symbolic Integration (SymPy)
-
-```
-integral
-```
-Computes ∫₀¹ x² dx symbolically. Returns exact result: `1/3`.
-
-### Analyze Python Code with GPT
-
-```
-analiza codigo main.py
-analiza codigo main.py security.py visualization.py
-```
-
-Parses each file with Python's `ast` module, lists all functions, then sends the code to GPT for improvement suggestions. Multiple files supported.
+Resultado: puntuación 0–100 por dimensión + puntuación global + KPI table + alertas.
 
 ---
 
-## 8. Security & Cryptography
-
-All cryptographic operations run **locally** — nothing is sent externally.
-
-### Password Hashing
-
+#### `forecast negocio`
 ```
-hash pass mysecretpassword
+forecast negocio ventas.csv
+forecast negocio ventas.csv 12
 ```
-Returns a bcrypt hash. Bcrypt is slow by design — resistant to brute-force attacks.
+Proyección de ingresos con tres bandas:
+- **Optimista**: tendencia + 1σ
+- **Esperado**: extrapolación lineal (R² como confianza)
+- **Conservador**: tendencia − 1σ
 
-```
-verify pass $2b$12$... mysecretpassword
-```
-Returns `True` or `False`. Use the exact hash output from `hash pass`.
-
-### Passlib (alternative hashing context)
-
-```
-passlib hash mysecretpassword
-passlib verify $2b$... mysecretpassword
-```
-Uses the Passlib CryptContext — same bcrypt algorithm, alternative interface.
-
-### JWT Tokens
-
-```
-crear jwt
-```
-Creates a signed JWT token with payload `{"user": "astra", "role": "admin"}` and secret `mi_clave_secreta`.
-
-```
-verificar jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-Decodes and verifies the token. Returns the payload dict.
-
-> **For production:** Change the secret in `security.py` and pass your own payload via code.
-
-### File Encryption
-
-```
-cifra archivo data/sensitive.txt
-```
-Encrypts the file using **Fernet** (AES-128-CBC with HMAC). Creates `data/sensitive.txt.cifrado`. The encryption key is printed — **save it**, it cannot be recovered.
-
-### SSH Client Demo
-
-```
-paramiko demo
-```
-Initializes a Paramiko SSH client (does not connect to any server). Confirms the library is ready.
+Por defecto 6 meses; añade un número al final para otro plazo (ej: `12`).
 
 ---
 
-## 9. Visualization
-
-All charts are saved as **image files** (no display in hosted mode).
-
-### Plot a CSV Column
-
+#### `plan de accion`
 ```
-grafica csv data/prices.csv
+plan de accion ventas.csv
 ```
-Reads the first numeric column, generates a histogram + KDE curve, saves as `grafico.png`.
-
-### Pretty-print CSV as Table
-
-```
-tabla data/prices.csv
-```
-Renders the CSV as a formatted grid table in the console (first 10 rows).
-
-### Rich Text
-
-```
-rich This is styled output
-```
-Prints text using the Rich library (color + formatting support in terminal).
-
-### Create PDF
-
-```
-crear pdf output/report.pdf Hello from ASTRA
-```
-Creates a simple single-page PDF with the given text using ReportLab.
-
-### Image Processing Demo
-
-```
-imagen
-```
-Loads a built-in scikit-image sample (coins image), runs Sobel edge detection, prints the resulting shape. Confirms image processing pipeline works.
+Llama-3.3-70B analiza el diagnóstico y genera un **Plan Estratégico** con 5 recomendaciones priorizadas, cada una con:
+- Acción concreta
+- Impacto esperado (en % o puntos KPI)
+- Plazo de implementación (corto / medio / largo)
 
 ---
 
-## 10. System & Utilities
-
-### System Status
-
+#### `simular escenario`
 ```
-estado pc
+que pasa si reduzco costos 15% ventas.csv
+si aumento ventas ventas.csv 20%
+que ocurre si mejoro margen 10% datos.csv
 ```
-Returns current CPU usage (%) and RAM usage (%). Fast, no external calls.
-
-### Current Date/Time
-
-```
-fecha
-```
-Returns the current UTC datetime using Arrow. Example: `Fecha actual: 2025-06-19T14:30:00+00:00`
-
-### JSON Serialization Demo
-
-```
-json
-```
-Serializes `{"msg": "ok", "sistema": "ASTRA"}` with orjson and prints the result. Confirms the fast JSON library works.
-
-### Progress Bar Demo
-
-```
-barra progreso
-```
-Runs a tqdm progress bar over 10 iterations with 0.2s sleep. Shows what progress bars look like in your terminal.
-
-### Scheduled Task Demo
-
-```
-tarea programada
-```
-Registers a schedule that would print a message every minute. Returns instructions for wiring it into a loop.
-
-### File Lock Demo
-
-```
-bloquear archivo data/myfile.txt
-```
-Acquires an exclusive file lock on `data/myfile.txt.lock`, holds it 2 seconds, releases it. Useful for multi-process file access patterns.
-
-### File System Monitor
-
-```
-monitor archivos data/
-```
-Starts a Watchdog observer on the given directory. Prints a message whenever any file inside is modified. Runs in background thread.
+Simulación What-If: el sistema interpreta el escenario en lenguaje natural, aplica el cambio sobre los datos reales y muestra una tabla **Antes / Después** con:
+- Todas las dimensiones del scorecard
+- KPIs clave (ingresos, ratio gastos, márgenes)
+- Delta (Δ) de cada métrica
 
 ---
 
-## 11. Memory & Database
+### Auto-Análisis del sistema
 
-### Redis Key-Value Store
+| Comando | Qué hace |
+|---|---|
+| `analiza astra` | Genera reporte completo del sistema |
+| `self analysis` | Alias en inglés |
+| `reporte sistema` | Alias en español |
+| `reporte astra` | Alias alternativo |
 
-Requires Redis to be running (optional).
-
-```
-redis set         →  stores "clave" = "Hola desde Redis"
-redis get         →  retrieves the value of "clave"
-```
-
-### SQLAlchemy Demo
-
-```
-sqlalchemy usuario
-```
-Creates an in-memory SQLite database, inserts a user named "Nico", confirms the write. Demonstrates SQLAlchemy ORM usage.
-
-### FAISS Vector Memory
-
-```
-faiss add         →  Instructions for adding vectors
-faiss search      →  Instructions for searching vectors
-```
-
-FAISS enables similarity search over high-dimensional vectors — useful for semantic memory. You can use it programmatically:
-```python
-from modules_extra import FaissMemory
-mem = FaissMemory(dim=128)
-mem.add(my_vector, "my text")
-results = mem.search(query_vector, k=3)
-```
-
-### LlamaIndex Document Memory
-
-```
-llama add         →  Instructions for indexing documents
-llama query       →  Instructions for querying
-```
-
-LlamaIndex wraps OpenAI embeddings for semantic document search. Requires `OPENAI_API_KEY`. Use it programmatically:
-```python
-from modules_extra import LlamaMemory
-mem = LlamaMemory()
-mem.add_doc("Forex pair EUR/USD analysis report...")
-answer = mem.query("What was the trend?")
-```
-
-### Symbolic Math (SymPy)
-
-```
-sympy integral
-```
-Computes ∫₀^π sin(x) dx symbolically. Returns exact value: `2`.
+El reporte se guarda como `REPORT DD-MM.md` en `artifacts/astra/` (un archivo por día).
+Incluye: estado del sistema, motor AI activo, herramientas registradas, módulos opcionales, roadmap.
 
 ---
 
-## 12. Audio & Video
+## PARTE 3 — ESTRUCTURA DE ARCHIVOS DE DATOS
 
-> **Note:** These commands require hardware (microphone, speakers) not available in hosted/cloud environments. They work correctly when running ASTRA locally on your machine.
+### CSV Forex (Branch 2)
 
-### Speech to Text
+El sistema acepta el formato de exportación estándar de plataformas de trading. Las columnas OHLCV son obligatorias; el resto puede estar en `NaN` — si falta un valor, el sistema lo calcula automáticamente desde OHLCV y lo escribe en su lugar.
 
-```
-voz a texto
-```
-Listens to your microphone, transcribes in Spanish using Google Speech Recognition API (free tier, requires internet).
-
-### Text to Speech
-
-```
-texto a voz Buenos días, soy ASTRA
-```
-Speaks the text aloud using pyttsx3 (local TTS engine, no API needed).
-
-### Audio Analysis
-
-```
-analiza audio recordings/sample.mp3
-```
-Loads audio with Librosa, computes duration (seconds) and estimated BPM.
-
-### Audio Playback
-
-```
-reproducir audio recordings/sample.wav
-```
-Plays audio through your speakers using SoundDevice.
-
-### Audio Conversion
-
-```
-convertir audio recordings/sample.wav mp3
-```
-Converts audio format using PyDub. Supports mp3, wav, ogg, flac, etc.
-
-### YouTube Audio Download
-
-```
-descargar audio youtube https://www.youtube.com/watch?v=XXXXXXXXXXX
-```
-Downloads only the audio track from a YouTube video.
-
----
-
-## 13. GPT Fallback (Free Chat)
-
-Any input not matched by a command is **automatically sent to GPT**:
-
-```
-Tú: What is the best timeframe for scalping EUR/USD?
-Copilot: [GPT response...]
-
-Tú: Explícame qué es el MACD
-Copilot: [GPT response in Spanish...]
-
-Tú: Write me a Python function that computes RSI
-Copilot: [GPT code response...]
-```
-
-**Requirements:** `OPENAI_API_KEY` must be set as an environment secret.
-
-GPT also has access to:
-- The last 10 conversation turns (memory)
-- Current CPU/RAM status (injected automatically)
-
-This means GPT knows the context of your session and can answer follow-up questions.
-
----
-
-## 14. CSV Format Guide for Forex
-
-**ASTRA accepts your CSV as-is** — the built-in adapter normalizes column names, infers the pair from the filename, and derives missing fields automatically. You do not need to rename columns or pre-process anything.
-
-### What the Adapter Handles Automatically
-
-| Your CSV column | What ASTRA uses it as | Note |
+| Columna | Obligatoria | Descripción |
 |---|---|---|
-| `timestamp` | `timestamp` | Required |
-| `open`, `high`, `low`, `close`, `volume` | same | Required — core OHLCV |
-| `rsi_14` | `RSI_14` | Auto-renamed |
-| `macd` | `MACD` | Auto-renamed |
-| `macd_signal` | `MACD_signal` | Auto-renamed |
-| `macd_histogram` | `MACD_hist` | Auto-renamed |
-| `atr_14` | `ATR_14` | Auto-renamed |
-| `ema_20` | `EMA20` | Auto-renamed |
-| `ema_50` | `EMA50` | Auto-renamed |
-| `ema_150` or `ema_200` | `EMA200` | Auto-renamed (ema_150 used as proxy) |
-| `bollinger_upper_20` | `BB_upper` | Auto-renamed |
-| `bollinger_lower_20` | `BB_lower` | Auto-renamed |
-| `volatility_20` | `volatility_24h` | Auto-renamed |
-| `spread` | `spread` | Filled with 0 if missing |
-| `returns` | computed from `close` | Always recomputed fresh |
-| `session` | computed from timestamp hour | Always derived automatically |
-| `pair` | inferred from filename | e.g. `usd_jpy_data.csv` → `USDJPY` |
+| `timestamp` | ✅ Sí | Fecha y hora (cualquier formato ISO 8601) |
+| `open` | ✅ Sí | Precio de apertura |
+| `high` | ✅ Sí | Precio máximo |
+| `low` | ✅ Sí | Precio mínimo |
+| `close` | ✅ Sí | Precio de cierre |
+| `volume` | ✅ Sí | Volumen (necesario para MFI y OBV) |
+| `rsi_14` | ☑ Opcional | RSI de 14 períodos (se recalcula si NaN) |
+| `macd` / `macd_signal` / `macd_histogram` | ☑ Opcional | MACD 12/26/9 (se recalcula si NaN) |
+| `atr_14` | ☑ Opcional | ATR de 14 períodos (se recalcula si NaN o = 0) |
+| `ema_20` / `ema_50` / `ema_150` | ☑ Opcional | EMAs (se recalcula si NaN) |
+| `bollinger_upper_20` / `bollinger_lower_20` | ☑ Opcional | Bandas de Bollinger (se recalcula si NaN) |
+| `return_5` | ☑ Opcional | Retorno a 5 períodos en % (se recalcula si NaN) |
+| `volatility_20` | ☑ Opcional | Volatilidad rolling 20 (se recalcula si NaN) |
 
-### Minimum Requirements
+> **Comportamiento NaN:** si una celda de indicador está en NaN, el sistema la computa desde OHLCV y la sobreescribe. El valor original no-NaN nunca se toca.
+>
+> **ATR = 0.0:** los valores ATR de exactamente 0.0 son tratados como NaN y recalculados (un ATR real nunca es cero para precios OHLCV reales).
 
-- **Mandatory columns:** `timestamp`, `open`, `high`, `low`, `close`, `volume`
-- **Strongly recommended:** RSI, MACD, ATR, EMA20/50 (ASTRA can still run without them but signal quality drops)
-- **Minimum rows:** 50 for training, 25 for prediction (1000+ strongly recommended for reliable results)
-
-### Typical Broker Export (MT4/MT5 style)
-
-If your broker exports raw OHLCV only (no indicators), you can add them with `pandas-ta` before feeding to ASTRA:
-
-```python
-import pandas as pd
-import pandas_ta as ta
-
-df = pd.read_csv("eurusd_raw.csv")
-df.ta.rsi(length=14, append=True)
-df.ta.macd(fast=12, slow=26, signal=9, append=True)
-df.ta.ema(length=20, append=True)
-df.ta.ema(length=50, append=True)
-df.ta.ema(length=150, append=True)   # ema_150 is used as EMA200 proxy
-df.ta.atr(length=14, append=True)
-df.ta.bbands(length=20, append=True)
-df.to_csv("eurusd_ready.csv", index=False)
-# No need to add pair, session, or returns — ASTRA derives them automatically
-```
+Los pares se detectan automáticamente desde el nombre del archivo (ej: `aud_usd_dataset.csv` → AUDUSD). También puedes indicarlo en el comando: `analiza forex audusd datos.csv`.
 
 ---
 
-## 15. Tips for Full Potential
+### CSV Negocio / PYME (Branches 3 y 4)
 
-### Forex ML
+Para que los módulos BI y Branch 4 funcionen correctamente, el CSV/Excel debe tener al menos estas columnas (los nombres son flexibles — el sistema los detecta automáticamente):
 
-1. **Use at least 2000+ candles** for training — the ensemble needs enough data to learn patterns. H1 bars: 2 years ≈ 17,000 rows. M15 bars: 6 months ≈ 16,000 rows.
-2. **Run `tune forex` once per pair before training** — Optuna finds better hyperparameters than defaults in most cases. Best params persist across sessions, so you only pay the 5–15 min cost once.
-3. **Confidence threshold** — only act on signals with confidence ≥ 0.62 **and** ADX ≥ 22. ASTRA enforces this automatically — if either gate fails you get HOLD, not a false signal.
-4. **Use `multi forex` for higher-conviction entries** — when all 3 horizons agree, the signal is more reliable. Use `predict forex` for a faster check.
-5. **Use `scan forex` to find opportunities** — instead of checking pairs one by one, point it at your data folder and it ranks all pairs by signal strength in one run.
-6. **Retrain regularly** — markets evolve. Retrain monthly or when drawdown exceeds 15%.
-7. **Backtest on clean data** — use data from a different time period than training for the most honest backtest.
-8. **Profit factor > 1.5** means the model is consistently earning more than it loses on the test set.
-
-### GPT Integration
-
-1. Use GPT for analysis after running Forex commands: "What does a win rate of 52% mean for my strategy?"
-2. Use `analiza codigo` to get GPT to review and suggest improvements to any `.py` file in the project.
-3. Combine tools: `lee pdf research.pdf` → then ask GPT "Summarize what I just read".
-
-### Security
-
-1. Never use `crear jwt` default secret in production — edit `security.py` to use `os.environ["JWT_SECRET"]`.
-2. When using `cifra archivo`, save the printed key somewhere safe — there is no recovery without it.
-
-### Memory
-
-1. All chat turns are saved in `memoria.db` (SQLite) — GPT remembers the last 10 exchanges.
-2. Use `LlamaMemory` programmatically to build a searchable knowledge base from your own documents.
-
----
-
-## 16. Limitations in Hosted Mode
-
-When running ASTRA in Replit's cloud environment (instead of your local machine):
-
-| Feature | Status | Reason |
+| Columna | Alias aceptados | Tipo |
 |---|---|---|
-| `voz a texto` | ❌ Not available | No microphone hardware |
-| `texto a voz` | ❌ Not available | No audio output device |
-| `reproducir audio` | ❌ Not available | No speakers |
-| `gui` (PyQt5) | ❌ Not available | No display server (headless) |
-| `redis set/get` | ⚠️ Only if Redis is running | Installed separately |
-| All Forex ML commands | ✅ Fully functional | Pure Python/CPU |
-| All document commands | ✅ Fully functional | File-based |
-| All web tools | ✅ Fully functional | HTTP-based |
-| All security tools | ✅ Fully functional | Pure Python |
-| GPT fallback | ✅ Requires API key | Set `OPENAI_API_KEY` secret |
+| Fecha | `date`, `fecha`, `periodo`, `mes` | fecha o texto |
+| Ingresos | `revenue`, `ingresos`, `ventas`, `sales` | numérico |
+| Gastos | `expenses`, `gastos`, `costos`, `costs` | numérico |
+| Ganancia bruta | `gross_profit`, `ganancia_bruta` | numérico (opcional) |
+| Ingreso neto | `net_income`, `ingreso_neto`, `beneficio` | numérico (opcional) |
+| Saldo | `balance`, `saldo`, `cash` | numérico (opcional) |
+
+Mínimo viable: `date` + `revenue` + `expenses` (el resto se calcula internamente).
 
 ---
 
-*ASTRA — Built for experimentation, learning, and real Forex analysis.*
-*Type `ayuda` in the console to see all commands at any time.*
+## PARTE 4 — MOTOR AI Y MEMORIA
+
+### Motor de lenguaje
+ASTRA usa **Llama-3.3-70B** (vía Groq). Si `GROQ_API_KEY` no está configurada, intenta con `OPENAI_API_KEY` (GPT-3.5-turbo) como fallback.
+
+### Memoria
+- **Sesión activa**: ASTRA recuerda los últimos 20 turnos de la conversación en memoria RAM. Puede referirse a respuestas anteriores de la misma sesión.
+- **Persistencia**: Los turnos se guardan en `memoria.db` (SQLite). Al reiniciar, carga los últimos 6 intercambios automáticamente.
+- La memoria se limpia sola cuando supera el límite. No necesitas hacer nada.
+
+---
+
+## PARTE 5 — ROADMAP
+
+| Branch | Nombre | Estado |
+|---|---|---|
+| 1 | Core (Tool Registry, Memory, File I/O, Security) | ✅ Completo |
+| 2 | Prediction Framework (Forex ML pipeline) | ✅ Completo |
+| 3 | Business Intelligence Engine (KPIs, BI pipeline) | ✅ Completo |
+| 4 | SME/PYME Consultant (Diagnostic, Forecast, Recommend, Simulate) | ✅ Completo |
+| 5 | Industry Packs (Retail, Restaurante, E-Commerce, Manufactura) | 🔄 Próximo |
+| 6 | Multi-Agent ASTRA | 🕐 Futuro |
+| 7 | Executive Copilot | 🕐 Futuro |
+
+---
+
+## PARTE 6 — SOLUCIÓN DE PROBLEMAS
+
+| Síntoma | Causa probable | Solución |
+|---|---|---|
+| `GROQ_API_KEY not found` | Key no configurada | Sigue los pasos de la Parte 1 |
+| `ModuleNotFoundError: openai` | Falta el paquete | `pip install openai` |
+| `lightgbm` crash en Linux | Falta libgomp | El workflow lo configura automáticamente vía `LD_LIBRARY_PATH` |
+| Torch/TensorFlow WARN | Son opcionales | Ignóralos o instala con `pip install torch` |
+| `redis` WARN | Es opcional | Ignóralo o instala con `pip install redis` |
+| Sin audio/TTS en Linux | pyttsx3 silenciado | Funcionalidad solo disponible en Windows con dispositivo de audio |
+| CSV no reconocido | Columnas con nombres distintos | Renombra a `date`, `revenue`, `expenses` (ver Parte 3) |
+
+---
+
+*Generado para ASTRA v2.1 — Branch 2 actualizado (CCI, MFI, ROC, ATR relativo + imputation NaN) — Branch 4 completo — Junio 2026*

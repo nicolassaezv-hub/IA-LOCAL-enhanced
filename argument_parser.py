@@ -231,13 +231,81 @@ def parse_arguments(intent, text):
 
         return extract_translation_text(text)
 
+    elif intent in ("sme_diagnostic", "sme_recommend"):
+        csv = extract_csv(text)
+        if csv:
+            return csv
+        excel = extract_excel(text)
+        if excel:
+            return excel
+        return []
+
+    elif intent == "sme_forecast":
+        filepath = []
+        csv = extract_csv(text)
+        if csv:
+            filepath = csv
+        else:
+            excel = extract_excel(text)
+            if excel:
+                filepath = excel
+        # Extract optional month integer — search in text with filename stripped
+        # to avoid matching digits inside filenames like "ventas2.csv" or "q3.csv"
+        search_text = text
+        if filepath:
+            search_text = text.replace(filepath[0], " ")
+        month_match = re.search(r"\b(\d{1,2})\b", search_text)
+        months = int(month_match.group(1)) if month_match else 6
+        if months > 24 or months < 1:
+            months = 6
+        return filepath + [months] if filepath else [months]
+
+    elif intent == "sme_simulate":
+        filepath = []
+        csv = extract_csv(text)
+        if csv:
+            filepath = csv
+        else:
+            excel = extract_excel(text)
+            if excel:
+                filepath = excel
+        # Scenario = everything after the filename (or the full text if no file)
+        scenario = text
+        if filepath:
+            scenario = text.replace(filepath[0], "").strip()
+        # Strip leading intent keywords
+        for kw in ["simula ", "simulacion ", "simulación ", "que pasa si ", "qué pasa si "]:
+            if scenario.lower().startswith(kw):
+                scenario = scenario[len(kw):].strip()
+                break
+        return filepath + [scenario] if filepath else [scenario]
+
+    elif intent in ("business_analysis", "business_consult", "business_train"):
+
+        csv = extract_csv(text)
+        if csv:
+            return csv
+
+        excel = extract_excel(text)
+        if excel:
+            return excel
+
+        pdf = extract_pdf(text)
+        if pdf:
+            return pdf
+
+        return []
+
     elif intent == "forex_analysis":
-
+        # Extract both the file path (if present) and the market symbol.
+        # Supports natural-language order: "analiza forex eurusd datos.csv"
+        # or "analiza forex datos.csv eurusd"
         market = extract_market_symbol(text)
-
+        filepath = extract_csv(text) or extract_excel(text)
         if market:
+            if filepath:
+                return [filepath[0], market]
             return [market]
-
         return []
 
     elif intent == "web_search":

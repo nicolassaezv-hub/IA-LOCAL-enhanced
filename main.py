@@ -30,6 +30,9 @@ from forex.market_universe import (
 from forex_analytics import analyze_market_file, market_history, compare_market_history
 from forex.forex_memory import list_saved_markets
 
+# ── Business Intelligence imports ───────────────────────────
+from forex.business.business_pipeline import BusinessPipeline
+
 
 def _print_banner():
     print(Fore.GREEN + "╔══════════════════════════════════════════╗")
@@ -41,10 +44,10 @@ def _print_banner():
 
 def _print_result(respuesta):
     if isinstance(respuesta, dict):
-        print(Fore.YELLOW + "Copilot: " + Style.RESET_ALL)
+        print(Fore.YELLOW + "ASTRA: " + Style.RESET_ALL)
         print(json.dumps(respuesta, indent=2, default=str, ensure_ascii=False))
     else:
-        print(Fore.YELLOW + "Copilot: " + Style.RESET_ALL + str(respuesta))
+        print(Fore.YELLOW + "ASTRA: " + Style.RESET_ALL + str(respuesta))
 
 
 # ═══════════════════════════════════════════════════════════
@@ -221,6 +224,66 @@ def _forex_mercados():
     return list_saved_markets()
 
 
+# ═══════════════════════════════════════════════════════════
+#  BUSINESS INTELLIGENCE HELPERS
+# ═══════════════════════════════════════════════════════════
+
+def _bi_analiza(csv_path: str):
+    """KPI analysis: health score, financials, alerts — no ML needed."""
+    show_progress("Running Business KPI Analysis", 3)
+    pipeline = BusinessPipeline()
+    return pipeline.analyze(csv_path)
+
+
+def _bi_consulta(csv_path: str):
+    """Full PYME consultant: KPIs + ML signal + recommendations."""
+    print(Fore.CYAN + f"\n[ASTRA-BI] Business Consultant: {csv_path}" + Style.RESET_ALL)
+    pipeline = BusinessPipeline()
+    result   = pipeline.consult(csv_path)
+    if isinstance(result, dict) and "error" not in result:
+        return ""
+    return result
+
+
+def _bi_predice(csv_path: str):
+    """ML forecast: will next period grow or decline?"""
+    show_progress("Business Forecast", 2)
+    pipeline = BusinessPipeline()
+    result   = pipeline.predict(csv_path)
+    if isinstance(result, dict) and "error" not in result:
+        action = result.get("action",     "STABLE")
+        conf   = result.get("confidence", 0)
+        health = result.get("health_score", 50)
+        risk   = result.get("risk_level", "MEDIUM")
+        return (
+            f"Forecast: {action}  |  Confidence: {conf:.2f}  |  "
+            f"Health: {health}/100  |  Risk: {risk}"
+        )
+    return result
+
+
+def _bi_entrena(csv_path: str):
+    """Train ML model on business dataset."""
+    print(Fore.CYAN + f"\n[ASTRA-BI] Training Business Model: {csv_path}" + Style.RESET_ALL)
+    pipeline = BusinessPipeline()
+    result   = pipeline.train(csv_path)
+    if isinstance(result, dict):
+        btype = result.get("business_type", "?")
+        rows  = result.get("rows_trained",  0)
+        acc   = result.get("accuracy",      0)
+        prec  = result.get("precision",     0)
+        out   = (
+            f"\n{Fore.GREEN}╔══ BUSINESS MODEL TRAINED ══╗{Style.RESET_ALL}\n"
+            f"  Type       : {btype}\n"
+            f"  Rows used  : {rows}\n"
+            f"  Accuracy   : {acc:.2%}\n"
+            f"  Precision  : {prec:.2%}\n"
+        )
+        print(out)
+        return ""
+    return result
+
+
 def _ayuda():
     help_text = f"""
 {Fore.GREEN}╔══════════════════════════════════════════════════════════════╗
@@ -240,6 +303,22 @@ def _ayuda():
   historial forex <symbol>       View saved analysis history
   compara forex <symbol>         Compare last 5 analyses of a pair
   mercados analizados            List all markets ever analyzed
+
+{Fore.CYAN}── BUSINESS INTELLIGENCE (PYME) ───────────────────────────────{Style.RESET_ALL}
+  consulta negocio <csv>         Full consultant: KPIs + forecast + recommendations
+  analiza negocio <csv>          KPI report + health score + alerts (no ML needed)
+  predice negocio <csv>          ML forecast: will next period grow or decline?
+  entrena negocio <csv>          Train ML model on your business dataset
+  (alias: consultar negocio, analizar negocio, predecir negocio)
+
+{Fore.CYAN}── CONSULTOR PYME AVANZADO (Branch 4) ─────────────────────────{Style.RESET_ALL}
+  diagnóstico pyme <csv>         Scorecard multidimensional: Financiero + Crecimiento + Riesgo
+  forecast negocio <csv>         Proyección 6 meses: optimista / esperado / conservador
+  forecast negocio <csv> 12      Proyección a N meses (reemplaza 12 por el plazo deseado)
+  plan de accion <csv>           Plan estratégico: 5 recomendaciones priorizadas (Llama)
+  que pasa si <escenario> <csv>  Simulación what-if: tabla antes/después con Δ en KPIs
+  si aumento ventas <csv> 20%    Simulación de crecimiento de ingresos
+  si reduzco costos <csv> 15%    Simulación de reducción de costos
 
 {Fore.CYAN}── DOCUMENTS ──────────────────────────────────────────────────{Style.RESET_ALL}
   lee pdf <path>                 Read a PDF file
@@ -306,7 +385,7 @@ def _ayuda():
 {Fore.CYAN}── SYSTEM ─────────────────────────────────────────────────────{Style.RESET_ALL}
   ayuda                          Show this help menu
   salir / exit / quit            Exit ASTRA
-  <anything else>                Sent to GPT (requires OPENAI_API_KEY)
+  <anything else>                Enviado a Llama-3.3-70B (Groq) — chat libre con contexto
 """
     print(help_text)
     return ""
@@ -399,13 +478,27 @@ if __name__ == "__main__":
 
             # ── FOREX: TECHNICAL ANALYTICS ───────────────────
             elif user_input.startswith("analiza forex "):
-                parts = user_input[len("analiza forex "):].strip().split(" ", 1)
-                if len(parts) == 2:
-                    respuesta = _forex_analiza(parts[0], parts[1])
-                elif len(parts) == 1:
-                    respuesta = analyze_market_file(None, parts[0])
+                # Accept both orderings:  "analiza forex eurusd datos.csv"
+                #                     and "analiza forex datos.csv eurusd"
+                from argument_parser import extract_market_symbol as _ems
+                _rest  = user_input[len("analiza forex "):].strip()
+                _parts = _rest.split()
+                _filepath, _sym = None, None
+                for _p in _parts:
+                    if _p.lower().endswith((".csv", ".xlsx", ".xls")):
+                        _filepath = _p
+                    else:
+                        _candidate = _ems(_p)
+                        if _candidate:
+                            _sym = _candidate
+                if _filepath and _sym:
+                    respuesta = _forex_analiza(_filepath, _sym)
+                elif _sym:
+                    respuesta = analyze_market_file(None, _sym)
+                elif _filepath:
+                    respuesta = _forex_analiza(_filepath, "")
                 else:
-                    respuesta = "Uso: analiza forex <csv_path> <symbol>  ó  analiza forex <symbol>"
+                    respuesta = "Uso: analiza forex <symbol> [csv_path]  ej: analiza forex eurusd datos.csv"
 
             # ── FOREX: LIST MARKETS ──────────────────────────
             elif user_input.lower() in ["lista mercados", "list markets", "forex pares"]:
@@ -428,6 +521,23 @@ if __name__ == "__main__":
                 symbol = user_input[len("compara forex "):].strip()
                 respuesta = _forex_compara(symbol)
 
+            # ── BUSINESS INTELLIGENCE ─────────────────────────
+            elif user_input.startswith("consulta negocio ") or user_input.startswith("consultar negocio "):
+                csv_path = user_input.split(" ", 2)[-1].strip()
+                respuesta = _bi_consulta(csv_path)
+
+            elif user_input.startswith("analiza negocio ") or user_input.startswith("analizar negocio "):
+                csv_path = user_input.split(" ", 2)[-1].strip()
+                respuesta = _bi_analiza(csv_path)
+
+            elif user_input.startswith("predice negocio ") or user_input.startswith("predecir negocio "):
+                csv_path = user_input.split(" ", 2)[-1].strip()
+                respuesta = _bi_predice(csv_path)
+
+            elif user_input.startswith("entrena negocio ") or user_input.startswith("entrenar negocio "):
+                csv_path = user_input.split(" ", 2)[-1].strip()
+                respuesta = _bi_entrena(csv_path)
+
             # ── IO FILES ─────────────────────────────────────
             elif user_input.startswith("analiza codigo"):
                 import ast
@@ -440,7 +550,7 @@ if __name__ == "__main__":
                         funciones = [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
                         print(f"Funciones en {archivo}: {funciones}")
                         respuesta = ask_openai("Analiza este código y dame mejoras:\n" + code)
-                        print(f"Copilot ({archivo}): {respuesta}")
+                        print(f"ASTRA ({archivo}): {respuesta}")
                     except Exception as e:
                         print(f"Error analizando {archivo}: {e}")
                 continue

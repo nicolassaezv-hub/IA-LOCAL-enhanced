@@ -135,6 +135,22 @@ from forex_analytics import (
     compare_market_history
 )
 
+from bi_analytics import (
+    bi_analyze,
+    bi_consult,
+    bi_kpis,
+    bi_train,
+)
+
+from self_analysis import generate_self_analysis
+
+from sme_consultant import (
+    sme_diagnostic,
+    sme_forecast,
+    sme_recommend,
+    sme_simulate,
+)
+
 from forex.forex_memory import (
     list_saved_markets
 )
@@ -170,6 +186,21 @@ def run_forex_analysis(
 # ==========================================
 
 TOOLS = {
+    # ---------- SELF ANALYSIS --------- #
+    "self_analysis": generate_self_analysis,
+
+    # ---------- BRANCH 4 — SME CONSULTANT --------- #
+    "sme_diagnostic": sme_diagnostic,
+    "sme_forecast":   sme_forecast,
+    "sme_recommend":  sme_recommend,
+    "sme_simulate":   sme_simulate,
+
+    # ---------- BUSINESS INTELLIGENCE --------- #
+    "bi_analyze":  bi_analyze,
+    "bi_consult":  bi_consult,
+    "bi_kpis":     bi_kpis,
+    "bi_train":    bi_train,
+
     # ---------- FOREX --------- #
     "ask_openai": ask_openai_tool,
     "forex_history" : market_history,
