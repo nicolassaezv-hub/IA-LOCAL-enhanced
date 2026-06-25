@@ -78,7 +78,7 @@ COMMODITIES = {
 # ============================================================
 # COMMON USER ALIASES
 # ============================================================
-
+#QUEDA ACTUALIZAR
 ALIASES = {
     # Forex
     "EURUSD": "EUR/USD",
