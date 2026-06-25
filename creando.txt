@@ -277,3 +277,127 @@ for symbol in SYMBOLS:
 mt5.shutdown()
 
 print("Proceso completado")
+
+por añadir (a revisar pertenencia, existencia y posible extraccion de CSV)
+"ADAUSD",
+"AUDCAD",
+"AUDCHF",
+"AUDJPY",
+"AUDNZD",
+"AUDUSD",
+"BCHUSD",
+"BTCUSD",
+"CADCHF",
+"CADJPY",
+"CHFJPY",
+"DASHUSD",
+"DOGEUSD",
+"EOSUSD",
+"ETCUSD",
+"ETHUSD",
+"EURAUD",
+"EURCAD",
+"EURCHF",
+"EURCZK",
+"EURGBP",
+"EURHKD",
+"EURJPY",
+"EURMXN",
+"EURNZD",
+"EURPLN",
+"EURSEK",
+"EURTRY",
+"EURUSD",
+"EURZAR",
+"GBPAUD",
+"GBPCAD",
+"GBPCHF",
+"GBPJPY",
+"GBPNZD",
+"GBPSEK",
+"GBPUSD",
+"LTCUSD",
+"NZDCAD",
+"NZDCHF",
+"NZDJPY",
+"NZDUSD",
+"OIL",
+"OILUSD",
+"SOLUSD",
+"SnPUSD",
+"USDCAD",
+"USDCHF",
+"USDCNH",
+"USDCZK",
+"USDDKK",
+"USDHKD",
+"USDJPY",
+"USDMXN",
+"USDNOK",
+"USDPLN",
+"USDRUB",
+"USDSEK",
+"USDSGD",
+"USDTRY",
+"USDZAR",
+"XAGEUR",
+"XAGUSD",
+"XAUEUR",
+"XAUOIL",
+"XAUSnP",
+"XAUUSD",
+"XAUXAG",
+"XLMUSD",
+"XMRUSD",
+"XPDUSD",
+"XPTUSD",
+"XRPUSD",
+"ZECUSD"
+"AUDUSD",
+"EURAUD",
+"EURGBP",
+"EURJPY",
+"EURMXN",
+"EURNOK",
+"EURRUB",
+"EURSEK",
+"EURUSD",
+"GBPAUD",
+"GBPJPY",
+"GBPUSD",
+"NZDJPY",
+"NZDUSD",
+"USDCAD",
+"USDCHF",
+"USDCNH",
+"USDHKD",
+"USDINR",
+"USDJPY",
+"USDMXN",
+"USDNOK",
+"USDRUB",
+"USDSEK",
+"USDSGD",
+"USDTRY",
+"USDZAR",
+BRENT OIL
+WTI
+WTI OIL
+NATGAS
+GAS
+ROBUSTA
+FEEDER CATTLE
+LIVE CATTLE
+LEAN HOGS
+
+Cocoa
+Corn
+Cotton
+Heating Oil
+Oats
+Orange Juice
+Rice
+Soybean
+Soybean Meal
+Sugar
+Wheat
