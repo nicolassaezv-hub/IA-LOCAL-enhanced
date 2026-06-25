@@ -136,7 +136,9 @@ El archivo CSV/Excel puede estar en cualquier ruta relativa a `artifacts/astra/`
 
 ### Branch 2 — Análisis Forex
 
-El sistema reconoce 41 pares: EUR/USD, GBP/USD, USD/JPY, BTC/USD, commodities, etc.
+El sistema reconoce pares Forex, materias primas (commodities) y criptomonedas.
+El universo completo se define en `forex/market_universe.py` y se sincroniza con
+`creando.py` (el generador de CSVs desde MetaTrader5).
 
 | Comando | Qué hace |
 |---|---|
@@ -145,6 +147,39 @@ El sistema reconoce 41 pares: EUR/USD, GBP/USD, USD/JPY, BTC/USD, commodities, e
 | `history eurusd` | Historial de análisis guardados para ese par |
 | `compare history eurusd` | Compara los últimos reportes guardados |
 | `list markets` | Lista todos los mercados analizados hasta ahora |
+
+#### Generación de CSVs desde MetaTrader5 (`creando.py`)
+
+`creando.py` descarga el historial OHLCV de MetaTrader5 para **cada símbolo
+soportado** (forex, commodities y crypto) y genera un CSV por combinación de
+**símbolo + timeframe**, con los indicadores técnicos ya calculados.
+
+**Requisitos:**
+- MetaTrader5 instalado y corriendo en Windows (la terminal debe estar abierta)
+- `pip install MetaTrader5 pandas numpy`
+
+**Timeframes generados:**
+
+| Timeframe | Desde | Hasta | Carpeta de salida |
+|---|---|---|---|
+| H1 (1 hora) | 2 años atrás | ahora | `CSVs/H1/` |
+| H4 (4 horas) | 2023-01-01 | ahora | `CSVs/H4/` |
+| D1 (diario) | 2021-01-01 | ahora | `CSVs/D1/` |
+
+**Uso:**
+```bash
+python creando.py
+```
+
+Cada CSV se nombra con el símbolo de MT5 (ej: `EURUSD.csv`, `XAUUSD.csv`,
+`BTCUSD.csv`) y contiene las columnas: `timestamp, open, high, low, close,
+volume, rsi_14, macd, macd_signal, macd_histogram, atr_14, ema_20, ema_50,
+ema_150, bollinger_upper_20, bollinger_lower_20, return_5, volatility_20`.
+
+> **Nota:** El mapeo entre nombres Astra (ej: `EUR/USD`, `BRENT CRUDE OIL`,
+> `BTC/USD`) y símbolos MT5 (`EURUSD`, `BRENTUSD`, `BTCUSD`) se define en
+> `MT5_SYMBOL_MAP` dentro de `forex/market_universe.py`. Si tu broker usa
+> sufijos (`.r`, `.m`), ajusta solo ese diccionario.
 
 #### Indicadores técnicos incluidos en el análisis
 

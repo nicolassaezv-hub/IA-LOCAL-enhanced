@@ -133,7 +133,7 @@ class ForexPredictor:
             regime = "strong trend"
         elif adx >= 25:
             regime = "moderate trend"
-        elif adx >= MIN_ADX:
+        elif adx >= self.min_adx:
             regime = "weak trend"
         else:
             regime = "ranging"

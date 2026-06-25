@@ -65,7 +65,12 @@ class DatasetBuilder:
     def create_target(self, horizon: int = 10, rr_ratio: float = 1.5):
 
         close = self.df["close"].values
-        atr   = self.df.get("ATR_14", pd.Series(np.zeros(len(self.df)), index=self.df.index)).values
+        atr_col = self.df.get("ATR_14")
+        if atr_col is None or atr_col.isna().all():
+            # Fallback: use a percentage of close as a synthetic ATR
+            atr = (pd.Series(close) * 0.01).values
+        else:
+            atr = atr_col.fillna(pd.Series(close) * 0.01).values
         n     = len(close)
         target = np.zeros(n, dtype=int)
 
@@ -73,6 +78,10 @@ class DatasetBuilder:
             entry = close[i]
             sl    = atr[i]          # 1 * ATR below (stop loss distance)
             tp    = atr[i] * rr_ratio  # rr_ratio * ATR above (take profit distance)
+
+            # Skip rows where ATR is zero or NaN — can't define a meaningful target
+            if sl <= 0 or np.isnan(sl) or np.isnan(tp) or tp <= 0:
+                continue
 
             tp_price = entry + tp
             sl_price = entry - sl

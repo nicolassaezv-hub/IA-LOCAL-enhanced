@@ -145,12 +145,17 @@ class ForexEnsembleTrainer:
     def train(self, X, y, save: bool = True):
         X_train, X_test, y_train, y_test = self.train_test_split(X, y)
 
+        # Split test set into calibration + evaluation to avoid data leakage
+        cal_split = max(1, len(X_test) // 2)
+        X_cal, X_eval = X_test.iloc[:cal_split], X_test.iloc[cal_split:]
+        y_cal, y_eval = y_test.iloc[:cal_split], y_test.iloc[cal_split:]
+
         n_pos = int(y_train.sum())
         n_neg = int((y_train == 0).sum())
         scale = n_neg / n_pos if n_pos > 0 else 1.0
 
         using_tuned = "YES ✓" if self._tuned else "NO (using defaults)"
-        print(f"\n[ENSEMBLE] Training on {len(X_train)} rows | validating on {len(X_test)} rows")
+        print(f"\n[ENSEMBLE] Training on {len(X_train)} rows | calibrating on {len(X_cal)} | validating on {len(X_eval)} rows")
         print(f"[ENSEMBLE] Pair: {self.pair or 'unknown'} | Tuned params: {using_tuned}")
         print(f"[ENSEMBLE] Class balance — bullish: {n_pos} | bearish: {n_neg} | weight: {scale:.2f}")
 
@@ -183,20 +188,20 @@ class ForexEnsembleTrainer:
             raw_model = VotingClassifier(estimators=estimators, voting="soft")
             raw_model.fit(X_train, y_train)
 
-        # Calibrate probabilities — makes confidence scores more trustworthy
+        # Calibrate probabilities on a separate holdout (prevents data leakage)
         self.model = CalibratedClassifierCV(raw_model, method="isotonic", cv="prefit")
-        self.model.fit(X_test, y_test)
+        self.model.fit(X_cal, y_cal)
 
-        preds = self.model.predict(X_test)
-        acc   = accuracy_score(y_test, preds)
-        prec  = precision_score(y_test, preds, zero_division=0)
-        f1    = f1_score(y_test, preds, zero_division=0)
+        preds = self.model.predict(X_eval)
+        acc   = accuracy_score(y_eval, preds)
+        prec  = precision_score(y_eval, preds, zero_division=0)
+        f1    = f1_score(y_eval, preds, zero_division=0)
 
         print(f"\n=== ENSEMBLE PERFORMANCE ===")
         print(f"Accuracy   : {acc:.4f}")
         print(f"Precision  : {prec:.4f}  ← key metric for profitability")
         print(f"F1 Score   : {f1:.4f}")
-        print(f"\n{classification_report(y_test, preds, target_names=['Bearish', 'Bullish'], zero_division=0)}")
+        print(f"\n{classification_report(y_eval, preds, target_names=['Bearish', 'Bullish'], zero_division=0)}")
 
         self._print_feature_importance(estimators, list(X_train.columns))
 

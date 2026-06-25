@@ -20,6 +20,7 @@ Usage:
 """
 
 import os
+import threading
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
@@ -56,10 +57,20 @@ class MultiPairScanner:
         rr_ratio: float       = 1.5,
         max_workers: int      = 4,
     ):
-        self.predictor   = ForexPredictor(min_confidence=min_confidence, min_adx=min_adx)
+        self._predictor_factory = lambda: ForexPredictor(
+            min_confidence=min_confidence, min_adx=min_adx
+        )
+        self._thread_local = threading.local()
         self.horizon     = horizon
         self.rr_ratio    = rr_ratio
         self.max_workers = max_workers
+
+    @property
+    def predictor(self):
+        """Each thread gets its own ForexPredictor instance (thread-safe)."""
+        if not hasattr(self._thread_local, "predictor"):
+            self._thread_local.predictor = self._predictor_factory()
+        return self._thread_local.predictor
 
     # -------------------------------------------------------
     # SCAN A LIST OF FILES

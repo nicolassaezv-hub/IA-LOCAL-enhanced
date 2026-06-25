@@ -32,15 +32,23 @@ BASE_DIR.mkdir(parents=True, exist_ok=True)
 
 def _safe_filename(symbol: str) -> str:
     """
-    EUR/USD -> EUR_USD
-    Brent Crude Oil -> BRENT_CRUDE_OIL
+    EUR/USD       -> EUR_USD
+    Brent Crude Oil -> BRENT__CRUDE__OIL
+
+    Uses '__' (double underscore) for spaces so the round-trip
+    in list_saved_markets is lossless.
     """
 
     return (
         symbol.upper()
         .replace("/", "_")
-        .replace(" ", "_")
+        .replace(" ", "__")
     )
+
+
+def _from_filename(name: str) -> str:
+    """Reverse of _safe_filename."""
+    return name.replace("__", " ").replace("_", "/")
 
 
 def _market_directory(symbol: str) -> Path:
@@ -192,10 +200,7 @@ def list_saved_markets() -> List[str]:
 
         if folder.is_dir():
 
-            markets.append(
-                folder.name
-                .replace("_", "/")
-            )
+            markets.append(_from_filename(folder.name))
 
     return sorted(markets)
 
