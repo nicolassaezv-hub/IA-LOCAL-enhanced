@@ -7,7 +7,8 @@ import os
 # =====================================
 # CONFIG
 # =====================================
-
+#TIMEFRAMES SON AHORA H1(2025-HOY),H4(2023-HOY)
+#Y D1 (2021-HOY
 TIMEFRAME = mt5.TIMEFRAME_H1
 
 START_DATE = datetime.now() - timedelta(days=365)
