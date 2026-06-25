@@ -6,9 +6,9 @@
 
 - agregar modulo de prediccion extra por Kernel (Lineal,Polinomial,RBF y Sigmoidal)
 
--agregar modulo de comparacion de sistemas de prediccion ya establecidos
+- agregar modulo de comparacion de sistemas de prediccion ya establecidos
 
--editar y reinstituir comandos, ahora por categorizacion en MANUAL.md y en README.md
+- editar y reinstituir comandos, ahora por categorizacion en MANUAL.md y en README.md
 
 ## Informacion General
 
