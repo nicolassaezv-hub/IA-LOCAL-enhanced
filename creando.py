@@ -16,7 +16,7 @@ END_DATE = datetime.now()
 OUTPUT_FOLDER = "CSVs"
 
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-
+#FALTA AÑADIR FOREX PAIRS Y RAW MATERIAL DE FOREX_UNIVERSE.PY
 SYMBOLS = [
     "ADAUSD",
     "AUDCAD",
