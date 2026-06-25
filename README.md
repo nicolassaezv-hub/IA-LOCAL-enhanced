@@ -1,4 +1,13 @@
 # ASTRA
+
+# Peticiones Personales
+
+- revisar creando.txt para actualizar rama de funcionamiento Forex
+
+- agregar modulo de prediccion extra por Kernel (Lineal,Polinomial,RBF y Sigmoidal)
+
+-agregar modulo de comparacion de sistemas de prediccion ya establecidos
+
 ## Informacion General
 
 Esta IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, ChatGPT y analisis activo de Copilot con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI con fijacion en procesamiento de archivos y analisis intensivo de datasets del area del mercado FOREX (Divisas y Materias Primas).
