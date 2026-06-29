@@ -24,7 +24,7 @@ except ImportError:
 try:
     import sounddevice as sd
     HAS_SD = True
-except ImportError:
+except (ImportError, OSError):
     sd = None
     HAS_SD = False
 

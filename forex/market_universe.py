@@ -3,11 +3,6 @@ market_universe.py
 
 Central market definitions for Astra Forex Analytics.
 
-This module is the single source of truth for all supported
-Forex pairs, commodities and crypto assets available in Astra,
-plus the MT5 symbol-name mapping used by `creando.py` to build
-the CSV datasets.
-
 Author: Nicolas Saez / Astra Project
 """
 
@@ -17,8 +12,6 @@ from typing import Optional
 # ============================================================
 # SUPPORTED FOREX PAIRS
 # ============================================================
-# Display format uses "BASE/QUOTE". The MT5 broker symbol name
-# (concatenated, no slash) is derived in MT5_SYMBOL_MAP below.
 
 FOREX_PAIRS = {
     "AUD/CAD", "AUD/CHF", "AUD/JPY", "AUD/NZD", "AUD/USD",
@@ -36,21 +29,15 @@ FOREX_PAIRS = {
     "USD/ZAR",
 }
 
-
-# ============================================================
-# SUPPORTED COMMODITIES
-# ============================================================
-# Display names (human readable). MT5 broker symbols mapped below.
-
 COMMODITIES = {
     "BRENT CRUDE OIL",
     "COCOA",
     "CORN",
     "COTTON",
     "HEATING OIL",
-    "LCATTLE",        # Live Cattle
-    "LHOG",           # Lean Hogs
-    "FCATTLE",        # Feeder Cattle
+    "LCATTLE",
+    "LHOG",
+    "FCATTLE",
     "NATURAL GAS",
     "OATS",
     "ORANGE JUICE",
@@ -61,22 +48,16 @@ COMMODITIES = {
     "SUGAR",
     "WHEAT",
     "WTI CRUDE OIL",
-    "XAG/EUR",        # Silver vs EUR
-    "XAG/USD",        # Silver vs USD
-    "XAU/EUR",        # Gold vs EUR
-    "XAU/USD",        # Gold vs USD
-    "XAU/XAG",        # Gold vs Silver
-    "XPD/USD",        # Palladium
-    "XPT/USD",        # Platinum
+    "XAG/EUR",
+    "XAG/USD",
+    "XAU/EUR",
+    "XAU/USD",
+    "XAU/XAG",
+    "XPD/USD",
+    "XPT/USD",
     "XAU/OIL",
     "XAU/SNP",
 }
-
-
-# ============================================================
-# SUPPORTED CRYPTO ASSETS
-# ============================================================
-# Quoted vs USD where applicable.
 
 CRYPTO_ASSETS = {
     "ADA/USD",
@@ -95,19 +76,11 @@ CRYPTO_ASSETS = {
     "ZEC/USD",
 }
 
-
 # ============================================================
-# MT5 SYMBOL NAME MAPPING
+# MT5 SYMBOL NAME MAPPING (para cuando MT5 está disponible)
 # ============================================================
-# MT5 brokers use concatenated symbol names (no slash, no spaces).
-# This map converts Astra display names -> MT5 symbol strings used
-# by `creando.py` when calling mt5.copy_rates_range().
-#
-# If your broker uses a suffix/prefix (e.g. "EURUSD.r", "EURUSD.m"),
-# adjust the values here only — the display names stay the same.
 
 MT5_SYMBOL_MAP = {
-    # Forex
     "AUD/CAD": "AUDCAD", "AUD/CHF": "AUDCHF", "AUD/JPY": "AUDJPY",
     "AUD/NZD": "AUDNZD", "AUD/USD": "AUDUSD",
     "CAD/CHF": "CADCHF", "CAD/JPY": "CADJPY",
@@ -115,8 +88,9 @@ MT5_SYMBOL_MAP = {
     "EUR/AUD": "EURAUD", "EUR/CAD": "EURCAD", "EUR/CHF": "EURCHF",
     "EUR/CZK": "EURCZK", "EUR/GBP": "EURGBP", "EUR/HKD": "EURHKD",
     "EUR/JPY": "EURJPY", "EUR/MXN": "EURMXN", "EUR/NZD": "EURNZD",
-    "EUR/NOK": "EURNOK", "EUR/PLN": "EURPLN", "EUR/RUB": "EURRUB", "EUR/SEK": "EURSEK",
-    "EUR/TRY": "EURTRY", "EUR/USD": "EURUSD", "EUR/ZAR": "EURZAR",
+    "EUR/NOK": "EURNOK", "EUR/PLN": "EURPLN", "EUR/RUB": "EURRUB",
+    "EUR/SEK": "EURSEK", "EUR/TRY": "EURTRY", "EUR/USD": "EURUSD",
+    "EUR/ZAR": "EURZAR",
     "GBP/AUD": "GBPAUD", "GBP/CAD": "GBPCAD", "GBP/CHF": "GBPCHF",
     "GBP/JPY": "GBPJPY", "GBP/NZD": "GBPNZD", "GBP/SEK": "GBPSEK",
     "GBP/USD": "GBPUSD",
@@ -128,8 +102,6 @@ MT5_SYMBOL_MAP = {
     "USD/NOK": "USDNOK", "USD/PLN": "USDPLN", "USD/RUB": "USDRUB",
     "USD/SEK": "USDSEK", "USD/SGD": "USDSGD", "USD/TRY": "USDTRY",
     "USD/ZAR": "USDZAR",
-
-    # Commodities
     "BRENT CRUDE OIL": "BRENTUSD",
     "WTI CRUDE OIL":   "OILUSD",
     "NATURAL GAS":     "NATGASUSD",
@@ -157,34 +129,66 @@ MT5_SYMBOL_MAP = {
     "XPT/USD":         "XPTUSD",
     "XAU/OIL":         "XAUOIL",
     "XAU/SNP":         "XAUSNP",
-
-    # Crypto
-    "ADA/USD":  "ADAUSD",
-    "BCH/USD":  "BCHUSD",
-    "BTC/USD":  "BTCUSD",
-    "DASH/USD": "DASHUSD",
-    "DOGE/USD": "DOGEUSD",
-    "EOS/USD":  "EOSUSD",
-    "ETC/USD":  "ETCUSD",
-    "ETH/USD":  "ETHUSD",
-    "LTC/USD":  "LTCUSD",
-    "SOL/USD":  "SOLUSD",
-    "XLM/USD":  "XLMUSD",
-    "XMR/USD":  "XMRUSD",
-    "XRP/USD":  "XRPUSD",
-    "ZEC/USD":  "ZECUSD",
+    "ADA/USD":  "ADAUSD",  "BCH/USD":  "BCHUSD",  "BTC/USD":  "BTCUSD",
+    "DASH/USD": "DASHUSD", "DOGE/USD": "DOGEUSD", "EOS/USD":  "EOSUSD",
+    "ETC/USD":  "ETCUSD",  "ETH/USD":  "ETHUSD",  "LTC/USD":  "LTCUSD",
+    "SOL/USD":  "SOLUSD",  "XLM/USD":  "XLMUSD",  "XMR/USD":  "XMRUSD",
+    "XRP/USD":  "XRPUSD",  "ZEC/USD":  "ZECUSD",
 }
 
-# Flat ordered list of MT5 symbol strings — consumed by creando.py.
 MT5_SYMBOLS = list(MT5_SYMBOL_MAP.values())
 
+# ============================================================
+# YFINANCE TICKER MAP (fallback sin MT5)
+# ============================================================
+# Mapea el nombre display de Astra -> ticker de Yahoo Finance
+# Solo se incluyen los pares que Yahoo Finance soporta con datos H1/D1 útiles
+
+YFINANCE_TICKER_MAP = {
+    # Forex majors & crosses (Yahoo usa sufijo =X)
+    "EUR/USD": "EURUSD=X",  "GBP/USD": "GBPUSD=X",  "USD/JPY": "USDJPY=X",
+    "AUD/USD": "AUDUSD=X",  "NZD/USD": "NZDUSD=X",  "USD/CAD": "USDCAD=X",
+    "USD/CHF": "USDCHF=X",  "EUR/JPY": "EURJPY=X",  "GBP/JPY": "GBPJPY=X",
+    "EUR/GBP": "EURGBP=X",  "EUR/AUD": "EURAUD=X",  "EUR/CAD": "EURCAD=X",
+    "EUR/CHF": "EURCHF=X",  "EUR/NZD": "EURNZD=X",  "GBP/AUD": "GBPAUD=X",
+    "GBP/CAD": "GBPCAD=X",  "GBP/CHF": "GBPCHF=X",  "GBP/NZD": "GBPNZD=X",
+    "AUD/JPY": "AUDJPY=X",  "AUD/CAD": "AUDCAD=X",  "AUD/CHF": "AUDCHF=X",
+    "AUD/NZD": "AUDNZD=X",  "NZD/JPY": "NZDJPY=X",  "NZD/CAD": "NZDCAD=X",
+    "NZD/CHF": "NZDCHF=X",  "CAD/JPY": "CADJPY=X",  "CAD/CHF": "CADCHF=X",
+    "CHF/JPY": "CHFJPY=X",  "USD/MXN": "USDMXN=X",  "USD/TRY": "USDTRY=X",
+    "USD/ZAR": "USDZAR=X",  "USD/SEK": "USDSEK=X",  "USD/NOK": "USDNOK=X",
+    "USD/HKD": "USDHKD=X",  "USD/SGD": "USDSGD=X",  "USD/CNH": "USDCNH=X",
+    "EUR/SEK": "EURSEK=X",  "EUR/NOK": "EURNOK=X",  "EUR/TRY": "EURTRY=X",
+    "EUR/ZAR": "EURZAR=X",  "EUR/MXN": "EURMXN=X",
+    # Commodities (Yahoo usa contratos de futuros)
+    "XAU/USD":       "GC=F",   # Gold futures
+    "XAG/USD":       "SI=F",   # Silver futures
+    "WTI CRUDE OIL": "CL=F",   # WTI Crude futures
+    "BRENT CRUDE OIL":"BZ=F",  # Brent Crude futures
+    "NATURAL GAS":   "NG=F",   # Natural Gas futures
+    "CORN":          "ZC=F",   # Corn futures
+    "WHEAT":         "ZW=F",   # Wheat futures
+    "SOYBEAN":       "ZS=F",   # Soybean futures
+    "SUGAR":         "SB=F",   # Sugar futures
+    "COTTON":        "CT=F",   # Cotton futures
+    "XPT/USD":       "PL=F",   # Platinum futures
+    "XPD/USD":       "PA=F",   # Palladium futures
+    # Crypto
+    "BTC/USD":  "BTC-USD",
+    "ETH/USD":  "ETH-USD",
+    "XRP/USD":  "XRP-USD",
+    "ADA/USD":  "ADA-USD",
+    "SOL/USD":  "SOL-USD",
+    "DOGE/USD": "DOGE-USD",
+    "LTC/USD":  "LTC-USD",
+    "BCH/USD":  "BCH-USD",
+}
 
 # ============================================================
-# COMMON USER ALIASES
+# ALIASES
 # ============================================================
 
 ALIASES = {
-    # Forex (concatenated -> display)
     "EURUSD": "EUR/USD", "GBPUSD": "GBP/USD", "USDJPY": "USD/JPY",
     "AUDUSD": "AUD/USD", "NZDUSD": "NZD/USD", "USDCAD": "USD/CAD",
     "USDCHF": "USD/CHF", "USDMXN": "USD/MXN", "USDTRY": "USD/TRY",
@@ -194,20 +198,20 @@ ALIASES = {
     "EURNOK": "EUR/NOK", "USDCNH": "USD/CNH", "USDHKD": "USD/HKD",
     "USDINR": "USD/INR", "USDNOK": "USD/NOK", "USDRUB": "USD/RUB",
     "USDSEK": "USD/SEK", "USDSGD": "USD/SGD", "EURMXN": "EUR/MXN",
-
-    # Commodities
+    "EURCAD": "EUR/CAD", "EURCHF": "EUR/CHF", "EURNZD": "EUR/NZD",
+    "GBPCAD": "GBP/CAD", "GBPCHF": "GBP/CHF", "GBPNZD": "GBP/NZD",
+    "AUDJPY": "AUD/JPY", "AUDCAD": "AUD/CAD", "AUDCHF": "AUD/CHF",
+    "AUDNZD": "AUD/NZD", "NZDCAD": "NZD/CAD", "NZDCHF": "NZD/CHF",
+    "CADJPY": "CAD/JPY", "CADCHF": "CAD/CHF", "CHFJPY": "CHF/JPY",
     "BRENT": "BRENT CRUDE OIL", "BRENT OIL": "BRENT CRUDE OIL",
     "WTI": "WTI CRUDE OIL", "WTI OIL": "WTI CRUDE OIL",
     "NATGAS": "NATURAL GAS", "GAS": "NATURAL GAS",
     "ROBUSTA": "ROBUSTA COFFEE",
-    "FEEDER CATTLE": "FCATTLE", "LIVE CATTLE": "LCATTLE",
-    "LEAN HOGS": "LHOG",
+    "FEEDER CATTLE": "FCATTLE", "LIVE CATTLE": "LCATTLE", "LEAN HOGS": "LHOG",
     "XAU": "XAU/USD", "GOLD": "XAU/USD",
     "XAG": "XAG/USD", "SILVER": "XAG/USD",
     "XPD": "XPD/USD", "PALLADIUM": "XPD/USD",
     "XPT": "XPT/USD", "PLATINUM": "XPT/USD",
-
-    # Crypto
     "BTC": "BTC/USD", "BITCOIN": "BTC/USD",
     "ETH": "ETH/USD", "ETHEREUM": "ETH/USD",
     "XRP": "XRP/USD", "RIPPLE": "XRP/USD",
@@ -217,11 +221,6 @@ ALIASES = {
     "LTC": "LTC/USD", "LITECOIN": "LTC/USD",
 }
 
-
-# ============================================================
-# COMBINED MARKET SET
-# ============================================================
-
 ALL_MARKETS = FOREX_PAIRS.union(COMMODITIES).union(CRYPTO_ASSETS)
 
 
@@ -230,88 +229,51 @@ ALL_MARKETS = FOREX_PAIRS.union(COMMODITIES).union(CRYPTO_ASSETS)
 # ============================================================
 
 def normalize_symbol(symbol: str) -> str:
-    """
-    Normalize user market input to a canonical display name.
-
-    Examples
-    --------
-    eurusd        -> EUR/USD
-    Eur/Usd       -> EUR/USD
-    usdjpy        -> USD/JPY
-    brent         -> BRENT CRUDE OIL
-    natural gas   -> NATURAL GAS
-    btcusd        -> BTC/USD
-    """
     if not symbol:
         return ""
-
     symbol = symbol.strip().upper()
-
-    # Alias lookup first
     if symbol in ALIASES:
         return ALIASES[symbol]
-
-    # Remove spaces for forex pair detection
     compact = symbol.replace(" ", "")
-
-    # 6-char concatenated symbols: EURUSD, BTCUSD, XAUUSD, XAGUSD, etc.
     if len(compact) == 6 and "/" not in compact:
         candidate = f"{compact[:3]}/{compact[3:]}"
-        if candidate in FOREX_PAIRS:
+        if candidate in ALL_MARKETS:
             return candidate
-        if candidate in COMMODITIES:
-            return candidate
-        if candidate in CRYPTO_ASSETS:
-            return candidate
-
     return symbol
 
 
-# ============================================================
-# MT5 SYMBOL RESOLUTION
-# ============================================================
-
 def to_mt5_symbol(symbol: str) -> str:
-    """
-    Convert an Astra display name (or raw user input) into the
-    MT5 broker symbol string used by creando.py.
-    """
     normalized = normalize_symbol(symbol)
     return MT5_SYMBOL_MAP.get(normalized, normalized.replace("/", ""))
 
 
-# ============================================================
-# VALIDATION
-# ============================================================
+def to_yfinance_ticker(symbol: str) -> Optional[str]:
+    """Convierte nombre Astra -> ticker Yahoo Finance. None si no soportado."""
+    normalized = normalize_symbol(symbol)
+    return YFINANCE_TICKER_MAP.get(normalized)
+
 
 def is_supported_market(symbol: str) -> bool:
-    normalized = normalize_symbol(symbol)
-    return normalized in ALL_MARKETS
+    return normalize_symbol(symbol) in ALL_MARKETS
+
+
+def is_supported_yfinance(symbol: str) -> bool:
+    return to_yfinance_ticker(symbol) is not None
 
 
 def is_forex_pair(symbol: str) -> bool:
-    normalized = normalize_symbol(symbol)
-    return normalized in FOREX_PAIRS
+    return normalize_symbol(symbol) in FOREX_PAIRS
 
 
 def is_commodity(symbol: str) -> bool:
-    normalized = normalize_symbol(symbol)
-    return normalized in COMMODITIES
+    return normalize_symbol(symbol) in COMMODITIES
 
 
 def is_crypto(symbol: str) -> bool:
-    normalized = normalize_symbol(symbol)
-    return normalized in CRYPTO_ASSETS
+    return normalize_symbol(symbol) in CRYPTO_ASSETS
 
-
-# ============================================================
-# MARKET TYPE
-# ============================================================
 
 def get_market_type(symbol: str) -> str:
-    """
-    Returns 'forex', 'commodity', 'crypto' or 'unknown'.
-    """
     normalized = normalize_symbol(symbol)
     if normalized in FOREX_PAIRS:
         return "forex"
@@ -322,52 +284,28 @@ def get_market_type(symbol: str) -> str:
     return "unknown"
 
 
-# ============================================================
-# LIST HELPERS
-# ============================================================
-
-def get_all_forex_pairs() -> list[str]:
+def get_all_forex_pairs() -> list:
     return sorted(FOREX_PAIRS)
 
 
-def get_all_commodities() -> list[str]:
+def get_all_commodities() -> list:
     return sorted(COMMODITIES)
 
 
-def get_all_crypto() -> list[str]:
+def get_all_crypto() -> list:
     return sorted(CRYPTO_ASSETS)
 
 
-def get_all_markets() -> list[str]:
-    return sorted(ALL_MARKETS)
-
-
-# ============================================================
-# SEARCH HELPERS
-# ============================================================
-
-def find_market(query: str) -> Optional[str]:
-    normalized = normalize_symbol(query)
-    if normalized in ALL_MARKETS:
-        return normalized
+def find_market(text: str) -> Optional[str]:
+    """Busca cualquier mercado conocido dentro de un texto libre."""
+    text = text.strip().upper()
+    if text in ALL_MARKETS:
+        return text
+    if text in ALIASES:
+        return ALIASES[text]
+    compact = text.replace(" ", "")
+    if len(compact) == 6 and "/" not in compact:
+        candidate = f"{compact[:3]}/{compact[3:]}"
+        if candidate in ALL_MARKETS:
+            return candidate
     return None
-
-
-# ============================================================
-# DEBUG / LOCAL TEST
-# ============================================================
-
-if __name__ == "__main__":
-    tests = [
-        "eurusd", "EUR/USD", "usdjpy", "brent", "natural gas",
-        "btcusd", "btc", "xauusd", "gold",
-    ]
-    for item in tests:
-        market = find_market(item)
-        print(f"\nInput: {item}")
-        if market:
-            print(f"Market: {market}")
-            print(f"Type:   {get_market_type(market)}")
-            print(f"MT5:    {to_mt5_symbol(market)}")
-        else:
-            print("Unsupported market")

@@ -39,7 +39,7 @@ except ImportError:
 try:
     from skimage import data, filters
     HAS_SKIMAGE = True
-except ImportError:
+except (ImportError, AttributeError, Exception):
     data = None
     filters = None
     HAS_SKIMAGE = False

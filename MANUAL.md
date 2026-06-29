@@ -1,43 +1,55 @@
 # ASTRA — Manual de Usuario
-**Sistema AI Modular · Consultor PYME · v2.0**
+**Sistema AI Modular · Consultor PYME · Análisis Forex · v2.1**
 
 ---
 
-## PARTE 1 — INSTALACIÓN Y ARRANQUE
+## ÍNDICE
+
+1. [Instalación](#parte-1--instalación-y-arranque)
+2. [Generación de CSVs Forex](#parte-2--generación-de-csvs-forex-creandopy)
+3. [Análisis y Predicción Forex](#parte-3--análisis-y-predicción-forex)
+4. [Documentos y Web](#parte-4--documentos-web-y-utilidades)
+5. [Consultor PYME](#parte-5--consultor-pyme-avanzado)
+6. [Business Intelligence](#parte-6--business-intelligence-bi-engine)
+7. [Sistema y Auto-Análisis](#parte-7--sistema-y-auto-análisis)
+8. [Estructura de archivos CSV](#parte-8--formato-de-archivos-csv)
+
+---
+
+## PARTE 1 — Instalación y Arranque
 
 ### Requisitos previos
-- Python 3.10 o superior
+- Python **3.10 o superior**
 - pip actualizado: `python -m pip install --upgrade pip`
-- Una API key de **Groq** (gratis): https://console.groq.com → API Keys → Create API Key
+- API key de **Groq** (gratuita): https://console.groq.com → API Keys → Create
 
 ---
 
-### Instalación en Windows (recomendado: entorno virtual)
+### Instalación en Windows
 
 ```cmd
-:: 1. Clonar / descargar el proyecto y entrar a la carpeta
+:: 1. Entrar a la carpeta del proyecto
 cd ruta\al\proyecto
 
 :: 2. Crear entorno virtual
 python -m venv venv
 
-:: 3. Activar el entorno virtual
-venv\Scripts\activate.bat          (CMD)
-.\venv\Scripts\Activate.ps1        (PowerShell)
+:: 3. Activar entorno virtual
+venv\Scripts\activate.bat          :: CMD
+.\venv\Scripts\Activate.ps1        :: PowerShell
 
 :: 4. Instalar dependencias
-pip install -r artifacts\astra\requirements.txt
+pip install -r requirements.txt
 
-:: 5. Configurar la API key de Groq (una sola vez)
+:: 5. Configurar API key (una sola vez)
 setx GROQ_API_KEY "gsk_tu_key_aqui"
-:: Cierra y vuelve a abrir el terminal para que tome efecto
+:: Cierra y vuelve a abrir el terminal
 
 :: 6. Lanzar ASTRA
-cd artifacts\astra
 python main.py
 ```
 
-> **Alternativa a setx**: crea un archivo `.env` dentro de `artifacts\astra\` con:
+> **Alternativa .env:** crea un archivo `.env` en la raíz con:
 > ```
 > GROQ_API_KEY=gsk_tu_key_aqui
 > ```
@@ -48,322 +60,577 @@ python main.py
 
 ---
 
-### Instalación en Linux / Replit
+### Instalación en Linux / macOS
 
 ```bash
 # 1. Instalar dependencias
-pip install -r artifacts/astra/requirements.txt
+pip install -r requirements.txt
 
-# 2. La API key ya está configurada en Replit Secrets como GROQ_API_KEY
-#    (no se necesita ningún paso extra en Replit)
+# 2. Exportar API key
+export GROQ_API_KEY="gsk_tu_key_aqui"
+# Para que persista, añádela a ~/.bashrc o ~/.zshrc
 
 # 3. Lanzar ASTRA
-cd artifacts/astra && python main.py
+python main.py
 ```
-
-En Replit el workflow **"ASTRA AI"** hace el paso 3 automáticamente al abrir el proyecto.
 
 ---
 
-### Diagnóstico antes de arrancar (opcional pero útil)
+### Diagnóstico de instalación (opcional)
 
 ```bash
-cd artifacts/astra
 python check_startup.py
 ```
 
-Resultado esperado:
-- Phase 2: 35 paquetes OK, 0 critical failures
-- Phase 3: 18/18 módulos OK
-- Phase 4: 12/12 módulos Forex/BI OK
-- Phase 5: 4/4 smoke tests OK
-- Final: `No critical issues found`
-
-Los `WARN` (torch, tensorflow, redis, librosa…) son **opcionales** — no bloquean el arranque.
+Resultado esperado: `No critical issues found`. Los `WARN` de torch, tensorflow,
+redis y librosa son paquetes **opcionales** y no bloquean el funcionamiento.
 
 ---
 
-### Instalar paquetes opcionales (si los necesitas)
+## PARTE 2 — Generación de CSVs Forex (`creando.py`)
 
-```bash
-pip install torch           # PyTorch — deep learning
-pip install tensorflow      # TensorFlow
-pip install redis           # cliente Redis
-pip install scikit-image    # procesamiento de imagen
-pip install librosa         # análisis de audio
-pip install python-dotenv   # carga .env automáticamente
-```
+`creando.py` descarga datos OHLCV reales para todos los pares, commodities y
+cryptos definidos en `forex/market_universe.py` y genera CSVs listos para
+entrenar y predecir — con todos los indicadores técnicos ya calculados.
 
----
+**Modos disponibles:**
 
-## PARTE 2 — COMANDOS DISPONIBLES
-
-Una vez dentro del asistente (prompt `Tú:`), escribe en lenguaje natural.
-El archivo CSV/Excel puede estar en cualquier ruta relativa a `artifacts/astra/`.
-
----
-
-### Branch 1 — Núcleo: Documentos, Seguridad y Sistema
-
-#### Lectura de archivos
-| Comando | Qué hace |
-|---|---|
-| `lee pdf informe.pdf` | Lee y extrae texto de un PDF |
-| `lee word documento.docx` | Lee un documento Word |
-| `lee excel tabla.xlsx` | Lee un Excel |
-| `lee csv datos.csv` | Lee un CSV |
-
-#### Web y traducción
-| Comando | Qué hace |
-|---|---|
-| `traduce Hola mundo al inglés` | Traduce texto al idioma indicado |
-| `extrae web https://ejemplo.com` | Scraping y extracción de texto de una URL |
-
-#### Seguridad
-| Comando | Qué hace |
-|---|---|
-| `hash password mipassword` | Genera hash bcrypt seguro |
-| `cifrar archivo secreto.txt` | Cifra un archivo con clave AES |
-| `crear jwt` | Genera un token JWT firmado |
-
-#### Sistema
-| Comando | Qué hace |
-|---|---|
-| `estado pc` | CPU, RAM, disco y uptime |
-| `ayuda` | Lista todos los comandos disponibles |
-
----
-
-### Branch 2 — Análisis Forex
-
-El sistema reconoce pares Forex, materias primas (commodities) y criptomonedas.
-El universo completo se define en `forex/market_universe.py` y se sincroniza con
-`creando.py` (el generador de CSVs desde MetaTrader5).
-
-| Comando | Qué hace |
-|---|---|
-| `analiza forex eurusd datos.csv` | Análisis técnico completo: RSI, MACD, EMA, CCI, MFI, ROC, volatilidad, señal ML |
-| `forex eurusd` | Reconoce el par y muestra estado del mercado |
-| `history eurusd` | Historial de análisis guardados para ese par |
-| `compare history eurusd` | Compara los últimos reportes guardados |
-| `list markets` | Lista todos los mercados analizados hasta ahora |
-
-#### Generación de CSVs desde MetaTrader5 (`creando.py`)
-
-`creando.py` descarga el historial OHLCV de MetaTrader5 para **cada símbolo
-soportado** (forex, commodities y crypto) y genera un CSV por combinación de
-**símbolo + timeframe**, con los indicadores técnicos ya calculados.
-
-**Requisitos:**
-- MetaTrader5 instalado y corriendo en Windows (la terminal debe estar abierta)
-- `pip install MetaTrader5 pandas numpy`
+| Modo | Requiere | Sistema |
+|---|---|---|
+| `yfinance` | Solo Python + internet | Cualquier OS ✅ |
+| `mt5` | MetaTrader5 terminal corriendo | Solo Windows |
 
 **Timeframes generados:**
 
-| Timeframe | Desde | Hasta | Carpeta de salida |
+| Timeframe | Datos | Velas aprox. | Carpeta |
 |---|---|---|---|
-| H1 (1 hora) | 2 años atrás | ahora | `CSVs/H1/` |
-| H4 (4 horas) | 2023-01-01 | ahora | `CSVs/H4/` |
-| D1 (diario) | 2021-01-01 | ahora | `CSVs/D1/` |
+| H1 | H1 real desde Yahoo Finance | ~17 000 | `CSVs/H1/` |
+| H4 | H1 resampleado a 4h | ~4 300 | `CSVs/H4/` |
+| D1 | D1 real desde Yahoo Finance | ~3 600 | `CSVs/D1/` |
 
-**Uso:**
+---
+
+### Comandos `creando.py`
+
+#### Generar todos los pares — todos los timeframes (modo yfinance)
 ```bash
-python creando.py
+python creando.py --modo yfinance --timeframe H1,H4,D1
+```
+Descarga EURUSD, GBPUSD, USDJPY, XAUUSD, BTCUSD y todos los demás soportados.
+
+---
+
+#### Generar pares específicos — un timeframe
+```bash
+python creando.py --modo yfinance --timeframe H1 --pares EURUSD GBPUSD XAUUSD
 ```
 
-Cada CSV se nombra con el símbolo de MT5 (ej: `EURUSD.csv`, `XAUUSD.csv`,
-`BTCUSD.csv`) y contiene las columnas: `timestamp, open, high, low, close,
-volume, rsi_14, macd, macd_signal, macd_histogram, atr_14, ema_20, ema_50,
-ema_150, bollinger_upper_20, bollinger_lower_20, return_5, volatility_20`.
+---
 
-> **Nota:** El mapeo entre nombres Astra (ej: `EUR/USD`, `BRENT CRUDE OIL`,
-> `BTC/USD`) y símbolos MT5 (`EURUSD`, `BRENTUSD`, `BTCUSD`) se define en
-> `MT5_SYMBOL_MAP` dentro de `forex/market_universe.py`. Si tu broker usa
-> sufijos (`.r`, `.m`), ajusta solo ese diccionario.
+#### Generar pares específicos — todos los timeframes
+```bash
+python creando.py --modo yfinance --timeframe H1,H4,D1 --pares EURUSD USDJPY BTCUSD
+```
 
-#### Indicadores técnicos incluidos en el análisis
+**Ejemplo de salida:**
+```
+=== yfinance H1 (2 años) → CSVs/H1 ===
+  [ok] CSVs/H1/EURUSD.csv  (17201 filas)
+  [ok] CSVs/H1/GBPUSD.csv  (17203 filas)
 
-| Grupo | Indicadores |
+=== yfinance H4 simulado desde H1 → CSVs/H4 ===
+  [ok] CSVs/H4/EURUSD.csv  (4338 filas)
+
+=== yfinance D1 (10 años) → CSVs/D1 ===
+  [ok] CSVs/D1/EURUSD.csv  (3626 filas)
+
+✅ yfinance completo: 6 CSVs generados, 0 omitidos.
+```
+
+---
+
+#### Usar MetaTrader5 (solo Windows)
+```bash
+# Asegúrate de tener el terminal MT5 abierto antes de ejecutar
+python creando.py --modo mt5 --timeframe H1,H4,D1
+```
+
+---
+
+#### Auto-detectar modo
+```bash
+# Si MT5 está disponible lo usa; si no, usa yfinance automáticamente
+python creando.py --timeframe H1,H4,D1
+```
+
+---
+
+### Pares soportados en yfinance
+
+| Categoría | Ejemplos | Ticker Yahoo |
+|---|---|---|
+| Forex majors | EUR/USD, GBP/USD, USD/JPY, AUD/USD | `EURUSD=X`, `GBPUSD=X` |
+| Forex crosses | EUR/JPY, GBP/JPY, AUD/JPY, EUR/GBP | `EURJPY=X`, `GBPJPY=X` |
+| Metales | XAU/USD (Gold), XAG/USD (Silver) | `GC=F`, `SI=F` |
+| Energía | WTI Crude Oil, Brent Crude Oil, Natural Gas | `CL=F`, `BZ=F`, `NG=F` |
+| Granos | Corn, Wheat, Soybean, Sugar, Cotton | `ZC=F`, `ZW=F`, `ZS=F` |
+| Crypto | BTC/USD, ETH/USD, XRP/USD, ADA/USD, SOL/USD | `BTC-USD`, `ETH-USD` |
+
+> El mapeo completo display → ticker está en `YFINANCE_TICKER_MAP` dentro de
+> `forex/market_universe.py`. Si necesitas añadir un par nuevo, solo agrega
+> una línea ahí.
+
+---
+
+## PARTE 3 — Análisis y Predicción Forex
+
+Una vez tienes los CSVs generados (ver Parte 2), puedes analizar y predecir
+directamente desde el chat de ASTRA o desde código Python.
+
+### Desde el chat de ASTRA (`main.py`)
+
+#### Analizar un par con su CSV
+```
+analiza forex eurusd CSVs/H1/EURUSD.csv
+```
+Ejecuta análisis técnico completo + señal ML sobre la última vela.
+
+---
+
+#### Analizar solo mencionando el par (sin CSV)
+```
+forex eurusd
+analiza forex XAUUSD
+```
+ASTRA busca automáticamente el CSV en `CSVs/H1/<SYMBOL>.csv`.
+
+---
+
+#### Ver historial de análisis guardados
+```
+history eurusd
+history xauusd
+```
+Muestra los últimos reportes almacenados en memoria para ese par.
+
+---
+
+#### Comparar reportes históricos
+```
+compare history eurusd
+compare history gbpusd
+```
+Compara los dos últimos reportes del par para detectar cambios de tendencia.
+
+---
+
+#### Ver todos los mercados analizados
+```
+list markets
+```
+Lista todos los pares con análisis guardado en la sesión actual.
+
+---
+
+### Desde código Python (pipeline directo)
+
+#### Flujo completo: generar CSV → entrenar → predecir
+
+```python
+import sys
+sys.path.insert(0, '.')  # ejecutar desde la raíz del proyecto
+
+from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
+
+pipeline = ForexIntegratedPipeline(
+    horizon=10,          # velas hacia adelante para el target
+    rr_ratio=1.5,        # ratio TP/SL para el label BUY/SELL
+    min_confidence=0.62, # confianza mínima para dar señal (vs HOLD)
+    min_adx=22.0,        # ADX mínimo — filtra mercados ranging
+)
+
+# 1. Entrenar el ensemble (XGBoost + LightGBM + RandomForest)
+resultado = pipeline.train("CSVs/H1/EURUSD.csv", pair="EURUSD")
+print(resultado)
+# {'accuracy': 0.66, 'precision': 0.41, 'rows': 17201, ...}
+
+# 2. Predecir señal de la última vela
+señal = pipeline.predict("CSVs/H1/EURUSD.csv", pair="EURUSD")
+print(señal)
+# {'action': 'BUY', 'direction': 'bullish', 'confidence': 0.68, 'adx': 28.4, ...}
+
+# 3. Backtest sobre datos retenidos
+bt = pipeline.backtest("CSVs/H1/EURUSD.csv")
+print(bt)
+# {'win_rate': 0.51, 'profit_factor': 1.03, 'final_balance': 10001.64, ...}
+
+# 4. Modo full (train + predict + backtest en un solo paso)
+full = pipeline.run("CSVs/H1/EURUSD.csv", mode="full", pair="EURUSD")
+
+# 5. Multi-horizonte (consenso H5 / H10 / H20)
+multi = pipeline.predict_multi_horizon("CSVs/H1/EURUSD.csv", pair="EURUSD")
+print(multi)
+# {'action': 'BUY', 'bullish_votes': 3, 'bearish_votes': 0, 'avg_confidence': 0.71, ...}
+```
+
+---
+
+#### Parámetros del pipeline
+
+| Parámetro | Valor por defecto | Descripción |
+|---|---|---|
+| `horizon` | `10` | Nº de velas futuras para calcular el target TP/SL |
+| `rr_ratio` | `1.5` | Ratio Riesgo/Beneficio para clasificar BUY vs SELL |
+| `min_confidence` | `0.62` | Confianza mínima del ensemble para no dar HOLD |
+| `min_adx` | `22.0` | ADX mínimo (mercado trending vs ranging) |
+
+---
+
+#### Modos del pipeline (`pipeline.run(..., mode=...)`)
+
+| Modo | Descripción |
 |---|---|
-| Momentum | RSI-14, Williams %R, Estocástico (14,3) |
-| Tendencia | MACD (12/26/9), EMA 20/50/150, ADX-14, cruce EMA |
-| Volatilidad | ATR-14, Bollinger Bands (20), ATR relativo |
-| Ciclo / extremos | **CCI-20** — sobrecompra/sobreventa sin límite |
-| Volumen | OBV, **MFI-14** — RSI ponderado por volumen |
-| Momentum % | **ROC-10** — cambio normalizado, comparable entre pares |
+| `"train"` | Solo entrenar y guardar el modelo |
+| `"predict"` | Solo predecir (requiere modelo ya entrenado) |
+| `"backtest"` | Solo backtest sobre datos retenidos |
+| `"multi_horizon"` | Consenso entre horizontes 5, 10 y 20 velas |
+| `"full"` | Train + predict + backtest en un solo paso |
+
+---
+
+#### Estructura de la señal devuelta
+
+```python
+{
+  "action":           "BUY" | "SELL" | "HOLD",
+  "direction":        "bullish" | "bearish",
+  "confidence":       0.68,          # probabilidad calibrada del ensemble
+  "signal_strength":  62.3,          # score 0–100 (confianza 65% + ADX 35%)
+  "adx":              28.4,          # ADX de la última vela
+  "regime":           "moderate trend" | "ranging" | "strong trend",
+  "hold_reason":      None,          # descripción si action=HOLD
+  "interpretation":   "Señal BUY de alta calidad — setup favorable detectado."
+}
+```
+
+---
+
+### Indicadores técnicos incluidos en el análisis
+
+| Grupo | Indicadores calculados |
+|---|---|
+| Momentum | RSI-14, Williams %R, Estocástico (14,3), Stoch Cross |
+| Tendencia | MACD 12/26/9, EMA 20/50/150/200, ADX-14, cruce EMAs |
+| Volatilidad | ATR-14, Bollinger Bands (20), volatilidad rolling |
+| Ciclo | CCI-20 |
+| Volumen | OBV, OBV-EMA, MFI-14 |
+| Momentum % | ROC-10, return_5 |
 | Patrones vela | Doji, Hammer, Shooting Star, Engulfing alcista/bajista |
+| Régimen | volatility_regime, trend_strength, ema_crossovers |
 
 ---
 
-### Branch 3 — Business Intelligence (BI Engine)
+## PARTE 4 — Documentos, Web y Utilidades
 
-| Comando | Qué hace |
-|---|---|
-| `analiza negocio ventas.csv` | KPIs financieros + health score + alertas automáticas |
-| `kpis reporte.xlsx` | Análisis de KPIs sobre un Excel |
-| `analisis completo negocio.csv` | Diagnóstico completo: KPIs + señal ML + recomendaciones |
-| `consulta empresa datos.xlsx` | Modo consultor PYME básico |
-| `entrena negocio historico.csv` | Entrena modelo ML sobre datos históricos de negocio |
+### Lectura de archivos
 
-El archivo debe tener columnas como `revenue`/`ingresos`, `expenses`/`gastos`, `date`/`fecha`.
-Formatos soportados: `.csv`, `.xlsx`, `.xls`
+```
+lee pdf informe.pdf
+```
+Lee y extrae texto completo de un PDF.
+
+```
+lee word contrato.docx
+```
+Lee un documento Word (.docx o .doc).
+
+```
+lee excel ventas.xlsx
+```
+Lee un archivo Excel y muestra su contenido.
+
+```
+lee csv datos.csv
+```
+Lee un CSV y muestra las primeras filas con estadísticas.
 
 ---
 
-### Branch 4 — Consultor PYME Avanzado
+### Resumen de documentos
 
-Los cuatro módulos del consultor estratégico. Todos generan narración automática de **Llama-3.3-70B** al finalizar.
+```
+resume pdf informe.pdf
+```
+Genera un resumen del PDF usando el modelo de lenguaje.
 
-#### `diagnóstico pyme`
+---
+
+### Traducción
+
+```
+traduce Hola, ¿cómo estás? al inglés
+traduce Hello world al español
+translate Good morning to French
+```
+Traduce texto libre al idioma indicado. Soporta cualquier idioma.
+
+---
+
+### Web
+
+```
+extrae web https://ejemplo.com
+busca informacion https://docs.python.org
+```
+Hace scraping de la URL y extrae el texto principal.
+
+---
+
+### Seguridad
+
+```
+hash password mipassword123
+```
+Genera un hash bcrypt seguro.
+
+```
+cifrar archivo secreto.txt
+```
+Cifra un archivo con clave AES.
+
+```
+crear jwt
+```
+Genera un token JWT firmado.
+
+---
+
+### Sistema
+
+```
+estado pc
+```
+Muestra CPU, RAM, disco y uptime del sistema.
+
+```
+ayuda
+```
+Lista todos los comandos disponibles en el asistente.
+
+---
+
+## PARTE 5 — Consultor PYME Avanzado
+
+Todos los módulos generan narración automática con **Llama-3.3-70B** al finalizar.
+El archivo de entrada puede ser `.csv` o `.xlsx` con columnas de ingresos/gastos/fecha.
+
+---
+
+### Diagnóstico PYME
+
 ```
 diagnóstico pyme ventas.csv
 ```
-Genera un **Scorecard Multidimensional** con tres dimensiones independientes:
-- **Salud Financiera** (40%): márgenes bruto/neto, ratio de gastos, saldo mínimo
-- **Salud de Crecimiento** (35%): CAGR, tendencia MoM, YoY
+Genera un Scorecard Multidimensional con tres dimensiones:
+- **Salud Financiera** (40%): márgenes bruto/neto, ratio de gastos
+- **Salud de Crecimiento** (35%): CAGR, tendencia MoM y YoY
 - **Nivel de Riesgo** (25%): volatilidad, concentración, estabilidad
 
-Resultado: puntuación 0–100 por dimensión + puntuación global + KPI table + alertas.
+**Resultado:** puntuación 0–100 por dimensión + score global + KPI table + alertas.
 
 ---
 
-#### `forecast negocio`
+### Proyección / Forecast
+
 ```
 forecast negocio ventas.csv
-forecast negocio ventas.csv 12
 ```
-Proyección de ingresos con tres bandas:
+Proyección de ingresos a 6 meses (por defecto) con tres bandas:
 - **Optimista**: tendencia + 1σ
 - **Esperado**: extrapolación lineal (R² como confianza)
 - **Conservador**: tendencia − 1σ
 
-Por defecto 6 meses; añade un número al final para otro plazo (ej: `12`).
+```
+forecast negocio ventas.csv 12
+```
+Proyección a 12 meses (añade el número de meses al final).
 
 ---
 
-#### `plan de accion`
+### Plan de Acción
+
 ```
 plan de accion ventas.csv
+recomienda para ventas.csv
 ```
-Llama-3.3-70B analiza el diagnóstico y genera un **Plan Estratégico** con 5 recomendaciones priorizadas, cada una con:
-- Acción concreta
-- Impacto esperado (en % o puntos KPI)
-- Plazo de implementación (corto / medio / largo)
+Llama-3.3-70B analiza el diagnóstico y genera un **Plan Estratégico** con
+5 recomendaciones priorizadas — cada una con acción concreta, impacto esperado
+y plazo (corto / medio / largo).
 
 ---
 
-#### `simular escenario`
+### Simulación What-If
+
 ```
-que pasa si reduzco costos 15% ventas.csv
-si aumento ventas ventas.csv 20%
-que ocurre si mejoro margen 10% datos.csv
+simula que pasa si reduzco costos 15% ventas.csv
+que pasa si aumento ventas 20% datos.xlsx
+si mejoro margen 10% reporte.csv
 ```
-Simulación What-If: el sistema interpreta el escenario en lenguaje natural, aplica el cambio sobre los datos reales y muestra una tabla **Antes / Después** con:
-- Todas las dimensiones del scorecard
-- KPIs clave (ingresos, ratio gastos, márgenes)
-- Delta (Δ) de cada métrica
+Aplica el cambio sobre los datos reales y muestra tabla **Antes / Después**
+con todas las dimensiones del scorecard y sus deltas.
 
 ---
 
-### Auto-Análisis del sistema
+## PARTE 6 — Business Intelligence (BI Engine)
 
-| Comando | Qué hace |
-|---|---|
-| `analiza astra` | Genera reporte completo del sistema |
-| `self analysis` | Alias en inglés |
-| `reporte sistema` | Alias en español |
-| `reporte astra` | Alias alternativo |
+```
+analiza negocio ventas.csv
+```
+KPIs financieros + health score + alertas automáticas.
 
-El reporte se guarda como `REPORT DD-MM.md` en `artifacts/astra/` (un archivo por día).
-Incluye: estado del sistema, motor AI activo, herramientas registradas, módulos opcionales, roadmap.
+```
+kpis reporte.xlsx
+```
+Análisis de KPIs sobre un Excel.
 
----
+```
+analisis completo negocio ventas.csv
+```
+Diagnóstico completo: KPIs + señal ML + recomendaciones narrativas.
 
-## PARTE 3 — ESTRUCTURA DE ARCHIVOS DE DATOS
+```
+consulta empresa datos.xlsx
+```
+Modo consultor PYME básico.
 
-### CSV Forex (Branch 2)
-
-El sistema acepta el formato de exportación estándar de plataformas de trading. Las columnas OHLCV son obligatorias; el resto puede estar en `NaN` — si falta un valor, el sistema lo calcula automáticamente desde OHLCV y lo escribe en su lugar.
-
-| Columna | Obligatoria | Descripción |
-|---|---|---|
-| `timestamp` | ✅ Sí | Fecha y hora (cualquier formato ISO 8601) |
-| `open` | ✅ Sí | Precio de apertura |
-| `high` | ✅ Sí | Precio máximo |
-| `low` | ✅ Sí | Precio mínimo |
-| `close` | ✅ Sí | Precio de cierre |
-| `volume` | ✅ Sí | Volumen (necesario para MFI y OBV) |
-| `rsi_14` | ☑ Opcional | RSI de 14 períodos (se recalcula si NaN) |
-| `macd` / `macd_signal` / `macd_histogram` | ☑ Opcional | MACD 12/26/9 (se recalcula si NaN) |
-| `atr_14` | ☑ Opcional | ATR de 14 períodos (se recalcula si NaN o = 0) |
-| `ema_20` / `ema_50` / `ema_150` | ☑ Opcional | EMAs (se recalcula si NaN) |
-| `bollinger_upper_20` / `bollinger_lower_20` | ☑ Opcional | Bandas de Bollinger (se recalcula si NaN) |
-| `return_5` | ☑ Opcional | Retorno a 5 períodos en % (se recalcula si NaN) |
-| `volatility_20` | ☑ Opcional | Volatilidad rolling 20 (se recalcula si NaN) |
-
-> **Comportamiento NaN:** si una celda de indicador está en NaN, el sistema la computa desde OHLCV y la sobreescribe. El valor original no-NaN nunca se toca.
->
-> **ATR = 0.0:** los valores ATR de exactamente 0.0 son tratados como NaN y recalculados (un ATR real nunca es cero para precios OHLCV reales).
-
-Los pares se detectan automáticamente desde el nombre del archivo (ej: `aud_usd_dataset.csv` → AUDUSD). También puedes indicarlo en el comando: `analiza forex audusd datos.csv`.
+```
+entrena negocio historico.csv
+```
+Entrena un modelo ML sobre datos históricos del negocio.
 
 ---
 
-### CSV Negocio / PYME (Branches 3 y 4)
+## PARTE 7 — Sistema y Auto-Análisis
 
-Para que los módulos BI y Branch 4 funcionen correctamente, el CSV/Excel debe tener al menos estas columnas (los nombres son flexibles — el sistema los detecta automáticamente):
-
-| Columna | Alias aceptados | Tipo |
-|---|---|---|
-| Fecha | `date`, `fecha`, `periodo`, `mes` | fecha o texto |
-| Ingresos | `revenue`, `ingresos`, `ventas`, `sales` | numérico |
-| Gastos | `expenses`, `gastos`, `costos`, `costs` | numérico |
-| Ganancia bruta | `gross_profit`, `ganancia_bruta` | numérico (opcional) |
-| Ingreso neto | `net_income`, `ingreso_neto`, `beneficio` | numérico (opcional) |
-| Saldo | `balance`, `saldo`, `cash` | numérico (opcional) |
-
-Mínimo viable: `date` + `revenue` + `expenses` (el resto se calcula internamente).
+```
+analiza astra
+self analysis
+reporte sistema
+reporte astra
+```
+Genera un reporte completo del estado del sistema: motor AI activo,
+herramientas registradas, módulos opcionales, roadmap.
+El reporte se guarda como `REPORT DD-MM.md` en la raíz del proyecto.
 
 ---
 
-## PARTE 4 — MOTOR AI Y MEMORIA
+### Audio
 
-### Motor de lenguaje
-ASTRA usa **Llama-3.3-70B** (vía Groq). Si `GROQ_API_KEY` no está configurada, intenta con `OPENAI_API_KEY` (GPT-3.5-turbo) como fallback.
+```
+analiza audio entrevista.mp3
+```
+Analiza un archivo de audio (.mp3, .wav, .ogg, .m4a).
+
+```
+voz a texto grabacion.mp3
+transcribir audio nota.wav
+```
+Transcribe audio a texto.
+
+```
+texto a voz Hola mundo
+```
+Convierte texto a audio.
+
+---
+
+### Matemáticas y ML
+
+```
+integral x^2
+derivada sin(x)
+```
+Cálculo simbólico con SymPy.
+
+```
+entrena modelo datos.csv
+```
+Entrena un modelo sklearn genérico sobre un CSV.
+
+---
 
 ### Memoria
-- **Sesión activa**: ASTRA recuerda los últimos 20 turnos de la conversación en memoria RAM. Puede referirse a respuestas anteriores de la misma sesión.
-- **Persistencia**: Los turnos se guardan en `memoria.db` (SQLite). Al reiniciar, carga los últimos 6 intercambios automáticamente.
-- La memoria se limpia sola cuando supera el límite. No necesitas hacer nada.
+
+```
+recuerda esto: reunión el lunes a las 10
+muestra memoria
+```
+Guarda y recupera notas en la memoria de sesión.
 
 ---
 
-## PARTE 5 — ROADMAP
+## PARTE 8 — Formato de Archivos CSV
 
-| Branch | Nombre | Estado |
+### CSV Forex (generado por `creando.py`)
+
+Columnas presentes en todos los CSVs de `CSVs/H1/`, `CSVs/H4/`, `CSVs/D1/`:
+
+| Columna | Tipo | Descripción |
 |---|---|---|
-| 1 | Core (Tool Registry, Memory, File I/O, Security) | ✅ Completo |
-| 2 | Prediction Framework (Forex ML pipeline) | ✅ Completo |
-| 3 | Business Intelligence Engine (KPIs, BI pipeline) | ✅ Completo |
-| 4 | SME/PYME Consultant (Diagnostic, Forecast, Recommend, Simulate) | ✅ Completo |
-| 5 | Industry Packs (Retail, Restaurante, E-Commerce, Manufactura) | 🔄 Próximo |
-| 6 | Multi-Agent ASTRA | 🕐 Futuro |
-| 7 | Executive Copilot | 🕐 Futuro |
+| `timestamp` | datetime | Fecha y hora de la vela |
+| `open` | float | Precio de apertura |
+| `high` | float | Precio máximo |
+| `low` | float | Precio mínimo |
+| `close` | float | Precio de cierre |
+| `volume` | float | Volumen (0 en forex spot) |
+| `rsi_14` | float | RSI de 14 períodos |
+| `macd` | float | Línea MACD (EMA12 − EMA26) |
+| `macd_signal` | float | Señal MACD (EMA9 del MACD) |
+| `macd_histogram` | float | Histograma MACD |
+| `atr_14` | float | ATR de 14 períodos |
+| `ema_20` | float | EMA de 20 períodos |
+| `ema_50` | float | EMA de 50 períodos |
+| `ema_150` | float | EMA de 150 períodos |
+| `bollinger_upper_20` | float | Banda superior Bollinger (20, 2σ) |
+| `bollinger_lower_20` | float | Banda inferior Bollinger (20, 2σ) |
+| `return_5` | float | Retorno a 5 velas (%) |
+| `volatility_20` | float | Volatilidad rolling 20 velas |
+| `session` | str | Sesión de mercado: Tokyo / London / NewYork |
 
----
+### CSV PYME / Negocio
 
-## PARTE 6 — SOLUCIÓN DE PROBLEMAS
+El sistema acepta cualquier CSV con al menos estas columnas
+(nombres en español o inglés, indistinto):
 
-| Síntoma | Causa probable | Solución |
+| Columna ES | Columna EN | Descripción |
 |---|---|---|
-| `GROQ_API_KEY not found` | Key no configurada | Sigue los pasos de la Parte 1 |
-| `ModuleNotFoundError: openai` | Falta el paquete | `pip install openai` |
-| `lightgbm` crash en Linux | Falta libgomp | El workflow lo configura automáticamente vía `LD_LIBRARY_PATH` |
-| Torch/TensorFlow WARN | Son opcionales | Ignóralos o instala con `pip install torch` |
-| `redis` WARN | Es opcional | Ignóralo o instala con `pip install redis` |
-| Sin audio/TTS en Linux | pyttsx3 silenciado | Funcionalidad solo disponible en Windows con dispositivo de audio |
-| CSV no reconocido | Columnas con nombres distintos | Renombra a `date`, `revenue`, `expenses` (ver Parte 3) |
+| `fecha` | `date` | Fecha del período |
+| `ingresos` | `revenue` | Ingresos del período |
+| `gastos` | `expenses` | Gastos del período |
+| `beneficio` | `profit` | Opcional (se calcula como ingresos − gastos) |
 
 ---
 
-*Generado para ASTRA v2.1 — Branch 2 actualizado (CCI, MFI, ROC, ATR relativo + imputation NaN) — Branch 4 completo — Junio 2026*
+## APÉNDICE — Referencia rápida de comandos
+
+| Comando | Ejemplo |
+|---|---|
+| Generar CSVs (yfinance) | `python creando.py --modo yfinance --timeframe H1,H4,D1` |
+| Generar CSVs (pares específicos) | `python creando.py --modo yfinance --timeframe H1 --pares EURUSD XAUUSD` |
+| Generar CSVs (MT5, Windows) | `python creando.py --modo mt5 --timeframe H1,H4,D1` |
+| Análisis forex (chat) | `analiza forex eurusd CSVs/H1/EURUSD.csv` |
+| Historial análisis | `history eurusd` |
+| Comparar reportes | `compare history eurusd` |
+| Ver mercados analizados | `list markets` |
+| Diagnóstico PYME | `diagnóstico pyme ventas.csv` |
+| Forecast | `forecast negocio ventas.csv 12` |
+| Plan de acción | `plan de accion ventas.csv` |
+| Simulación | `simula que pasa si reduzco costos 15% ventas.csv` |
+| BI análisis | `analiza negocio ventas.csv` |
+| Leer PDF | `lee pdf informe.pdf` |
+| Traducir | `traduce Hola mundo al inglés` |
+| Extraer web | `extrae web https://ejemplo.com` |
+| Hash password | `hash password mipassword` |
+| Estado PC | `estado pc` |
+| Auto-análisis ASTRA | `analiza astra` |
+| Diagnóstico instalación | `python check_startup.py` |

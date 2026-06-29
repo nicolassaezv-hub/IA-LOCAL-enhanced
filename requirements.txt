@@ -1,22 +1,24 @@
 # ASTRA — requirements.txt
-# Linux/Replit-compatible. Windows-only packages (pywin32, comtypes, dearpygui,
-# mss, PyAutoGUI, etc.) are intentionally excluded.
-# Heavy optional packages (torch, tensorflow, librosa…) are listed at the bottom
-# as comments — install manually: pip install <package>
+# Compatible con Linux, macOS y Windows (sin paquetes exclusivos de Windows).
+# Paquetes opcionales pesados al final, comentados — instalar manualmente.
 
-# ── AI / API client (REQUIRED — used for Groq and optional OpenAI) ───────────
-openai>=1.0
+# ── AI / API client ───────────────────────────────────────────────────────────
+openai>=1.0                  # Cliente Groq + OpenAI (REQUERIDO)
 
 # ── Core data & file I/O ─────────────────────────────────────────────────────
 numpy>=1.24
 pandas>=2.0
-openpyxl>=3.1
-PyPDF2>=3.0
-python-docx>=1.0
-pdfplumber>=0.9
+openpyxl>=3.1                # Lectura/escritura Excel .xlsx
+PyPDF2>=3.0                  # Lectura PDF
+python-docx>=1.0             # Lectura/escritura Word .docx
+pdfplumber>=0.9              # Extracción avanzada de texto en PDF
 
-# ── MetaTrader5 (Windows only — required by creando.py to build CSVs) ───────
-# MetaTrader5>=5.0.45  # pip install MetaTrader5  (Windows + MT5 terminal needed)
+# ── Forex data (sin MT5) ─────────────────────────────────────────────────────
+yfinance>=0.2.40             # Descarga OHLCV desde Yahoo Finance (creando.py --modo yfinance)
+pandas-datareader>=0.10      # Fuente alternativa de datos financieros
+
+# ── MetaTrader5 (solo Windows con MT5 terminal) ──────────────────────────────
+# MetaTrader5>=5.0.45        # pip install MetaTrader5 (Windows + terminal abierta)
 
 # ── Web & scraping ────────────────────────────────────────────────────────────
 requests>=2.30
@@ -34,15 +36,17 @@ tabulate>=0.9
 colorama>=0.4
 
 # ── ML & analytics ───────────────────────────────────────────────────────────
-scikit-learn>=1.3
+scikit-learn>=1.4            # ⚠️ Mínimo 1.4 (CalibratedClassifierCV cambió en 1.4)
 scipy>=1.11
 xgboost>=2.0
 lightgbm>=4.3
 optuna>=3.6
 faiss-cpu>=1.7
+imbalanced-learn>=0.12       # SMOTE para balanceo de clases en el trainer Forex
 
 # ── Database & storage ────────────────────────────────────────────────────────
 SQLAlchemy>=2.0
+joblib>=1.3                  # Serialización de modelos ML
 
 # ── Security ──────────────────────────────────────────────────────────────────
 cryptography>=42.0
@@ -62,20 +66,20 @@ watchdog>=4.0
 lazy-loader>=0.5
 sympy>=1.12
 
-# ── Optional — install manually with pip if needed ────────────────────────────
-# scikit-image>=0.21     — Image processing
-# torch>=2.0             — PyTorch deep learning
-# tensorflow>=2.14       — TensorFlow deep learning
-# librosa>=0.10          — Audio analysis (requires soundfile, resampy)
-# pydub>=0.25            — Audio conversion (requires ffmpeg)
-# sounddevice>=0.4       — Audio playback (requires PortAudio)
-# SpeechRecognition>=3.10 — Voice recognition (requires mic)
-# pyttsx3>=2.90          — Text-to-speech (requires audio device)
-# llama-index>=0.10      — LlamaIndex RAG framework
-# redis>=5.0             — Redis client
-# fastapi>=0.110         — FastAPI web framework
-# flask>=3.0             — Flask web framework
-# grpcio>=1.60           — gRPC
-# httpx>=0.27            — Async HTTP client
-# aiohttp>=3.9           — Async HTTP server/client
-# python-socketio>=5.0   — Socket.IO
+# ── Opcionales — instalar manualmente si los necesitas ───────────────────────
+# scikit-image>=0.21         — Procesamiento de imagen
+# torch>=2.0                 — PyTorch deep learning
+# tensorflow>=2.14           — TensorFlow deep learning
+# librosa>=0.10              — Análisis de audio (requiere soundfile, resampy)
+# pydub>=0.25                — Conversión de audio (requiere ffmpeg)
+# sounddevice>=0.4           — Reproducción de audio (requiere PortAudio)
+# SpeechRecognition>=3.10    — Reconocimiento de voz (requiere micrófono)
+# pyttsx3>=2.90              — Text-to-speech (requiere dispositivo de audio)
+# llama-index>=0.10          — Framework RAG LlamaIndex
+# redis>=5.0                 — Cliente Redis
+# fastapi>=0.110             — Framework FastAPI
+# flask>=3.0                 — Framework Flask
+# httpx>=0.27                — Cliente HTTP asíncrono
+# aiohttp>=3.9               — Servidor/cliente HTTP asíncrono
+# python-socketio>=5.0       — Socket.IO
+# python-dotenv>=1.0         — Carga .env automáticamente

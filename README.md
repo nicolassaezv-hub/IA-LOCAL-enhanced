@@ -43,22 +43,18 @@ Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 # Estructura
 
 Esta IA Local se compone de mas de 20 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
-
 El programa puente (main.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
 
-Se incluyen ?¿ codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python.
+Se incluyen dos codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python.
 
-Notese que se necesita activar un entorno virtual (activate.bat) y Redis con tal de prometer eficiencia al usar dichas herramientas.
+Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
 # Comandos y Programa Puente (main.py + iniciar_astra.bat)
-
 ### Comandos
 
 El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos 
-
-!ACTUALIZAR Y CATEGORIZAR!
 
 <details>
 <summary>Ver comandos</summary>
