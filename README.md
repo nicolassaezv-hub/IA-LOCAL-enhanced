@@ -7,7 +7,7 @@ Perfecto. Entonces trabajamos sobre lo que ya existe y lo extendemos de forma in
 Déjame hacer el audit primero para saber exactamente en qué estado están las piezas actuales:
 
 
-[Abrir roadmap](https://github.com/nicolassaezv-hub/IA-LOCAL-enhanced.git/bottom-up-roadmap.html)
+[Abrir roadmap](https://github.io/nicolassaezv-hub/IA-LOCAL-enhanced.git/bottom-up-roadmap.html)
 
 </details>
 
