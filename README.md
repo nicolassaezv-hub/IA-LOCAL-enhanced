@@ -9,7 +9,7 @@ Déjame hacer el audit primero para saber exactamente en qué estado están las 
 <details>
 <summary>Ver contenido de bottom-up-roadmap.html</summary>
 	
-[TRABAJANDO EN ESTO](bottom-up-roadmap.html)
+[TRABAJANDO EN ESTO](https://github.com/nicolassaezv-hub/IA-LOCAL-enhanced.git/bottom-up-roadmap.html)
 
 </details>
 
