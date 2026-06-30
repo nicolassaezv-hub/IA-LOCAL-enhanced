@@ -1,9 +1,9 @@
 # ASTRA — Manual de Usuario
-**Sistema AI Modular · Consultor PYME · Análisis Forex · v2.1**
+**Sistema AI Modular · Consultor PYME · Análisis Forex · v2.2 — Fases 1-4**
 
 ---
 
-## ÍNDICE
+## ÁNDICE
 
 1. [Instalación](#parte-1--instalación-y-arranque)
 2. [Generación de CSVs Forex](#parte-2--generación-de-csvs-forex-creandopy)
@@ -21,7 +21,7 @@
 ### Requisitos previos
 - Python **3.10 o superior**
 - pip actualizado: `python -m pip install --upgrade pip`
-- API key de **Groq** (gratuita): https://console.groq.com → API Keys → Create
+- API key de **Groq** (gratuita): https://console.groq.com — API Keys — Create
 
 ---
 
@@ -97,7 +97,7 @@ entrenar y predecir — con todos los indicadores técnicos ya calculados.
 
 | Modo | Requiere | Sistema |
 |---|---|---|
-| `yfinance` | Solo Python + internet | Cualquier OS ✅ |
+| `yfinance` | Solo Python + internet | Cualquier OS — |
 | `mt5` | MetaTrader5 terminal corriendo | Solo Windows |
 
 **Timeframes generados:**
@@ -134,17 +134,17 @@ python creando.py --modo yfinance --timeframe H1,H4,D1 --pares EURUSD USDJPY BTC
 
 **Ejemplo de salida:**
 ```
-=== yfinance H1 (2 años) → CSVs/H1 ===
+=== yfinance H1 (2 años) — CSVs/H1 ===
   [ok] CSVs/H1/EURUSD.csv  (17201 filas)
   [ok] CSVs/H1/GBPUSD.csv  (17203 filas)
 
-=== yfinance H4 simulado desde H1 → CSVs/H4 ===
+=== yfinance H4 simulado desde H1 — CSVs/H4 ===
   [ok] CSVs/H4/EURUSD.csv  (4338 filas)
 
-=== yfinance D1 (10 años) → CSVs/D1 ===
+=== yfinance D1 (10 años) — CSVs/D1 ===
   [ok] CSVs/D1/EURUSD.csv  (3626 filas)
 
-✅ yfinance completo: 6 CSVs generados, 0 omitidos.
+— yfinance completo: 6 CSVs generados, 0 omitidos.
 ```
 
 ---
@@ -176,7 +176,7 @@ python creando.py --timeframe H1,H4,D1
 | Granos | Corn, Wheat, Soybean, Sugar, Cotton | `ZC=F`, `ZW=F`, `ZS=F` |
 | Crypto | BTC/USD, ETH/USD, XRP/USD, ADA/USD, SOL/USD | `BTC-USD`, `ETH-USD` |
 
-> El mapeo completo display → ticker está en `YFINANCE_TICKER_MAP` dentro de
+> El mapeo completo display — ticker está en `YFINANCE_TICKER_MAP` dentro de
 > `forex/market_universe.py`. Si necesitas añadir un par nuevo, solo agrega
 > una línea ahí.
 
@@ -234,7 +234,7 @@ Lista todos los pares con análisis guardado en la sesión actual.
 
 ### Desde código Python (pipeline directo)
 
-#### Flujo completo: generar CSV → entrenar → predecir
+#### Flujo completo: generar CSV — entrenar — predecir
 
 ```python
 import sys
@@ -279,7 +279,7 @@ print(multi)
 
 | Parámetro | Valor por defecto | Descripción |
 |---|---|---|
-| `horizon` | `10` | Nº de velas futuras para calcular el target TP/SL |
+| `horizon` | `10` | NÂº de velas futuras para calcular el target TP/SL |
 | `rr_ratio` | `1.5` | Ratio Riesgo/Beneficio para clasificar BUY vs SELL |
 | `min_confidence` | `0.62` | Confianza mínima del ensemble para no dar HOLD |
 | `min_adx` | `22.0` | ADX mínimo (mercado trending vs ranging) |
@@ -368,7 +368,7 @@ Genera un resumen del PDF usando el modelo de lenguaje.
 ### Traducción
 
 ```
-traduce Hola, ¿cómo estás? al inglés
+traduce Hola, Â¿cómo estás? al inglés
 traduce Hello world al español
 translate Good morning to French
 ```
@@ -447,8 +447,8 @@ forecast negocio ventas.csv
 ```
 Proyección de ingresos a 6 meses (por defecto) con tres bandas:
 - **Optimista**: tendencia + 1σ
-- **Esperado**: extrapolación lineal (R² como confianza)
-- **Conservador**: tendencia − 1σ
+- **Esperado**: extrapolación lineal (RÂ² como confianza)
+- **Conservador**: tendencia — 1σ
 
 ```
 forecast negocio ventas.csv 12
@@ -584,7 +584,7 @@ Columnas presentes en todos los CSVs de `CSVs/H1/`, `CSVs/H4/`, `CSVs/D1/`:
 | `close` | float | Precio de cierre |
 | `volume` | float | Volumen (0 en forex spot) |
 | `rsi_14` | float | RSI de 14 períodos |
-| `macd` | float | Línea MACD (EMA12 − EMA26) |
+| `macd` | float | Línea MACD (EMA12 — EMA26) |
 | `macd_signal` | float | Señal MACD (EMA9 del MACD) |
 | `macd_histogram` | float | Histograma MACD |
 | `atr_14` | float | ATR de 14 períodos |
@@ -607,11 +607,249 @@ El sistema acepta cualquier CSV con al menos estas columnas
 | `fecha` | `date` | Fecha del período |
 | `ingresos` | `revenue` | Ingresos del período |
 | `gastos` | `expenses` | Gastos del período |
-| `beneficio` | `profit` | Opcional (se calcula como ingresos − gastos) |
+| `beneficio` | `profit` | Opcional (se calcula como ingresos — gastos) |
+
+-
+
+---
+
+## PARTE 9 — Memoria de Proyectos y Modelos (Fase 1)
+
+`project_memory.py` extiende la base de datos SQLite con tres tablas nuevas:
+`models`, `projects` y `tasks`. Al arrancar ASTRA se muestra automáticamente
+un resumen de modelos entrenados, proyectos activos y tareas pendientes.
+
+### Resumen de sesión automático
+
+Al ejecutar `python main.py` verás:
+```
+  📋  ASTRA — Resumen de sesión
+  ────────────────────────────────────────────
+  🤖  Modelos entrenados (2):
+     EURUSD        precision=71.00%  acc=68.00%      2026-06-30
+     XAUUSD        precision=75.00%  acc=72.00%      2026-06-30
+  📁  Proyectos activos (1):
+     Forex_Prod    Pipeline activo EURUSD/XAUUSD
+  ✅  Tareas pendientes (3):
+     [1] Forex_Prod  Actualizar CSV julio
+```
+
+### Comandos de modelos
+
+```
+mis modelos
+```
+Lista todos los modelos entrenados con precision, accuracy, filas y fecha.
+
+```
+info modelo EURUSD
+```
+Detalle de un modelo específico.
+
+> Los modelos se registran **automáticamente** después de cada `train forex <csv>`.
+> No es necesario registrarlos a mano.
+
+---
+
+### Comandos de proyectos
+
+```
+mis proyectos
+nuevo proyecto Forex_Prod Pipeline EURUSD activo
+cerrar proyecto Forex_Prod
+pausar proyecto Forex_Prod
+```
+
+Status disponibles: `active` → `paused` → `done`.
+
+---
+
+### Comandos de tareas
+
+```
+tareas
+tareas Forex_Prod
+nueva tarea Forex_Prod | Actualizar CSV con datos de julio
+completar tarea 3
+```
+
+El id de la tarea aparece entre corchetes en el listado.
+
+---
+
+## PARTE 10 — Watcher y Señales Forex (Fase 2)
+
+`forex_watcher.py` monitorea un CSV en background (thread daemon).
+`signal_tracker.py` persiste cada señal BUY/SELL/HOLD generada en SQLite.
+
+### Iniciar monitoreo de un par
+
+```
+watch forex EURUSD CSVs/H1/EURUSD.csv 60
+```
+Monitorea `EURUSD.csv` cada **60 segundos**. Si el CSV cambia (nuevo dato de MT5
+o yfinance), re-entrena automáticamente el modelo antes de predecir.
+
+Intervalo mínimo: 10 segundos. Sin especificar: 60 segundos por defecto.
+
+```
+watch forex XAUUSD CSVs/H1/XAUUSD.csv 120
+```
+Puedes tener múltiples pares activos simultáneamente.
+
+---
+
+### Control del watcher
+
+```
+watch status
+```
+Ver qué pares están siendo monitoreados y con qué intervalo.
+
+```
+watch check EURUSD
+```
+Forzar una evaluación inmediata sin esperar el intervalo.
+
+```
+watch stop EURUSD
+watch stop all
+```
+
+---
+
+### Historial de señales
+
+```
+señales EURUSD
+señales
+```
+Muestra las últimas 10 señales del par (o de todos los pares).
+Incluye barra de fuerza visual, confidence, ADX, régimen y razón de HOLD.
+
+```
+stats señales EURUSD
+stats señales
+```
+Ratio BUY/SELL/HOLD, confidence promedio y strength promedio.
+
+> Las señales también se guardan automáticamente al ejecutar `predict forex` y `full forex`.
+
+---
+
+## PARTE 11 — Active Engine Scheduler (Fase 3)
+
+`active_engine.py` usa la librería `schedule` en un thread daemon para ejecutar
+evaluaciones Forex de forma periódica sin necesidad de cron ni servicios externos.
+100% compatible con Windows.
+
+### Programar evaluación periódica
+
+```
+schedule forex EURUSD CSVs/H1/EURUSD.csv 60
+```
+Evalúa señal EURUSD cada 60 minutos. La señal se guarda en `signal_tracker`
+automáticamente. Notificación en consola solo si la señal es BUY o SELL.
+
+El engine se **auto-inicia** al registrar el primer trabajo. No hace falta
+llamar a ningún comando de arranque.
+
+---
+
+### Control del scheduler
+
+```
+schedule status
+```
+Ver trabajos activos con nombre, intervalo y próxima ejecución.
+
+```
+schedule run forex_EURUSD
+```
+Forzar ejecución inmediata de un trabajo por nombre.
+
+```
+schedule stop forex_EURUSD
+schedule stop all
+```
+
+> Los nombres de trabajos Forex siguen el patrón `forex_<PAR>`, ej. `forex_EURUSD`.
+
+---
+
+## PARTE 12 — News Intelligence (Fase 4)
+
+`news_intelligence.py` obtiene noticias de Yahoo Finance y FXStreet,
+analiza el sentimiento con **Llama-3.3-70B** (Groq) y combina la señal
+técnica con el sentimiento para generar una recomendación final ponderada.
+
+**Ponderación:** `70% señal técnica + 30% sentimiento noticias`
+
+Si técnico y noticias coinciden en dirección → señal **REFORZADA**.
+Si discrepan → señal reducida o HOLD.
+
+### Solo noticias + sentimiento
+
+```
+noticias EURUSD
+noticias XAUUSD
+```
+Muestra los últimos artículos de Yahoo Finance y FXStreet, y el score
+de sentimiento generado por Llama (-1.0 muy bearish → +1.0 muy bullish).
+
+Ejemplo de salida:
+```
+  NOTICIAS — EURUSD  (8 artículos)
+  ────────────────────────────────────────────────────────────────
+  [Yahoo Finance] EUR rallies as ECB signals rate hike
+  [FXStreet     ] Euro holds gains ahead of US CPI data
+  ...
+  SENTIMIENTO  : BULLISH  score=+0.62  confianza=80%
+  Análisis     : Las noticias reflejan expectativas alcistas en EUR...
+```
+
+---
+
+### Señal combinada (técnico + noticias)
+
+```
+noticias predice EURUSD CSVs/H1/EURUSD.csv
+```
+Ejecuta el predictor técnico + scraping de noticias + análisis Llama.
+Devuelve la decisión final con desglose de ambos componentes:
+
+```
+  ▲  ANÁLISIS COMBINADO — EURUSD
+  ══════════════════════════════════════════════════════════════
+  SEÑAL TÉCNICA   : BUY    conf=72.00%  adx=28.3  (moderate trend)
+  SENTIMIENTO     : BULLISH   score=+0.62  confianza=80%
+  SCORE COMBINADO : +0.6934  (70% técnico + 30% noticias)
+
+  DECISIÓN: BUY
+  Señal BUY REFORZADA — técnico y noticias alineados. Score: +0.6934
+```
+
+---
+
+### Pares soportados en News Intelligence
+
+| Par | Fuente Yahoo Finance |
+|---|---|
+| EURUSD | EURUSD=X |
+| GBPUSD | GBPUSD=X |
+| USDJPY | USDJPY=X |
+| XAUUSD | GC=F (Gold Futures) |
+| XAGUSD | SI=F (Silver Futures) |
+| USOIL  | CL=F (WTI Crude) |
+| UKOIL  | BZ=F (Brent Crude) |
+
+> Si Llama no está disponible (sin API key), el análisis usa un fallback
+> heurístico por keywords (bullish/bearish) con confianza reducida (40%).
 
 ---
 
 ## APÉNDICE — Referencia rápida de comandos
+## APÁNDICE — Referencia rápida de comandos
 
 | Comando | Ejemplo |
 |---|---|
@@ -634,3 +872,17 @@ El sistema acepta cualquier CSV con al menos estas columnas
 | Estado PC | `estado pc` |
 | Auto-análisis ASTRA | `analiza astra` |
 | Diagnóstico instalación | `python check_startup.py` |
+| Mis modelos | `mis modelos` |
+| Info de un modelo | `info modelo EURUSD` |
+| Nuevo proyecto | `nuevo proyecto Forex_Prod Pipeline activo` |
+| Listar tareas | `tareas Forex_Prod` |
+| Nueva tarea | `nueva tarea Forex_Prod | Actualizar CSV julio` |
+| Completar tarea | `completar tarea 3` |
+| Watcher Forex | `watch forex EURUSD CSVs/H1/EURUSD.csv 60` |
+| Ver pares activos | `watch status` |
+| Historial señales | `señales EURUSD` |
+| Stats señales | `stats señales EURUSD` |
+| Scheduler Forex | `schedule forex EURUSD CSVs/H1/EURUSD.csv 60` |
+| Estado scheduler | `schedule status` |
+| Noticias + sentimiento | `noticias EURUSD` |
+| Señal combinada | `noticias predice EURUSD CSVs/H1/EURUSD.csv` |

@@ -9,6 +9,27 @@ colorama_init(autoreset=True)
 
 # ── Lazy imports to keep startup fast ──────────────────────
 from memory import init_db
+from project_memory import (
+    init_project_db, session_summary, auto_register_forex_model,
+    cmd_list_models, cmd_list_projects, cmd_list_tasks,
+    save_project, update_project_status, add_task, complete_task,
+    get_pending_tasks, list_models, get_model
+)
+from signal_tracker import (
+    init_signal_db, save_signal, cmd_signal_history, cmd_signal_stats
+)
+from forex_watcher import (
+    cmd_watch_start, cmd_watch_stop, cmd_watch_status, cmd_watch_check
+)
+from active_engine import (
+    cmd_schedule_forex, cmd_schedule_stop, cmd_schedule_status, cmd_schedule_run
+)
+from news_intelligence import (
+    cmd_news, cmd_news_predict
+)
+
+
+
 from io_files import leer_pdf, leer_word, leer_excel, leer_csv, escribe_pdf, escribe_word, escribe_excel, escribe_csv
 from ai_models import ask_openai, system_status, torch_demo, tensorflow_demo, keras_demo, sklearn_demo, calcular_integral, entrenar_modelo_sklearn
 from web_tools import extrae_web, traducir, descargar_youtube, httpx_demo, aiohttp_demo, socketio_demo, fastapi_demo, flask_demo, subir_archivo_azure, consumir_api_grpc
@@ -61,6 +82,11 @@ def _forex_train(csv_path: str):
     pipeline = ForexIntegratedPipeline()
     result = pipeline.train(csv_path)
     if isinstance(result, dict):
+        # Registrar modelo en project_memory
+        try:
+            auto_register_forex_model(result, csv_path)
+        except Exception:
+            pass
         pair = result.get("pair", "?")
         acc  = result.get("accuracy", 0)
         prec = result.get("precision", 0)
@@ -83,7 +109,11 @@ def _forex_predict(csv_path: str):
     show_progress("Running Forex Prediction", 2)
     pipeline = ForexIntegratedPipeline()
     result = pipeline.predict(csv_path)
-    if isinstance(result, dict):
+    if isinstance(result, dict) and "error" not in result:
+        try:
+            save_signal(result, csv_path)
+        except Exception:
+            pass
         return _format_signal(result)
     return result
 
@@ -179,12 +209,111 @@ def _forex_backtest(csv_path: str):
     return pipeline.backtest(csv_path)
 
 
+def _resolve_mtf_paths(csv_h1: str):
+    """
+    Dado un CSV H1 (ej. CSVs/H1/EURUSD.csv) busca automaticamente
+    H4 y D1 del mismo par en carpetas hermanas (CSVs/H4/, CSVs/D1/).
+    Retorna (path_h4, path_d1) — None si no existen.
+    """
+    import os
+    basename = os.path.basename(csv_h1)
+    parent   = os.path.dirname(os.path.dirname(os.path.abspath(csv_h1)))
+    path_h4, path_d1 = None, None
+    for folder in os.listdir(parent):
+        full = os.path.join(parent, folder, basename)
+        if folder.upper() in ("H4", "4H", "M240") and os.path.exists(full):
+            path_h4 = full
+        elif folder.upper() in ("D1", "D", "1D", "DAILY") and os.path.exists(full):
+            path_d1 = full
+    return path_h4, path_d1
+
+
 def _forex_full(csv_path: str):
-    """Train + predict + backtest all in one run."""
+    """
+    Pipeline completo: tune -> train -> predict -> backtest.
+    Detecta automaticamente H4 y D1 si existen en carpetas hermanas.
+    """
     from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
-    print(Fore.CYAN + f"\n[ASTRA] Full Forex Analysis Pipeline: {csv_path}" + Style.RESET_ALL)
+
+    path_h4, path_d1 = _resolve_mtf_paths(csv_path)
+
+    mtf_parts = []
+    if path_h4: mtf_parts.append(f"H4: {path_h4}")
+    if path_d1: mtf_parts.append(f"D1: {path_d1}")
+    mtf_str = ("  MTF: " + " | ".join(mtf_parts)) if mtf_parts else "  MTF: no encontrado (solo H1)"
+
+    print(Fore.CYAN + "\n[ASTRA] ══ FULL FOREX PIPELINE ══" + Style.RESET_ALL)
+    print(f"  H1 : {csv_path}")
+    print(mtf_str)
+    print()
+
     pipeline = ForexIntegratedPipeline()
-    return pipeline.run(csv_path, mode="full")
+
+    # ── 1/4 TUNE ──────────────────────────────────────────────
+    print(Fore.YELLOW + "[1/4] Optimizando hiperparametros (Optuna)..." + Style.RESET_ALL)
+    tune_r = pipeline.tune(csv_path, path_h4=path_h4, path_d1=path_d1)
+    if isinstance(tune_r, dict) and "error" not in tune_r:
+        print(Fore.GREEN + f"     Tune OK  precision: {tune_r.get('precision',0):.2%}" + Style.RESET_ALL)
+    else:
+        print(Fore.YELLOW + "     Tune omitido o fallo  continuando con defaults" + Style.RESET_ALL)
+
+    # ── 2/4 TRAIN ─────────────────────────────────────────────
+    print(Fore.YELLOW + "\n[2/4] Entrenando ensemble (XGB + LGB + RF)..." + Style.RESET_ALL)
+    train_r = pipeline.train(csv_path, path_h4=path_h4, path_d1=path_d1)
+    # Registrar modelo en project_memory automáticamente
+    try:
+        auto_register_forex_model(train_r, csv_path)
+    except Exception:
+        pass
+    if isinstance(train_r, dict):
+        pair   = train_r.get("pair",        "?")
+        acc    = train_r.get("accuracy",     0)
+        prec   = train_r.get("precision",    0)
+        rows   = train_r.get("rows",         0)
+        valid  = train_r.get("model_valid",  False)
+        mtf_f  = train_r.get("mtf_features", 0)
+        wfv    = train_r.get("wfv",          {})
+        wfv_p  = wfv.get("avg_precision",    0)
+        wfv_m  = wfv.get("median_precision", 0)
+        wfv_ok = wfv.get("wfv_passed",       False)
+        col    = Fore.GREEN if valid else Fore.RED
+        print(f"     Par      : {pair}")
+        print(f"     Filas    : {rows}  |  Features: {train_r.get('features',0)} ({mtf_f} MTF)")
+        print(f"     Accuracy : {acc:.2%}  |  Precision: {prec:.2%}  [{col}{'VALIDO' if valid else 'INVALIDO < 65%'}{Style.RESET_ALL}]")
+        print(f"     WFV avg  : {wfv_p:.2%}  median: {wfv_m:.2%}  [{'OK' if wfv_ok else 'BAJO'}]")
+    else:
+        print(Fore.RED + f"     Entrenamiento fallo: {train_r}" + Style.RESET_ALL)
+        return ""
+
+    # ── 3/4 PREDICT ───────────────────────────────────────────
+    print(Fore.YELLOW + "\n[3/4] Generando senal de la ultima vela..." + Style.RESET_ALL)
+    pred_r = pipeline.predict(csv_path, path_h4=path_h4, path_d1=path_d1)
+    if isinstance(pred_r, dict) and "error" not in pred_r:
+        try:
+            save_signal(pred_r, csv_path)
+        except Exception:
+            pass
+        print(_format_signal(pred_r))
+    else:
+        print(pred_r)
+
+    # ── 4/4 BACKTEST ──────────────────────────────────────────
+    print(Fore.YELLOW + "[4/4] Backtesting sobre datos historicos..." + Style.RESET_ALL)
+    back_r = pipeline.backtest(csv_path, path_h4=path_h4, path_d1=path_d1)
+    if isinstance(back_r, dict) and "error" not in back_r:
+        trades = back_r.get("total_trades",   0)
+        wr     = back_r.get("win_rate",        0)
+        pf     = back_r.get("profit_factor",   0)
+        er     = back_r.get("expected_return", 0)
+        print(f"     Trades: {trades}  |  Win Rate: {wr:.1%}  |  PF: {pf:.2f}  |  E[R]: {er:.4f}")
+    elif isinstance(back_r, dict):
+        print(Fore.YELLOW + f"     Backtest: {back_r.get('error','?')}" + Style.RESET_ALL)
+    else:
+        print(back_r)
+
+    print()
+    print(Fore.GREEN + "[ASTRA] ══ FULL PIPELINE COMPLETADO ══" + Style.RESET_ALL)
+    return ""
 
 
 def _forex_analiza(csv_path: str, symbol: str):
@@ -374,6 +503,105 @@ def _ayuda():
   crear pdf <path> <text>        Create PDF via ReportLab
   imagen                         Scikit-image edge detection demo
 
+            # ── NEWS INTELLIGENCE (FASE 4) ───────────────────────
+            elif user_input.lower().startswith("noticias predice "):
+                parts = user_input[17:].strip().split()
+                if len(parts) >= 2:
+                    respuesta = cmd_news_predict(parts[0], parts[1])
+                else:
+                    respuesta = "Uso: noticias predice <par> <csv>  ej: noticias predice EURUSD CSVs/H1/EURUSD.csv"
+
+            elif user_input.lower().startswith("noticias "):
+                respuesta = cmd_news(user_input[9:].strip())
+
+            elif user_input.lower().startswith("news "):
+                respuesta = cmd_news(user_input[5:].strip())
+
+            # ── ACTIVE ENGINE SCHEDULER (FASE 3) ─────────────────
+            elif user_input.lower().startswith("schedule forex "):
+                # uso: schedule forex <par> <csv> [minutos]
+                parts = user_input[15:].strip().split()
+                if len(parts) >= 2:
+                    _pair = parts[0]
+                    _csv  = parts[1]
+                    _min  = int(parts[2]) if len(parts) > 2 else 60
+                    respuesta = cmd_schedule_forex(_pair, _csv, _min)
+                else:
+                    respuesta = "Uso: schedule forex <par> <csv> [minutos]  ej: schedule forex EURUSD CSVs/H1/EURUSD.csv 60"
+
+            elif user_input.lower().startswith("schedule stop "):
+                respuesta = cmd_schedule_stop(user_input[14:].strip())
+
+            elif user_input.lower() == "schedule stop":
+                respuesta = cmd_schedule_stop("all")
+
+            elif user_input.lower() in ["schedule status", "schedule"]:
+                respuesta = cmd_schedule_status()
+
+            elif user_input.lower().startswith("schedule run "):
+                respuesta = cmd_schedule_run(user_input[13:].strip())
+
+            # ── FOREX WATCHER (FASE 2) ────────────────────────────
+            elif user_input.lower().startswith("watch forex "):
+                # uso: watch forex <par> <csv> [intervalo_segundos]
+                parts = user_input[12:].strip().split()
+                if len(parts) >= 2:
+                    _pair  = parts[0]
+                    _csv   = parts[1]
+                    _intv  = int(parts[2]) if len(parts) > 2 else 60
+                    respuesta = cmd_watch_start(_pair, _csv, _intv)
+                else:
+                    respuesta = "Uso: watch forex <par> <csv> [intervalo]  ej: watch forex EURUSD CSVs/H1/EURUSD.csv 60"
+
+            elif user_input.lower().startswith("watch stop "):
+                respuesta = cmd_watch_stop(user_input[11:].strip())
+
+            elif user_input.lower() == "watch stop":
+                respuesta = cmd_watch_stop("all")
+
+            elif user_input.lower() in ["watch status", "watch"]:
+                respuesta = cmd_watch_status()
+
+            elif user_input.lower().startswith("watch check "):
+                respuesta = cmd_watch_check(user_input[12:].strip())
+
+            # ── HISTORIAL DE SEÑALES (FASE 2) ────────────────────
+            elif user_input.lower().startswith("señales "):
+                respuesta = cmd_signal_history(user_input[8:].strip())
+
+            elif user_input.lower().startswith("signals "):
+                respuesta = cmd_signal_history(user_input[8:].strip())
+
+            elif user_input.lower() in ["señales", "signals", "historial señales"]:
+                respuesta = cmd_signal_history()
+
+            elif user_input.lower().startswith("stats señales"):
+                parts = user_input.split()
+                pair_arg = parts[2] if len(parts) > 2 else None
+                respuesta = cmd_signal_stats(pair_arg)
+
+{Fore.CYAN}── FOREX WATCHER Y SEÑALES (FASE 2) ──────────────────────{Style.RESET_ALL}
+  watch forex <par> <csv> [seg]  Monitoreo continuo de un par (thread background)
+  watch stop <par>               Detener monitoreo de un par
+  watch stop all                 Detener todos los watchers
+  watch status                   Ver pares activos en monitoreo
+  watch check <par>              Forzar evaluación inmediata
+  señales <par>                  Historial de señales BUY/SELL/HOLD del par
+  señales                        Historial global (todos los pares)
+  stats señales [par]            Estadísticas de señales (ratio BUY/SELL/HOLD)
+
+{Fore.CYAN}── PROYECTOS Y MODELOS (FASE 1) ───────────────────────────────{Style.RESET_ALL}
+  mis modelos                    Lista todos los modelos Forex entrenados
+  info modelo <par>              Detalles de un modelo (ej: info modelo EURUSD)
+  mis proyectos                  Lista todos los proyectos registrados
+  nuevo proyecto <nombre> <desc> Crea un proyecto nuevo
+  cerrar proyecto <nombre>       Marca un proyecto como completado
+  pausar proyecto <nombre>       Pausa un proyecto activo
+  tareas                         Lista todas las tareas pendientes
+  tareas <proyecto>              Tareas pendientes de un proyecto específico
+  nueva tarea <proj> | <desc>    Agrega una tarea a un proyecto
+  completar tarea <id>           Marca una tarea como completada
+
 {Fore.CYAN}── MEMORY / DATABASE ──────────────────────────────────────────{Style.RESET_ALL}
   redis set                      Store a key-value in Redis
   redis get                      Retrieve a key from Redis
@@ -397,7 +625,12 @@ def _ayuda():
 
 if __name__ == "__main__":
     init_db()
+    init_project_db()
+    init_signal_db()
     _print_banner()
+    _session_summary = session_summary()
+    if _session_summary.strip():
+        print(_session_summary)
 
     while True:
         try:
@@ -474,6 +707,10 @@ if __name__ == "__main__":
             # ── FOREX: FULL PIPELINE ─────────────────────────
             elif user_input.startswith("full forex "):
                 csv_path = user_input[len("full forex "):].strip()
+                respuesta = _forex_full(csv_path)
+
+            elif user_input.startswith("completo forex "):
+                csv_path = user_input[len("completo forex "):].strip()
                 respuesta = _forex_full(csv_path)
 
             # ── FOREX: TECHNICAL ANALYTICS ───────────────────
@@ -736,6 +973,71 @@ if __name__ == "__main__":
             elif user_input == "integral":
                 show_progress("Symbolic Integration", 1)
                 respuesta = calcular_integral("x**2", "x", 0, 1)
+
+
+            # ── PROYECTOS Y MODELOS (FASE 1) ─────────────────────
+            elif user_input.lower() in ["mis modelos", "list models", "modelos entrenados"]:
+                respuesta = cmd_list_models()
+
+            elif user_input.lower() in ["mis proyectos", "list projects", "proyectos"]:
+                respuesta = cmd_list_projects()
+
+            elif user_input.lower() in ["tareas", "mis tareas", "pendientes"]:
+                respuesta = cmd_list_tasks()
+
+            elif user_input.lower().startswith("tareas "):
+                respuesta = cmd_list_tasks(user_input[7:].strip())
+
+            elif user_input.lower().startswith("nuevo proyecto "):
+                parts = user_input[15:].strip().split(" ", 1)
+                name  = parts[0]
+                desc  = parts[1] if len(parts) > 1 else ""
+                pid   = save_project(name, desc)
+                respuesta = f"Proyecto '{name}' guardado (id={pid})"
+
+            elif user_input.lower().startswith("cerrar proyecto "):
+                name = user_input[16:].strip()
+                ok   = update_project_status(name, "done")
+                respuesta = f"Proyecto '{name}' completado." if ok else f"No encontré el proyecto '{name}'."
+
+            elif user_input.lower().startswith("pausar proyecto "):
+                name = user_input[16:].strip()
+                ok   = update_project_status(name, "paused")
+                respuesta = f"Proyecto '{name}' pausado." if ok else f"No encontré el proyecto '{name}'."
+
+            elif user_input.lower().startswith("nueva tarea "):
+                rest = user_input[12:].strip()
+                if "|" in rest:
+                    proj, desc = rest.split("|", 1)
+                    tid = add_task(proj.strip(), desc.strip())
+                    respuesta = f"Tarea [{tid}] agregada al proyecto '{proj.strip()}'."
+                else:
+                    respuesta = "Uso: nueva tarea <proyecto> | <descripción>"
+
+            elif user_input.lower().startswith("completar tarea "):
+                try:
+                    tid = int(user_input[16:].strip())
+                    ok  = complete_task(tid)
+                    respuesta = f"Tarea [{tid}] completada." if ok else f"No encontré la tarea [{tid}]."
+                except ValueError:
+                    respuesta = "Uso: completar tarea <id>  (ej: completar tarea 3)"
+
+            elif user_input.lower().startswith("info modelo "):
+                pair  = user_input[12:].strip()
+                model = get_model(pair)
+                if model:
+                    prec = model.get("precision")
+                    acc  = model.get("accuracy")
+                    rows = model.get("rows_trained")
+                    date = (model.get("updated_at") or "")[:16]
+                    out  = [f"  Modelo: {model['pair']}"]
+                    if prec: out.append(f"  Precision  : {prec:.2%}")
+                    if acc:  out.append(f"  Accuracy   : {acc:.2%}")
+                    if rows: out.append(f"  Filas      : {rows:,}")
+                    out.append(f"  Actualizado: {date}")
+                    respuesta = "\n".join(out)
+                else:
+                    respuesta = f"No hay modelo para '{pair}'. Usa: train forex <csv>"
 
             # ── EXTRA MODULES ────────────────────────────────
             elif user_input in comandos_extra:
