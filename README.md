@@ -7,7 +7,7 @@ Perfecto. Entonces trabajamos sobre lo que ya existe y lo extendemos de forma in
 Déjame hacer el audit primero para saber exactamente en qué estado están las piezas actuales:
 
 
-[Abrir roadmap](bottom-up-roadmap.html)
+[Abrir roadmap](https://bottom-up-roadmap.html)
 
 </details>
 
