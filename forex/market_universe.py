@@ -1,351 +1,175 @@
 """
-forex_memory.py
+market_universe.py — Universal market symbol registry for ASTRA.
 
-Persistence layer for Astra Forex Analytics.
+Centralizes all supported forex pairs, commodities, and crypto assets
+with mappings to MT5 symbols and Yahoo Finance tickers.
 
-Stores, retrieves, lists and compares Forex analysis reports.
+Functions:
+  - get_all_forex_pairs()     -> list of forex pairs
+  - get_all_commodities()     -> list of commodities
+  - normalize_symbol(symbol)  -> standardized format (e.g., "EURUSD")
+  - is_supported_market(sym)  -> True if in our universe
+  - get_market_type(symbol)   -> "forex", "commodity", "crypto", or None
+  - to_yfinance_ticker(symbol) -> Yahoo Finance ticker (e.g., "EURUSD=X")
+  - to_mt5_symbol(symbol)     -> MT5 symbol (e.g., "EURUSD")
 
 Author: Nicolas Saez / Astra Project
 """
 
-from __future__ import annotations
-
-import json
-from pathlib import Path
-from typing import List, Optional
-
-from forex.forex_report import ForexReport
-
+from typing import Optional, List
 
 # ==========================================================
-# STORAGE CONFIGURATION
+# FOREX PAIRS (majors + crosses)
 # ==========================================================
 
-BASE_DIR = Path("data") / "forex_analytics"
+FOREX_PAIRS = [
+    # Majors
+    "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
+    # Euro crosses
+    "EURGBP", "EURJPY", "EURCHF", "EURAUD", "EURCAD", "EURNZD",
+    # GBP crosses
+    "GBPJPY", "GBPCHF", "GBPAUD", "GBPCAD", "GBPNZD",
+    # Other crosses
+    "AUDJPY", "AUDCHF", "AUDCAD", "AUDNZD",
+    "CADJPY", "CADCHF",
+    "NZDJPY", "NZDCHF",
+    # Scandinavian
+    "USDSEK", "USDNOK", "USDTRY", "USDZAR",
+    "EURSEK", "EURNOK", "EURTRY",
+]
 
-BASE_DIR.mkdir(parents=True, exist_ok=True)
-
-
-# ==========================================================
-# INTERNAL HELPERS
-# ==========================================================
-
-def _safe_filename(symbol: str) -> str:
-    """
-    EUR/USD       -> EUR_USD
-    Brent Crude Oil -> BRENT__CRUDE__OIL
-
-    Uses '__' (double underscore) for spaces so the round-trip
-    in list_saved_markets is lossless.
-    """
-
-    return (
-        symbol.upper()
-        .replace("/", "_")
-        .replace(" ", "__")
-    )
-
-
-def _from_filename(name: str) -> str:
-    """Reverse of _safe_filename."""
-    return name.replace("__", " ").replace("_", "/")
-
-
-def _market_directory(symbol: str) -> Path:
-    """
-    Returns the directory for a specific market.
-    """
-
-    market_dir = BASE_DIR / _safe_filename(symbol)
-
-    market_dir.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    return market_dir
-
+FOREX_PAIRS_ALIASES = {
+    "EUR/USD": "EURUSD", "GBP/USD": "GBPUSD", "USD/JPY": "USDJPY",
+    "USD/CHF": "USDCHF", "AUD/USD": "AUDUSD", "USD/CAD": "USDCAD",
+    "NZD/USD": "NZDUSD", "EUR/GBP": "EURGBP", "EUR/JPY": "EURJPY",
+    "GBP/JPY": "GBPJPY", "XAU/USD": "XAUUSD", "XAG/USD": "XAGUSD",
+    "USD_JPY": "USDJPY", "EUR_USD": "EURUSD", "GBP_USD": "GBPUSD",
+    "AUD_USD": "AUDUSD", "USD_CAD": "USDCAD", "XAU_USD": "XAUUSD", "XAG_USD": "XAGUSD",
+}
 
 # ==========================================================
-# SAVE
+# COMMODITIES (metals, energy, agriculture)
 # ==========================================================
 
-def save_analysis(report: ForexReport) -> str:
-    """
-    Save a ForexReport as JSON.
+COMMODITIES = [
+    "XAUUSD",  # Gold
+    "XAGUSD",  # Silver
+    "XPTUSD",  # Platinum
+    "XPDUSD",  # Palladium
+    "USOIL",   # WTI Crude Oil
+    "UKOIL",   # Brent Crude Oil
+    "NGAS",    # Natural Gas
+]
 
-    Returns:
-        Path of saved file.
-    """
-
-    market_dir = _market_directory(
-        report.symbol
-    )
-
-    timestamp = (
-        report.created_at
-        .replace(":", "-")
-        .replace(".", "-")
-    )
-
-    filename = (
-        f"{timestamp}.json"
-    )
-
-    filepath = market_dir / filename
-
-    with open(
-        filepath,
-        "w",
-        encoding="utf-8"
-    ) as file:
-
-        json.dump(
-            report.to_dict(),
-            file,
-            indent=4,
-            ensure_ascii=False
-        )
-
-    return str(filepath)
-
+COMMODITY_ALIASES = {
+    "GOLD": "XAUUSD", "SILVER": "XAGUSD", "XAU": "XAUUSD", "XAG": "XAGUSD",
+    "WTI": "USOIL", "CRUDE": "USOIL", "BRENT": "UKOIL", "OIL": "USOIL",
+    "NATGAS": "NGAS", "NATURAL_GAS": "NGAS",
+}
 
 # ==========================================================
-# LOAD
+# CRYPTO (major pairs vs USD)
 # ==========================================================
 
-def load_analysis(
-    filepath: str
-) -> ForexReport:
-    """
-    Load a saved report.
-    """
+CRYPTO_ASSETS = [
+    "BTCUSD", "ETHUSD", "XRPUSD", "LTCUSD",
+    "ADAUSD", "SOLUSD", "DOGEUSD", "DOTUSD",
+]
 
-    with open(
-        filepath,
-        "r",
-        encoding="utf-8"
-    ) as file:
-
-        data = json.load(file)
-
-    return ForexReport(**data)
-
+CRYPTO_ALIASES = {
+    "BTC": "BTCUSD", "BITCOIN": "BTCUSD",
+    "ETH": "ETHUSD", "ETHEREUM": "ETHUSD",
+    "XRP": "XRPUSD", "RIPPLE": "XRPUSD",
+    "LTC": "LTCUSD", "LITECOIN": "LTCUSD",
+    "ADA": "ADAUSD", "CARDANO": "ADAUSD",
+    "SOL": "SOLUSD", "SOLANA": "SOLUSD",
+    "DOGE": "DOGEUSD", "DOGECOIN": "DOGEUSD",
+    "DOT": "DOTUSD", "POLKADOT": "DOTUSD",
+}
 
 # ==========================================================
-# HISTORY
+# YAHOO FINANCE TICKER MAP
 # ==========================================================
 
-def get_history(
-    symbol: str
-) -> List[ForexReport]:
-    """
-    Return all reports for a market.
-    """
-
-    market_dir = _market_directory(
-        symbol
-    )
-
-    reports = []
-
-    for file in sorted(
-        market_dir.glob("*.json")
-    ):
-
-        try:
-
-            reports.append(
-                load_analysis(str(file))
-            )
-
-        except Exception:
-            pass
-
-    return reports
-
+YFINANCE_TICKER_MAP = {
+    # Forex majors
+    "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "USDJPY=X",
+    "USDCHF": "USDCHF=X", "AUDUSD": "AUDUSD=X", "USDCAD": "USDCAD=X",
+    "NZDUSD": "NZDUSD=X",
+    # Euro crosses
+    "EURGBP": "EURGBP=X", "EURJPY": "EURJPY=X", "EURCHF": "EURCHF=X",
+    "EURAUD": "EURAUD=X", "EURCAD": "EURCAD=X", "EURNZD": "EURNZD=X",
+    # GBP crosses
+    "GBPJPY": "GBPJPY=X", "GBPCHF": "GBPCHF=X", "GBPAUD": "GBPAUD=X",
+    "GBPCAD": "GBPCAD=X", "GBPNZD": "GBPNZD=X",
+    # Other crosses
+    "AUDJPY": "AUDJPY=X", "AUDCHF": "AUDCHF=X", "AUDCAD": "AUDCAD=X",
+    "NZDJPY": "NZDJPY=X", "NZDCHF": "NZDCHF=X",
+    "CADJPY": "CADJPY=X", "CADCHF": "CADCHF=X",
+    # Scandinavian
+    "USDSEK": "USDSEK=X", "USDNOK": "USDNOK=X", "USDTRY": "USDTRY=X",
+    "EURSEK": "EURSEK=X", "EURNOK": "EURNOK=X",
+    # Commodities
+    "XAUUSD": "GC=F", "XAGUSD": "SI=F", "USOIL": "CL=F", "UKOIL": "BZ=F", "NGAS": "NG=F",
+    # Crypto
+    "BTCUSD": "BTC-USD", "ETHUSD": "ETH-USD", "XRPUSD": "XRP-USD",
+    "LTCUSD": "LTC-USD", "ADAUSD": "ADA-USD", "SOLUSD": "SOL-USD",
+    "DOGEUSD": "DOGE-USD",
+}
 
 # ==========================================================
-# LATEST REPORT
+# MT5 SYMBOL MAP
 # ==========================================================
 
-def get_latest_analysis(
-    symbol: str
-) -> Optional[ForexReport]:
-    """
-    Return latest report for a market.
-    """
+MT5_SYMBOL_MAP = {
+    "EURUSD": "EURUSD", "GBPUSD": "GBPUSD", "USDJPY": "USDJPY",
+    "USDCHF": "USDCHF", "AUDUSD": "AUDUSD", "USDCAD": "USDCAD",
+    "NZDUSD": "NZDUSD", "EURGBP": "EURGBP", "EURJPY": "EURJPY",
+    "GBPJPY": "GBPJPY", "XAUUSD": "XAUUSD", "XAGUSD": "XAGUSD",
+    "USOIL": "USOIL", "UKOIL": "UKOIL", "BTCUSD": "BTCUSD", "ETHUSD": "ETHUSD",
+}
 
-    reports = get_history(symbol)
-
-    if not reports:
-        return None
-
-    return reports[-1]
-
+MT5_SYMBOLS = list(MT5_SYMBOL_MAP.values())
 
 # ==========================================================
-# LIST MARKETS
+# HELPER FUNCTIONS
 # ==========================================================
 
-def list_saved_markets() -> List[str]:
-    """
-    Returns all markets
-    with stored analyses.
-    """
+def normalize_symbol(symbol: str) -> str:
+    if not symbol:
+        return "UNKNOWN"
+    s = symbol.upper().replace("/", "").replace("_", "").replace("-", "")
+    if s in FOREX_PAIRS_ALIASES: return FOREX_PAIRS_ALIASES[s]
+    if s in COMMODITY_ALIASES: return COMMODITY_ALIASES[s]
+    if s in CRYPTO_ALIASES: return CRYPTO_ALIASES[s]
+    if s in FOREX_PAIRS or s in COMMODITIES or s in CRYPTO_ASSETS:
+        return s
+    return s
 
-    markets = []
+def is_supported_market(symbol: str) -> bool:
+    s = normalize_symbol(symbol)
+    return s in FOREX_PAIRS or s in COMMODITIES or s in CRYPTO_ASSETS
 
-    for folder in BASE_DIR.iterdir():
+def get_market_type(symbol: str) -> Optional[str]:
+    s = normalize_symbol(symbol)
+    if s in FOREX_PAIRS: return "forex"
+    if s in COMMODITIES: return "commodity"
+    if s in CRYPTO_ASSETS: return "crypto"
+    return None
 
-        if folder.is_dir():
+def get_all_forex_pairs() -> List[str]:
+    return FOREX_PAIRS.copy()
 
-            markets.append(_from_filename(folder.name))
+def get_all_commodities() -> List[str]:
+    return COMMODITIES.copy()
 
-    return sorted(markets)
+def get_all_crypto() -> List[str]:
+    return CRYPTO_ASSETS.copy()
 
+def to_yfinance_ticker(symbol: str) -> Optional[str]:
+    s = normalize_symbol(symbol)
+    return YFINANCE_TICKER_MAP.get(s)
 
-# ==========================================================
-# COUNT REPORTS
-# ==========================================================
-
-def count_reports(
-    symbol: str
-) -> int:
-    """
-    Count reports for a market.
-    """
-
-    market_dir = _market_directory(
-        symbol
-    )
-
-    return len(
-        list(
-            market_dir.glob("*.json")
-        )
-    )
-
-
-# ==========================================================
-# COMPARISON
-# ==========================================================
-
-def compare_last_reports(
-    symbol: str,
-    num_reports: int = 5
-) -> str:
-    """
-    Compare recent reports.
-
-    Returns human-readable text.
-    """
-
-    reports = get_history(symbol)
-
-    if not reports:
-
-        return (
-            f"No analysis history "
-            f"found for {symbol}."
-        )
-
-    reports = reports[-num_reports:]
-
-    lines = [
-        "=" * 60,
-        f"ANALYSIS HISTORY: {symbol}",
-        "=" * 60,
-        ""
-    ]
-
-    for report in reports:
-
-        lines.extend([
-            f"Date: {report.created_at}",
-            f"Trend: {report.trend}",
-            f"Confidence: {report.confidence:.2f}",
-            f"Summary: {report.ai_summary}",
-            "-" * 60,
-        ])
-
-    return "\n".join(lines)
-
-
-# ==========================================================
-# DELETE
-# ==========================================================
-
-def delete_market_history(
-    symbol: str
-) -> int:
-    """
-    Delete all reports for a market.
-
-    Returns:
-        Number of deleted reports.
-    """
-
-    market_dir = _market_directory(
-        symbol
-    )
-
-    files = list(
-        market_dir.glob("*.json")
-    )
-
-    for file in files:
-
-        try:
-            file.unlink()
-
-        except Exception:
-            pass
-
-    return len(files)
-
-
-# ==========================================================
-# STATS
-# ==========================================================
-
-def get_storage_stats() -> dict:
-    """
-    Returns overall storage statistics.
-    """
-
-    total_markets = 0
-    total_reports = 0
-
-    for folder in BASE_DIR.iterdir():
-
-        if folder.is_dir():
-
-            total_markets += 1
-
-            total_reports += len(
-                list(
-                    folder.glob("*.json")
-                )
-            )
-
-    return {
-        "total_markets": total_markets,
-        "total_reports": total_reports,
-        "storage_directory": str(BASE_DIR)
-    }
-
-
-# ==========================================================
-# TESTING
-# ==========================================================
-
-if __name__ == "__main__":
-
-    print(
-        "\nASTRA FOREX MEMORY"
-    )
-
-    print(
-        get_storage_stats()
-    )
+def to_mt5_symbol(symbol: str) -> Optional[str]:
+    s = normalize_symbol(symbol)
+    return MT5_SYMBOL_MAP.get(s)
