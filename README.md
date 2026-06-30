@@ -1,14 +1,12 @@
 # ASTRA
 
-# Peticiones Personales
+# WORKFLOW
 
-- revisar creando.txt para actualizar rama de funcionamiento Forex
+Perfecto. Entonces trabajamos sobre lo que ya existe y lo extendemos de forma incremental.
 
-- agregar modulo de prediccion extra por Kernel (Lineal,Polinomial,RBF y Sigmoidal)
+Déjame hacer el audit primero para saber exactamente en qué estado están las piezas actuales:
 
-- agregar modulo de comparacion de sistemas de prediccion ya establecidos
-
-- editar y reinstituir comandos, ahora por categorizacion en MANUAL.md y en README.md
+Tengo una visión clara del estado actual. Déjame mostrarte el diagnóstico honesto:
 
 ## Informacion General
 
