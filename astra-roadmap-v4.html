@@ -1,0 +1,961 @@
+<!doctype html><html dir="auto"><head><meta http-equiv="Content-Security-Policy" content="default-src 'unsafe-inline' 'unsafe-eval' https: data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<script id="__base44_dark_class__">document.documentElement.classList.remove('dark');</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Wix+Madefor+Text:wght@400;500;600;700&display=swap">
+<style id="__base44_editor_theme__">
+:root {
+  --background: 38 27% 94%;
+  --foreground: 0 0% 4%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 4%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 4%;
+  --primary: 21 42% 55%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 96%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 39 17% 93%;
+  --muted-foreground: 0 0% 45%;
+  --accent: 0 0% 96%;
+  --accent-foreground: 0 0% 9%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 98%;
+  --input: 0 0% 98%;
+  --ring: 21 42% 55%;
+  --radius: 0.5rem;
+  color-scheme: light;
+}
+.dark {
+  --background: 220 5% 11%;
+  --foreground: 0 0% 99%;
+  --card: 0 1% 14%;
+  --card-foreground: 0 0% 99%;
+  --popover: 0 1% 14%;
+  --popover-foreground: 0 0% 99%;
+  --primary: 21 42% 55%;
+  --primary-foreground: 0 0% 99%;
+  --secondary: 0 0% 18%;
+  --secondary-foreground: 0 0% 99%;
+  --muted: 0 0% 18%;
+  --muted-foreground: 0 0% 65%;
+  --accent: 0 0% 18%;
+  --accent-foreground: 0 0% 99%;
+  --destructive: 0 62% 30%;
+  --destructive-foreground: 0 0% 99%;
+  --border: 0 0% 16%;
+  --input: 0 0% 16%;
+  --ring: 21 42% 55%;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+/* shadcn's base layer: default every element's border-color to the theme
+   token. Without this, Tailwind's bare `border` utility only sets width and
+   the color falls back to currentColor (near-black text) — so the model's
+   `border` cards render heavy/dark and the `--border` value is ignored.
+   Explicit `border-{color}` utilities and inline styles still override. */
+*, *::before, *::after { border-color: hsl(var(--border)); }
+html, body {
+  margin: 0 !important;
+  padding: 0;
+  overflow: auto !important;
+  /* Inline card: transparent, so the real chat surface (a gradient, not the
+     single flat `--background` stop) shows straight through and the artifact
+     reads as inline chat content in both themes. Standalone saved file: opaque
+     `--background` so it stays readable on its own page. `--card` stays
+     elevated for emphasis blocks (stat tiles, panels) so hierarchy reads. */
+  background: hsl(var(--background)) !important;
+  color: hsl(var(--foreground));
+  font-family: 'WixMadeforText', 'Wix Madefor Text', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+/* 8px (vs 16px) — minimal breathing room from the iframe edge so
+   tightly-composed dashboards don't ship a fat empty halo at the top
+   before their first element. LLMs add their own inner spacing. */
+body { padding: 8px; }
+code, kbd, pre, samp { font-family: 'WixMadeforMonospace', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+a { color: hsl(var(--primary)); }
+hr { border: 0; border-top: 1px solid hsl(var(--border)); }
+h1, h2, h3, h4, h5, h6 { font-weight: 600; color: hsl(var(--foreground)); }
+</style>
+<script id="__base44_tw_config__">
+window.tailwind = window.tailwind || {};
+window.tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        primary: { DEFAULT: 'hsl(var(--primary))', foreground: 'hsl(var(--primary-foreground))' },
+        secondary: { DEFAULT: 'hsl(var(--secondary))', foreground: 'hsl(var(--secondary-foreground))' },
+        destructive: { DEFAULT: 'hsl(var(--destructive))', foreground: 'hsl(var(--destructive-foreground))' },
+        muted: { DEFAULT: 'hsl(var(--muted))', foreground: 'hsl(var(--muted-foreground))' },
+        accent: { DEFAULT: 'hsl(var(--accent))', foreground: 'hsl(var(--accent-foreground))' },
+        popover: { DEFAULT: 'hsl(var(--popover))', foreground: 'hsl(var(--popover-foreground))' },
+        card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
+      },
+      // A bare `border` / `divide-*` (no color) falls back to Tailwind
+      // preflight's DEFAULT, which is a FIXED gray-200 (#e5e7eb) — subtle on the
+      // light card but near-white glare on the dark card. The `colors.border`
+      // map above only creates the `border-border` class; it does NOT set the
+      // uncolored default. Point the DEFAULT at the theme token so an uncolored
+      // border adapts to dark mode like the rest of the palette. (Explicit
+      // `border-primary` etc. still override.)
+      borderColor: { DEFAULT: 'hsl(var(--border))' },
+      divideColor: { DEFAULT: 'hsl(var(--border))' },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
+      fontFamily: {
+        // Same two-name stack as `FONT_SANS_STACK` above. The
+        // sandboxed null-origin iframe lands on `Wix Madefor Text`
+        // (Google Fonts' name); `WixMadeforText` is here only for
+        // defense-in-depth in case the iframe ever runs same-origin.
+        sans: ['WixMadeforText', 'Wix Madefor Text', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        mono: ['WixMadeforMonospace', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+      },
+    },
+  },
+};
+</script>
+<script src="https://cdn.tailwindcss.com" id="__base44_tw_cdn__"></script></head><body><!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    padding: 2rem 1.5rem 4rem;
+    line-height: 1.6;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+  .header-badge {
+    display: inline-block;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    margin-bottom: 0.75rem;
+  }
+  .header h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    color: hsl(var(--foreground));
+    letter-spacing: -0.02em;
+  }
+  .header h1 span { color: hsl(var(--primary)); }
+  .header p {
+    margin-top: 0.5rem;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.9rem;
+    max-width: 560px;
+    margin-inline: auto;
+  }
+
+  /* ── COMPLETED SECTION ── */
+  .completed-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.6rem;
+    margin-bottom: 2.5rem;
+  }
+  .completed-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.82rem;
+    color: hsl(var(--foreground));
+  }
+  .completed-item .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: hsl(141 76% 48%);
+    flex-shrink: 0;
+  }
+
+  /* ── SECTION TITLE ── */
+  .section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    margin-bottom: 1rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  /* ── PHASE CARD ── */
+  .phase {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 14px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.1rem 1.4rem;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid transparent;
+    transition: background 0.15s;
+  }
+  .phase-header:hover { background: hsl(var(--accent)); }
+  .phase.open .phase-header { border-bottom-color: hsl(var(--border)); }
+
+  .phase-num {
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: hsl(var(--primary-foreground));
+    background: hsl(var(--primary));
+    border-radius: 7px;
+    padding: 0.3rem 0.6rem;
+    flex-shrink: 0;
+  }
+  .phase-info { flex: 1; }
+  .phase-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .phase-sub {
+    font-size: 0.78rem;
+    color: hsl(var(--muted-foreground));
+    margin-top: 0.1rem;
+  }
+  .phase-meta {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--muted));
+    white-space: nowrap;
+  }
+  .badge.high { color: hsl(0 70% 55%); border-color: hsl(0 70% 55% / 0.35); background: hsl(0 70% 55% / 0.08); }
+  .badge.med  { color: hsl(38 90% 48%); border-color: hsl(38 90% 48% / 0.35); background: hsl(38 90% 48% / 0.08); }
+  .chevron {
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .phase.open .chevron { transform: rotate(180deg); }
+
+  /* ── PHASE BODY ── */
+  .phase-body { display: none; padding: 1.2rem 1.4rem; }
+  .phase.open .phase-body { display: block; }
+
+  /* ── MODULE ROWS ── */
+  .module {
+    display: flex;
+    gap: 1rem;
+    padding: 0.9rem 0;
+    border-bottom: 1px solid hsl(var(--border));
+    align-items: flex-start;
+  }
+  .module:last-child { border-bottom: none; }
+  .module-num {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.1);
+    border-radius: 6px;
+    padding: 0.25rem 0.5rem;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+    min-width: 2.6rem;
+    text-align: center;
+  }
+  .module-content { flex: 1; }
+  .module-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .module-file {
+    font-size: 0.73rem;
+    color: hsl(var(--muted-foreground));
+    font-family: 'Consolas', 'Courier New', monospace;
+    margin-top: 0.1rem;
+    margin-bottom: 0.4rem;
+  }
+  .module-desc {
+    font-size: 0.82rem;
+    color: hsl(var(--muted-foreground));
+    line-height: 1.55;
+  }
+  .module-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+  }
+  .tag {
+    font-size: 0.67rem;
+    font-weight: 600;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    background: hsl(var(--primary) / 0.1);
+    color: hsl(var(--primary));
+    font-family: 'Consolas', monospace;
+  }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: hsl(var(--muted) / 0.5);
+    border-radius: 10px;
+    border: 1px solid hsl(var(--border));
+  }
+  .flow-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    margin-bottom: 0.75rem;
+  }
+  .flow-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    align-items: center;
+  }
+  .flow-step {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.3rem 0.65rem;
+    border-radius: 6px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
+    white-space: nowrap;
+  }
+  .flow-arrow {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8rem;
+  }
+
+  /* ── SUMMARY TABLE ── */
+  .summary {
+    margin-top: 2rem;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .summary-header {
+    padding: 1rem 1.4rem;
+    border-bottom: 1px solid hsl(var(--border));
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: hsl(var(--foreground));
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+  thead th {
+    text-align: left;
+    padding: 0.65rem 1rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  tbody td {
+    padding: 0.7rem 1rem;
+    color: hsl(var(--foreground));
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: hsl(var(--accent) / 0.5); }
+  .stars { color: hsl(var(--primary)); letter-spacing: 0.05em; }
+  .stars-dim { color: hsl(var(--border)); }
+
+  .order-section {
+    margin-top: 1.5rem;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .order-header {
+    padding: 1rem 1.4rem;
+    border-bottom: 1px solid hsl(var(--border));
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+  .order-body { padding: 1.2rem 1.4rem; }
+  .order-phase {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .order-phase:last-child { margin-bottom: 0; }
+  .order-phase-num {
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    flex-shrink: 0;
+    height: fit-content;
+    margin-top: 0.15rem;
+  }
+  .order-phase-content {}
+  .order-phase-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: hsl(var(--foreground));
+    margin-bottom: 0.3rem;
+  }
+  .order-subs {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .order-sub {
+    font-size: 0.78rem;
+    color: hsl(var(--muted-foreground));
+    padding-left: 0.5rem;
+    border-left: 2px solid hsl(var(--border));
+  }
+  .order-sub.first-note {
+    color: hsl(var(--primary));
+    border-left-color: hsl(var(--primary));
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-badge">Roadmap v4.0</div>
+  <h1>ASTRA — <span>Plataforma Cognitiva</span></h1>
+  <p>De "asistente con herramientas" a arquitecto de sistemas predictivos con ciclo evolutivo propio.</p>
+</div>
+
+<!-- COMPLETADO -->
+<div class="section-label">✅ Estado actual — v3.0 completado</div>
+<div class="completed-grid">
+  <div class="completed-item"><span class="dot"></span>Pipeline MTF — H1 / H4 / D1 automático</div>
+  <div class="completed-item"><span class="dot"></span>Walk-Forward Validation (40%, purga 20 filas)</div>
+  <div class="completed-item"><span class="dot"></span>XGBoost Ensemble + calibración de confianza</div>
+  <div class="completed-item"><span class="dot"></span>Fix feature_names mismatch ({model, features})</div>
+  <div class="completed-item"><span class="dot"></span>Filtro gaps fin de semana + varianza MTF</div>
+  <div class="completed-item"><span class="dot"></span>Signal Tracker — historial SQLite</div>
+  <div class="completed-item"><span class="dot"></span>Multi-pair Scanner</div>
+  <div class="completed-item"><span class="dot"></span>Circuit Breaker — diario / semanal / drawdown</div>
+  <div class="completed-item"><span class="dot"></span>Position Sizing — Kelly x0.25, clamp 0.5–2%</div>
+  <div class="completed-item"><span class="dot"></span>Scheduler automático (Active Engine)</div>
+  <div class="completed-item"><span class="dot"></span>Memoria de comandos — LLM sabe qué ejecutaste</div>
+  <div class="completed-item"><span class="dot"></span>MANUAL.md — 1340 líneas, 12 partes + guía real</div>
+</div>
+
+<!-- FASES -->
+<div class="section-label">🚀 Fases pendientes — v4.0</div>
+
+<!-- FASE 5 -->
+<div class="phase open" id="p5">
+  <div class="phase-header" onclick="toggle('p5')">
+    <div class="phase-num">FASE 5</div>
+    <div class="phase-info">
+      <div class="phase-title">Prediction Lab</div>
+      <div class="phase-sub">Sistema Inteligente de Desarrollo de Sistemas Predictivos</div>
+    </div>
+    <div class="phase-meta">
+      <span class="badge high">Complejidad Alta</span>
+      <span class="badge">8 archivos</span>
+      <span class="badge">5–7 sesiones</span>
+    </div>
+    <span class="chevron">▼</span>
+  </div>
+  <div class="phase-body">
+    <div class="flow">
+      <div class="flow-title">Flujo completo</div>
+      <div class="flow-steps">
+        <span class="flow-step">Descripción natural</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Dataset adjunto</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Prompt Analyzer</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Dataset Analyzer</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Feasibility Engine</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Model Planner</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Pipeline Generator</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Validation Engine</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Report Generator</span>
+      </div>
+    </div>
+
+    <div style="margin-top:1.2rem;">
+      <div class="module">
+        <div class="module-num">5.1</div>
+        <div class="module-content">
+          <div class="module-title">Prompt Analyzer</div>
+          <div class="module-file">prediction_lab/prompt_analyzer.py</div>
+          <div class="module-desc">Interpreta la idea del usuario en lenguaje natural. Extrae tipo de problema, variable objetivo, features candidatas, horizonte temporal y tipo de salida esperada. Devuelve un objeto <code>ProblemSpec</code> estructurado.</div>
+          <div class="module-tags"><span class="tag">lab analiza "&lt;idea&gt;"</span></div>
+        </div>
+      </div>
+      <div class="module">
+        <div class="module-num">5.2</div>
+        <div class="module-content">
+          <div class="module-title">Dataset Analyzer</div>
+          <div class="module-file">prediction_lab/dataset_analyzer.py</div>
+          <div class="module-desc">Analiza el dataset en profundidad: filas, columnas, % NaN, balance de target, correlaciones Pearson + VIF, outliers IQR/z-score, skewness, kurtosis. Puntúa la calidad 0–100 por dimensión.</div>
+          <div class="module-tags"><span class="tag">lab dataset &lt;archivo.csv&gt;</span></div>
+        </div>
+      </div>
+      <div class="module">
+        <div class="module-num">5.3</div>
+        <div class="module-content">
+          <div class="module-title">Feasibility Engine ⭐</div>
+          <div class="module-file">prediction_lab/feasibility_engine.py</div>
+          <div class="module-desc">Componente central. Responde: <em>"¿puede construirse un predictor útil con esto?"</em> Calcula un Índice de Viabilidad 0–100 ponderando cantidad de datos (25%), calidad (20%), balance (15%), señal predictiva (20%), complejidad (10%), horizonte (10%). Si viabilidad &lt; 40% → explica qué falta y no procede.</div>
+          <div class="module-tags"><span class="tag">lab viabilidad &lt;csv&gt; "&lt;idea&gt;"</span></div>
+        </div>
+      </div>
+      <div class="module">
+        <div class="module-num">5.4</div>
+        <div class="module-content">
+          <div class="module-title">Model Planner</div>
+          <div class="module-file">prediction_lab/model_planner.py</div>
+          <div class="module-desc">Selecciona automáticamente qué modelos entrenar según el tipo de problema detectado. XGBoost, LightGBM, RF, Logistic Reg. para clasificación; Regresores para regresión; ARIMA/LSTM para series temporales. Justifica técnicamente cada decisión.</div>
+          <div class="module-tags"><span class="tag">lab modelos &lt;csv&gt; "&lt;idea&gt;"</span></div>
+        </div>
+      </div>
+      <div class="module">
+        <div class="module-num">5.5</div>
+        <div class="module-content">
+          <div class="module-title">Pipeline Generator</div>
+          <div class="module-file">prediction_lab/pipeline_generator.py</div>
+          <div class="module-desc">Genera la carpeta completa del proyecto: <code>dataset_loader.py</code>, <code>feature_engineering.py</code>, <code>train.py</code>, <code>predict.py</code>, <code>evaluate.py</code>, <code>visualization.py</code>, <code>report.py</code>, <code>config.json</code>, <code>README.md</code>. Todo adaptado al dataset concreto con nombres de columnas reales.</div>
+          <div class="module-tags"><span class="tag">lab generar &lt;csv&gt; "&lt;idea&gt;" [nombre]</span></div>
+        </div>
+      </div>
+      <div class="module">
+        <div class="module-num">5.6</div>
+        <div class="module-content">
+          <div class="module-title">Validation Engine</div>
+          <div class="module-file">prediction_lab/validation_engine.py</div>
+          <div class="module-desc">Entrena y compara todos los modelos candidatos con CV-5 estratificada. Métricas según tipo: F1/AUC/Brier para clasificación, MAE/RMSE/R² para regresión. Selecciona el mejor con justificación + importancia de variables (SHAP).</div>
+          <div class="module-tags"><span class="tag">lab entrenar &lt;proyecto&gt;</span><span class="tag">lab comparar &lt;proyecto&gt;</span></div>
+        </div>
+      </div>
+      <div class="module">
+        <div class="module-num">5.7</div>
+        <div class="module-content">
+          <div class="module-title">Report Generator</div>
+          <div class="module-file">prediction_lab/report_generator.py</div>
+          <div class="module-desc">Genera informe técnico completo en Markdown: viabilidad, modelos evaluados, mejor modelo, métricas, variables clave, riesgos identificados, mejoras sugeridas, lista de archivos generados.</div>
+          <div class="module-tags"><span class="tag">lab reporte &lt;proyecto&gt;</span><span class="tag">lab proyectos</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FASE 6 -->
+<div class="phase" id="p6">
+  <div class="phase-header" onclick="toggle('p6')">
+    <div class="phase-num">FASE 6</div>
+    <div class="phase-info">
+      <div class="phase-title">Feedback System</div>
+      <div class="phase-sub">Sistema de Retroalimentación Evolutiva</div>
+    </div>
+    <div class="phase-meta">
+      <span class="badge med">Complejidad Media</span>
+      <span class="badge">7 archivos</span>
+      <span class="badge">3–4 sesiones</span>
+    </div>
+    <span class="chevron">▼</span>
+  </div>
+  <div class="phase-body">
+    <div class="module">
+      <div class="module-num">6.1</div>
+      <div class="module-content">
+        <div class="module-title">Tool Tracker</div>
+        <div class="module-file">feedback/tool_tracker.py</div>
+        <div class="module-desc">Instrumenta todas las herramientas via decorator <code>@track_tool</code>. Registra tiempo de ejecución, resultado (éxito/fallo/error), tipo de excepción, CPU/RAM delta y frecuencia de uso por herramienta.</div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">6.2</div>
+      <div class="module-content">
+        <div class="module-title">Model Tracker</div>
+        <div class="module-file">feedback/model_tracker.py</div>
+        <div class="module-desc">Historial de rendimiento de todos los modelos (Accuracy, F1, AUC por par/proyecto). Detecta model drift si la precisión cae &gt;5% vs. el mejor registro histórico y lanza alerta automática.</div>
+        <div class="module-tags"><span class="tag">feedback modelo EURUSD</span><span class="tag">feedback drift</span></div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">6.3</div>
+      <div class="module-content">
+        <div class="module-title">System Tracker</div>
+        <div class="module-file">feedback/system_tracker.py</div>
+        <div class="module-desc">Monitorea CPU, RAM, GPU, espacio en disco y tiempos de respuesta del LLM durante cada ejecución. Alerta si CPU &gt;85% o RAM &gt;80% en entrenamientos.</div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">6.4</div>
+      <div class="module-content">
+        <div class="module-title">User Feedback Collector</div>
+        <div class="module-file">feedback/user_feedback.py</div>
+        <div class="module-desc">Captura señales explícitas (<code>feedback bueno/malo</code>) e implícitas (detecta "error", "mal", "perfecto", "funciona" en el texto del usuario). Asocia cada señal al último comando ejecutado.</div>
+        <div class="module-tags"><span class="tag">feedback bueno</span><span class="tag">feedback malo</span><span class="tag">feedback "&lt;texto&gt;"</span></div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">6.5</div>
+      <div class="module-content">
+        <div class="module-title">Feedback Aggregator</div>
+        <div class="module-file">feedback/feedback_aggregator.py</div>
+        <div class="module-desc">Consolida todas las fuentes en un informe interno por sesión: tasa de éxito de herramientas, modelo con mejor/peor rendimiento, alertas de drift, feedback del usuario, picos de recursos.</div>
+        <div class="module-tags"><span class="tag">feedback reporte</span><span class="tag">feedback historia</span></div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">6.6</div>
+      <div class="module-content">
+        <div class="module-title">Evolution Memory</div>
+        <div class="module-file">feedback/evolution_memory.py</div>
+        <div class="module-desc">Persiste el conocimiento acumulado en <code>evolution.db</code> (SQLite separada). Tablas: <code>session_reports</code>, <code>model_history</code>, <code>tool_stats</code>, <code>user_preferences</code>. Base de datos que alimenta el Evolution Engine.</div>
+        <div class="module-tags"><span class="tag">feedback tendencias</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FASE 7 -->
+<div class="phase" id="p7">
+  <div class="phase-header" onclick="toggle('p7')">
+    <div class="phase-num">FASE 7</div>
+    <div class="phase-info">
+      <div class="phase-title">Evolution Engine</div>
+      <div class="phase-sub">Motor de Mejora Continua — ASTRA analiza y mejora su propio código</div>
+    </div>
+    <div class="phase-meta">
+      <span class="badge high">Complejidad Alta</span>
+      <span class="badge">5 archivos</span>
+      <span class="badge">4–5 sesiones</span>
+    </div>
+    <span class="chevron">▼</span>
+  </div>
+  <div class="phase-body">
+    <div class="module">
+      <div class="module-num">7.1</div>
+      <div class="module-content">
+        <div class="module-title">Supervisor</div>
+        <div class="module-file">evolution/supervisor.py</div>
+        <div class="module-desc">Thread daemon siempre activo. Solo observa: rendimiento de herramientas, calidad de modelos vs. historial, frecuencia de errores, consumo de recursos. Genera snapshots de estado cada N horas en <code>evolution.db</code>. Nunca modifica nada.</div>
+        <div class="module-tags"><span class="tag">evolution status</span><span class="tag">evolution snapshot</span></div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">7.2</div>
+      <div class="module-content">
+        <div class="module-title">Repair Engine</div>
+        <div class="module-file">evolution/repair_engine.py</div>
+        <div class="module-desc">Analiza errores recurrentes del Feedback System. Para cada error: localiza el archivo y función, diagnostica la causa probable, propone un parche con código concreto, explica el motivo técnico y estima el riesgo (bajo/medio/alto). Nunca aplica cambios.</div>
+        <div class="module-tags"><span class="tag">evolution errores</span><span class="tag">evolution parche &lt;id&gt;</span></div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">7.3</div>
+      <div class="module-content">
+        <div class="module-title">Innovation Engine</div>
+        <div class="module-file">evolution/innovation_engine.py</div>
+        <div class="module-desc">Detecta oportunidades de mejora: código duplicado, módulos redundantes, cuellos de botella (del Tool Tracker), patrones de uso que podrían automatizarse, nuevas ramas cuando funciones relacionadas alcanzan masa crítica. Ordena por prioridad = Impacto / Esfuerzo.</div>
+        <div class="module-tags"><span class="tag">evolution oportunidades</span><span class="tag">evolution innovacion</span></div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">7.4</div>
+      <div class="module-content">
+        <div class="module-title">Proposal Store</div>
+        <div class="module-file">evolution/proposal_store.py</div>
+        <div class="module-desc">Base de datos de propuestas generadas por Repair e Innovation. Almacena: descripción, archivos afectados, código propuesto, riesgo, impacto, estado (pendiente/aprobada/rechazada/aplicada) e historial de decisiones del desarrollador.</div>
+        <div class="module-tags"><span class="tag">evolution propuestas</span><span class="tag">evolution aprobar &lt;id&gt;</span><span class="tag">evolution rechazar &lt;id&gt;</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FASE 8 -->
+<div class="phase" id="p8">
+  <div class="phase-header" onclick="toggle('p8')">
+    <div class="phase-num">FASE 8</div>
+    <div class="phase-info">
+      <div class="phase-title">Constitution Engine</div>
+      <div class="phase-sub">Motor de Seguridad y Gobernanza — ASTRA nunca se rompe a sí misma</div>
+    </div>
+    <div class="phase-meta">
+      <span class="badge med">Complejidad Media</span>
+      <span class="badge">6 archivos</span>
+      <span class="badge">3–4 sesiones</span>
+    </div>
+    <span class="chevron">▼</span>
+  </div>
+  <div class="phase-body">
+    <div class="module">
+      <div class="module-num">8.1</div>
+      <div class="module-content">
+        <div class="module-title">Validator</div>
+        <div class="module-file">constitution/validator.py</div>
+        <div class="module-desc">Verifica automáticamente cada propuesta: compatibilidad de imports, dependencias rotas, impacto en módulos, integridad del Core (main.py, memory.py, ai_models.py), sintaxis via <code>ast.parse()</code>, existencia de tests, posibilidad de rollback.</div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">8.2</div>
+      <div class="module-content">
+        <div class="module-title">Reglas Fundamentales</div>
+        <div class="module-file">constitution/rules.py</div>
+        <div class="module-desc">8 reglas inmutables: nunca modificar Core automáticamente, nunca eliminar módulos sin aprobación, todo cambio tiene snapshot previo, todo cambio queda registrado, respaldo de tests obligatorio, no eliminar comandos CLI, no modificar schema de memoria.db sin migración, arquitectura modular inviolable.</div>
+        <div class="module-tags"><span class="tag">constitution reglas</span></div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">8.3</div>
+      <div class="module-content">
+        <div class="module-title">Rollback Manager</div>
+        <div class="module-file">constitution/rollback_manager.py</div>
+        <div class="module-desc">Antes de aplicar cualquier cambio: snapshot comprimido de archivos afectados, registro en <code>rollback_log</code>. Si la aplicación falla → restauración automática. Mantiene los últimos 10 snapshots con rotación.</div>
+        <div class="module-tags"><span class="tag">constitution snapshots</span><span class="tag">constitution rollback &lt;id&gt;</span></div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">8.4</div>
+      <div class="module-content">
+        <div class="module-title">Approval Flow</div>
+        <div class="module-file">constitution/approval_flow.py</div>
+        <div class="module-desc">Flujo completo: propuesta entra → Validator verifica → si pasa: presentar al desarrollador con resumen + archivos + riesgo + código + test sugerido → desarrollador aprueba/rechaza → si aprobado: snapshot + aplicar + Audit Log.</div>
+        <div class="module-tags"><span class="tag">constitution aprobar &lt;id&gt;</span><span class="tag">constitution rechazar &lt;id&gt;</span></div>
+      </div>
+    </div>
+    <div class="module">
+      <div class="module-num">8.5</div>
+      <div class="module-content">
+        <div class="module-title">Audit Log</div>
+        <div class="module-file">constitution/audit_log.py</div>
+        <div class="module-desc">Registro inmutable de todos los cambios aplicados: timestamp exacto, archivos y líneas modificadas, justificación de la propuesta, aprobación del desarrollador, resultado (éxito/fallo/rollback).</div>
+        <div class="module-tags"><span class="tag">constitution auditoria</span><span class="tag">constitution auditoria &lt;fecha&gt;</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FASE 9 -->
+<div class="phase" id="p9">
+  <div class="phase-header" onclick="toggle('p9')">
+    <div class="phase-num">FASE 9</div>
+    <div class="phase-info">
+      <div class="phase-title">Ciclo Evolutivo Completo</div>
+      <div class="phase-sub">Integración de todos los sistemas en un ciclo continuo de mejora</div>
+    </div>
+    <div class="phase-meta">
+      <span class="badge med">Complejidad Media</span>
+      <span class="badge">integración</span>
+      <span class="badge">2–3 sesiones</span>
+    </div>
+    <span class="chevron">▼</span>
+  </div>
+  <div class="phase-body">
+    <div class="flow">
+      <div class="flow-title">El ciclo completo</div>
+      <div class="flow-steps">
+        <span class="flow-step">ASTRA ejecuta</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Tool + System Tracker</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Feedback Aggregator</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Supervisor detecta</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Repair / Innovation</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Constitution valida</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Tú apruebas</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Snapshot + aplica</span><span class="flow-arrow">→</span>
+        <span class="flow-step">Evolution Memory aprende</span>
+      </div>
+    </div>
+    <div style="margin-top:1rem; font-size:0.83rem; color:hsl(var(--muted-foreground)); line-height:1.7;">
+      Conecta Feedback → Evolution → Constitution en un flujo coherente. Añade dashboard de estado del ciclo. 
+      Actualiza MANUAL.md con Partes 13–17. El desarrollador siempre tiene la decisión final — ASTRA propone, tú apruebas.
+    </div>
+  </div>
+</div>
+
+<!-- SUMMARY TABLE -->
+<div class="summary">
+  <div class="summary-header">Resumen ejecutivo</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Fase</th>
+        <th>Nombre</th>
+        <th>Archivos</th>
+        <th>Sesiones</th>
+        <th>Prioridad</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>✅ 1–4</strong></td>
+        <td>Core + Forex + Risk + Memoria</td>
+        <td>26+</td>
+        <td>— completado</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><strong>5</strong></td>
+        <td>Prediction Lab</td>
+        <td>8</td>
+        <td>5–7</td>
+        <td><span class="stars">★★★★★</span></td>
+      </tr>
+      <tr>
+        <td><strong>6</strong></td>
+        <td>Feedback System</td>
+        <td>7</td>
+        <td>3–4</td>
+        <td><span class="stars">★★★★</span><span class="stars-dim">★</span></td>
+      </tr>
+      <tr>
+        <td><strong>7</strong></td>
+        <td>Evolution Engine</td>
+        <td>5</td>
+        <td>4–5</td>
+        <td><span class="stars">★★★</span><span class="stars-dim">★★</span></td>
+      </tr>
+      <tr>
+        <td><strong>8</strong></td>
+        <td>Constitution Engine</td>
+        <td>6</td>
+        <td>3–4</td>
+        <td><span class="stars">★★★</span><span class="stars-dim">★★</span></td>
+      </tr>
+      <tr>
+        <td><strong>9</strong></td>
+        <td>Ciclo Evolutivo</td>
+        <td>—</td>
+        <td>2–3</td>
+        <td><span class="stars">★★★★</span><span class="stars-dim">★</span></td>
+      </tr>
+      <tr>
+        <td colspan="2"><strong>Total pendiente</strong></td>
+        <td><strong>~26</strong></td>
+        <td><strong>~20 sesiones</strong></td>
+        <td>—</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ORDER -->
+<div class="order-section">
+  <div class="order-header">Orden de implementación recomendado</div>
+  <div class="order-body">
+    <div class="order-phase">
+      <div class="order-phase-num">F5</div>
+      <div class="order-phase-content">
+        <div class="order-phase-title">Prediction Lab — mayor valor inmediato</div>
+        <div class="order-subs">
+          <div class="order-sub">5.1 Prompt Analyzer</div>
+          <div class="order-sub">5.2 Dataset Analyzer</div>
+          <div class="order-sub">5.3 Feasibility Engine ⭐</div>
+          <div class="order-sub">5.4 Model Planner</div>
+          <div class="order-sub">5.5 Pipeline Generator</div>
+          <div class="order-sub">5.6 Validation Engine</div>
+          <div class="order-sub">5.7 Report Generator</div>
+        </div>
+      </div>
+    </div>
+    <div class="order-phase">
+      <div class="order-phase-num">F6</div>
+      <div class="order-phase-content">
+        <div class="order-phase-title">Feedback System — habilita las fases 7 y 8</div>
+        <div class="order-subs">
+          <div class="order-sub first-note">6.6 Evolution Memory ← primero (base de datos)</div>
+          <div class="order-sub">6.1 Tool Tracker · 6.2 Model Tracker · 6.5 Aggregator · 6.3 System · 6.4 User</div>
+        </div>
+      </div>
+    </div>
+    <div class="order-phase">
+      <div class="order-phase-num">F7</div>
+      <div class="order-phase-content">
+        <div class="order-phase-title">Evolution Engine — depende del Feedback</div>
+        <div class="order-subs">
+          <div class="order-sub first-note">7.4 Proposal Store ← primero (base de datos)</div>
+          <div class="order-sub">7.1 Supervisor · 7.2 Repair Engine · 7.3 Innovation Engine</div>
+        </div>
+      </div>
+    </div>
+    <div class="order-phase">
+      <div class="order-phase-num">F8</div>
+      <div class="order-phase-content">
+        <div class="order-phase-title">Constitution Engine — depende del Evolution</div>
+        <div class="order-subs">
+          <div class="order-sub first-note">8.5 Audit Log ← primero (base de datos)</div>
+          <div class="order-sub">8.2 Reglas · 8.3 Rollback Manager · 8.1 Validator · 8.4 Approval Flow</div>
+        </div>
+      </div>
+    </div>
+    <div class="order-phase">
+      <div class="order-phase-num">F9</div>
+      <div class="order-phase-content">
+        <div class="order-phase-title">Ciclo Evolutivo — conectar todo</div>
+        <div class="order-subs">
+          <div class="order-sub">Feedback → Evolution → Constitution · Dashboard · MANUAL Partes 13–17</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function toggle(id) {
+    const el = document.getElementById(id);
+    el.classList.toggle('open');
+  }
+</script>
+</body>
+</html>
+<script id="__base44_dark_class_post__">document.documentElement.classList.remove('dark');</script></body></html>
