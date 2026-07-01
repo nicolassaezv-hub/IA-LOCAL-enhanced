@@ -2,13 +2,9 @@
 
 # Peticiones Personales
 
-- revisar creando.txt para actualizar rama de funcionamiento Forex
+- Sube los archivos desde el C:\ASTRA
 
-- agregar modulo de prediccion extra por Kernel (Lineal,Polinomial,RBF y Sigmoidal)
-
-- agregar modulo de comparacion de sistemas de prediccion ya establecidos
-
-- editar y reinstituir comandos, ahora por categorizacion en MANUAL.md y en README.md
+- Sigue con el (astra-roadmap-v4.html)
 
 ## Informacion General
 
