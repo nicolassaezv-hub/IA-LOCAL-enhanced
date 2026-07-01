@@ -4,7 +4,7 @@
 
 - Sube los archivos desde el C:\ASTRA
 
-- Sigue con el [Abrir archivo HTML](astra-roadmap-v4.html)
+- Sigue con el [Descargar y abrir archivo HTML](astra-roadmap-v4.html)
 
 ## Informacion General
 
