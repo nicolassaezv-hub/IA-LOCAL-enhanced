@@ -1,81 +1,70 @@
+"""
+forex_prediction_bridge.py — Bridge para ASTRA
+
+FIX #1: usa predict_features() para señal sobre última vela real
+FIX #2: pasa pair al predictor para modelo correcto
+"""
+
 import pandas as pd
 
 from .feature_engineering import build_features
-from .dataset_builder import DatasetBuilder
-from .predictor import ForexPredictor
+from .dataset_builder     import DatasetBuilder
+from .predictor           import ForexPredictor
+from .csv_adapter         import adapt_csv
 
 
 class ForexPredictionBridge:
 
-    def __init__(self, min_confidence: float = 0.62, min_adx: float = 22.0):
+    def __init__(self, min_confidence: float = 0.65, min_adx: float = 22.0):
         self.predictor = ForexPredictor(
             min_confidence=min_confidence,
             min_adx=min_adx,
         )
 
-    # -----------------------------
-    # LOAD DATA
-    # -----------------------------
-    def load_data(self, filepath: str) -> pd.DataFrame:
-        df = pd.read_csv(filepath)
-        df.columns = df.columns.str.strip()
-        return df
+    def load_data(self, filepath: str, pair: str = None) -> pd.DataFrame:
+        return adapt_csv(filepath, pair=pair)
 
-    # -----------------------------
-    # BUILD FEATURE PIPELINE
-    # -----------------------------
+    def prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Prepara features para predicción (sin drop de horizonte)."""
+        df      = build_features(df)
+        builder = DatasetBuilder(df)
+        return builder.predict_features(n_rows=1)
+
     def prepare_data(self, df: pd.DataFrame, use_feature_engineering: bool = True):
+        """Compatibilidad legacy — retorna (X_pred, None)."""
         if use_feature_engineering:
             df = build_features(df)
+        X = DatasetBuilder(df).predict_features(n_rows=1)
+        return X, None
 
-        builder = DatasetBuilder(df)
-        X, y    = builder.build()
-        return X, y
-
-    # -----------------------------
-    # PREDICT ONLY (NO TRAINING)
-    # Returns BUY / SELL / HOLD with full signal details.
-    # -----------------------------
+    # ─────────────────────────────────────────────────────────
+    # PREDICT — señal sobre la última vela real (FIX #1 + #2)
+    # ─────────────────────────────────────────────────────────
     def predict_from_csv(self, filepath: str, pair: str = None) -> dict:
-        df   = self.load_data(filepath)
-        X, _ = self.prepare_data(df)
+        df   = self.load_data(filepath, pair=pair)
+        pair = pair or (str(df["pair"].iloc[-1]) if "pair" in df.columns else None)
+        X    = self.prepare_features(df)
         return self.predictor.signal(X, pair=pair)
 
-    # -----------------------------
-    # FULL ANALYSIS PIPELINE (ASTRA-READY)
-    # -----------------------------
     def analyze(self, filepath: str, pair: str = None) -> dict:
-        df   = self.load_data(filepath)
-        X, _ = self.prepare_data(df)
+        df   = self.load_data(filepath, pair=pair)
+        pair = pair or (str(df["pair"].iloc[-1]) if "pair" in df.columns else None)
+        X    = self.prepare_features(df)
+        signal = self.predictor.signal(X, pair=pair)
+        return {**signal, "data_points": len(df)}
 
-        inferred_pair = pair
-        if inferred_pair is None and "pair" in df.columns:
-            inferred_pair = str(df["pair"].iloc[-1])
-
-        signal = self.predictor.signal(X, pair=inferred_pair)
-
-        return {
-            **signal,
-            "data_points": len(df),
-        }
-
-    # -----------------------------
-    # ASTRA INTEGRATION OUTPUT
-    # One-liner summary + full payload for ASTRA to render.
-    # -----------------------------
-    def analyze_for_astra(self, filepath: str) -> dict:
-        result = self.analyze(filepath)
-
+    def analyze_for_astra(self, filepath: str, pair: str = None) -> dict:
+        result = self.analyze(filepath, pair=pair)
         action = result.get("action", "HOLD")
         conf   = result.get("confidence", 0)
-        pair   = result.get("pair", "?")
+        pair_r = result.get("pair", "?")
         strng  = result.get("signal_strength", 0)
+        prob   = result.get("est_prob_correct", 0)
 
         summary = (
-            f"{pair} → {action} "
-            f"(confidence={conf:.2f}, strength={strng})"
+            f"{pair_r} → {action} "
+            f"(confidence={conf:.2f}, prob_acierto={prob:.1f}%, strength={strng})"
         )
-
         return {
             "type":    "forex_prediction",
             "payload": result,

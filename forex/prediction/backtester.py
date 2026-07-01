@@ -1,3 +1,10 @@
+"""
+backtester.py
+
+FIX #6: Backtester recibe `pair` como parámetro y carga el modelo correcto por par.
+         Ya no usa load_latest() genérico — usa ModelStorage.load_model(pair).
+"""
+
 import numpy as np
 import pandas as pd
 from .predictor import ForexPredictor
@@ -5,71 +12,70 @@ from .predictor import ForexPredictor
 
 class ForexBacktester:
 
-    def __init__(self, initial_balance=10000, risk_per_trade=0.01):
+    def __init__(self, initial_balance: float = 10_000, risk_per_trade: float = 0.01):
         self.initial_balance = initial_balance
-        self.risk_per_trade = risk_per_trade
-        self.predictor = ForexPredictor()
+        self.risk_per_trade  = risk_per_trade
 
-    # -----------------------------
-    # RUN BACKTEST ON HELD-OUT DATA
-    # Accepts only the TEST portion (last 20%) to avoid leakage
-    # -----------------------------
-    def run(self, df: pd.DataFrame, test_ratio=0.20):
-        split = int(len(df) * (1 - test_ratio))
+    # ─────────────────────────────────────────────────────────
+    # RUN — acepta pair para cargar modelo correcto (FIX #6)
+    # ─────────────────────────────────────────────────────────
+    def run(self, df: pd.DataFrame, pair: str = None, test_ratio: float = 0.20) -> dict:
+        split  = int(len(df) * (1 - test_ratio))
         X_test = df.iloc[split:].copy().reset_index(drop=True)
 
-        if len(X_test) == 0:
-            return {"error": "Not enough rows for backtesting. Need at least 5 rows."}
+        if len(X_test) < 5:
+            return {"error": "Insuficientes filas para backtesting. Mínimo 5."}
 
-        predictions = self.predictor.predict_batch(X_test)
+        # FIX #6: predictor con modelo del par correcto
+        predictor   = ForexPredictor()
+        predictions = predictor.predict_batch(X_test, pair=pair)
 
-        balance = self.initial_balance
-        trades = []
+        balance     = self.initial_balance
+        trades      = []
         equity_curve = [balance]
 
         for i in range(len(X_test) - 1):
             row = X_test.iloc[i]
             pred = predictions[i]
 
-            price_now  = row["close"]
-            price_next = X_test["close"].iloc[i + 1]
+            price_now    = row["close"]
+            price_next   = X_test["close"].iloc[i + 1]
             price_change = price_next - price_now
 
             direction  = pred["direction"]
             confidence = pred["confidence"]
 
             position_size = balance * self.risk_per_trade * confidence
-            pnl = 0
+            pnl = 0.0
 
             if direction == "bullish":
-                pnl = position_size * (price_change / (price_now + 1e-9))
+                pnl =  position_size * (price_change / (price_now + 1e-9))
             elif direction == "bearish":
                 pnl = -position_size * (price_change / (price_now + 1e-9))
 
             balance += pnl
-
             trades.append({
-                "index"     : i,
-                "direction" : direction,
+                "index":      i,
+                "direction":  direction,
                 "confidence": round(confidence, 4),
-                "pnl"       : round(pnl, 4),
-                "balance"   : round(balance, 4),
+                "pnl":        round(pnl, 4),
+                "balance":    round(balance, 4),
             })
             equity_curve.append(balance)
 
-        return self._summary(trades, equity_curve)
+        return self._summary(trades, equity_curve, pair=pair)
 
-    # -----------------------------
-    # PERFORMANCE METRICS
-    # -----------------------------
-    def _summary(self, trades, equity_curve):
-        pnls  = [t["pnl"] for t in trades]
-        wins  = [p for p in pnls if p > 0]
+    # ─────────────────────────────────────────────────────────
+    # MÉTRICAS DE RENDIMIENTO
+    # ─────────────────────────────────────────────────────────
+    def _summary(self, trades: list, equity_curve: list, pair: str = None) -> dict:
+        pnls   = [t["pnl"] for t in trades]
+        wins   = [p for p in pnls if p > 0]
         losses = [p for p in pnls if p <= 0]
 
-        win_rate     = len(wins) / len(pnls) if pnls else 0
-        avg_win      = np.mean(wins)  if wins   else 0
-        avg_loss     = np.mean(losses) if losses else 0
+        win_rate      = len(wins) / len(pnls) if pnls else 0
+        avg_win       = float(np.mean(wins))   if wins   else 0.0
+        avg_loss      = float(np.mean(losses)) if losses else 0.0
         profit_factor = (
             abs(sum(wins)) / abs(sum(losses))
             if losses and sum(losses) != 0 else float("inf")
@@ -77,25 +83,35 @@ class ForexBacktester:
         total_return = equity_curve[-1] - self.initial_balance
         max_drawdown = self._compute_drawdown(equity_curve)
 
+        # Sharpe simplificado (ratio de retorno / volatilidad de PnL)
+        if len(pnls) > 1:
+            pnl_std  = float(np.std(pnls))
+            pnl_mean = float(np.mean(pnls))
+            sharpe   = round(pnl_mean / (pnl_std + 1e-9), 3)
+        else:
+            sharpe = 0.0
+
         return {
-            "initial_balance" : self.initial_balance,
-            "final_balance"   : round(equity_curve[-1], 2),
-            "total_return"    : round(total_return, 2),
+            "pair":             pair,
+            "initial_balance":  self.initial_balance,
+            "final_balance":    round(equity_curve[-1], 2),
+            "total_return":     round(total_return, 2),
             "total_return_pct": round(total_return / self.initial_balance * 100, 2),
-            "win_rate"        : round(win_rate, 4),
-            "total_trades"    : len(pnls),
-            "winning_trades"  : len(wins),
-            "losing_trades"   : len(losses),
-            "avg_win"         : round(avg_win, 4),
-            "avg_loss"        : round(avg_loss, 4),
-            "profit_factor"   : round(profit_factor, 4),
-            "max_drawdown"    : round(max_drawdown, 4),
+            "win_rate":         round(win_rate, 4),
+            "total_trades":     len(pnls),
+            "winning_trades":   len(wins),
+            "losing_trades":    len(losses),
+            "avg_win":          round(avg_win, 4),
+            "avg_loss":         round(avg_loss, 4),
+            "profit_factor":    round(profit_factor, 4),
+            "max_drawdown":     round(max_drawdown, 4),
             "max_drawdown_pct": round(max_drawdown * 100, 2),
+            "sharpe_approx":    sharpe,
         }
 
-    def _compute_drawdown(self, equity_curve):
+    def _compute_drawdown(self, equity_curve: list) -> float:
         peak   = equity_curve[0]
-        max_dd = 0
+        max_dd = 0.0
         for value in equity_curve:
             if value > peak:
                 peak = value

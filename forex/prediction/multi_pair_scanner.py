@@ -30,6 +30,19 @@ from .feature_engineering import build_features
 from .dataset_builder     import DatasetBuilder
 from .predictor           import ForexPredictor
 
+# Registro de señales (opcional — no bloquea si falla)
+def _try_save_signal(signal: dict, filepath: str = ""):
+    try:
+        import sys, os
+        _root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        if _root not in sys.path:
+            sys.path.insert(0, _root)
+        from signal_tracker import save_signal, init_signal_db
+        init_signal_db()
+        save_signal(signal, csv_path=filepath)
+    except Exception:
+        pass  # signal_tracker es opcional — no bloquear el scanner
+
 
 # Supported file extensions
 _SUPPORTED_EXT = (".csv", ".xlsx", ".xls")
@@ -165,7 +178,16 @@ class MultiPairScanner:
             df = adapt_csv(filepath, pair=pair)
             df = build_features(df)
 
-            inferred_pair = str(df["pair"].iloc[-1]) if "pair" in df.columns else "UNKNOWN"
+            # Normalizar par: quitar sufijos de archivo como _TEST, _H1, etc.
+            _raw_pair = str(df["pair"].iloc[-1]) if "pair" in df.columns else "UNKNOWN"
+            _SUFFIXES = ['_TEST','_H1','_H4','_D1','_M15','_M30','_BACKUP','_NEW','_OLD',
+                         '_2024','_2025','_2026']
+            _clean = _raw_pair.upper()
+            for _sfx in _SUFFIXES:
+                if _clean.endswith(_sfx):
+                    _clean = _clean[:-len(_sfx)]
+                    break
+            inferred_pair = _clean
 
             builder = DatasetBuilder(df)
             X, _    = builder.build(horizon=self.horizon, rr_ratio=self.rr_ratio)
@@ -178,6 +200,9 @@ class MultiPairScanner:
                 }
 
             signal = self.predictor.signal(X, pair=inferred_pair)
+
+            # Registrar señal en historial (no-blocking)
+            _try_save_signal(signal, filepath=filepath)
 
             return {
                 **signal,

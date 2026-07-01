@@ -1,5 +1,49 @@
+"""
+dataset_builder.py
+
+FIX #1: predict_features() retorna la última vela real (sin drop de horizonte).
+FIX #3: Timeouts (ni TP ni SL) se excluyen del training.
+FIX #9: PAIR_CONFIG con horizon/rr_ratio óptimos por instrumento.
+
+NUEVO: rr_ratio=1.0 como default universal más balanceado.
+NUEVO: Las features MTF reales (h4_*, d1_*) se incluyen automáticamente si están presentes.
+NUEVO: filter_cols_by_variance() elimina features con varianza casi cero (ruido).
+"""
+
 import pandas as pd
 import numpy as np
+
+# ─────────────────────────────────────────────────────────────
+# CONFIG POR PAR
+# ─────────────────────────────────────────────────────────────
+PAIR_CONFIG = {
+    "EURUSD": {"horizon": 12, "rr_ratio": 1.0},
+    "GBPUSD": {"horizon": 12, "rr_ratio": 1.0},
+    "USDJPY": {"horizon": 12, "rr_ratio": 1.0},
+    "USDCHF": {"horizon": 12, "rr_ratio": 1.0},
+    "AUDUSD": {"horizon": 10, "rr_ratio": 1.0},
+    "USDCAD": {"horizon": 10, "rr_ratio": 1.0},
+    "NZDUSD": {"horizon": 10, "rr_ratio": 1.0},
+    "AUDCAD": {"horizon": 10, "rr_ratio": 1.0},
+    "EURGBP": {"horizon": 10, "rr_ratio": 1.0},
+    "EURJPY": {"horizon": 10, "rr_ratio": 1.2},
+    "GBPJPY": {"horizon":  8, "rr_ratio": 1.2},
+    "XAUUSD": {"horizon":  8, "rr_ratio": 1.5},
+    "XAGUSD": {"horizon":  8, "rr_ratio": 1.5},
+    "USOIL":  {"horizon":  8, "rr_ratio": 1.5},
+    "UKOIL":  {"horizon":  8, "rr_ratio": 1.5},
+    "BTCUSD": {"horizon":  6, "rr_ratio": 2.0},
+    "ETHUSD": {"horizon":  6, "rr_ratio": 2.0},
+}
+
+DEFAULT_PAIR_CONFIG = {"horizon": 10, "rr_ratio": 1.0}
+
+
+def get_pair_config(pair: str) -> dict:
+    if not pair:
+        return DEFAULT_PAIR_CONFIG
+    clean = pair.upper().replace("/", "").replace("_", "").replace("-", "")
+    return PAIR_CONFIG.get(clean, DEFAULT_PAIR_CONFIG)
 
 
 class DatasetBuilder:
@@ -7,22 +51,16 @@ class DatasetBuilder:
     def __init__(self, df: pd.DataFrame):
         self.df = df.copy()
 
-    # -----------------------------
-    # TIME FEATURES
-    # -----------------------------
     def process_time(self):
         if "timestamp" in self.df.columns:
-            self.df["timestamp"]   = pd.to_datetime(self.df["timestamp"])
-            self.df["hour"]        = self.df["timestamp"].dt.hour
-            self.df["day_of_week"] = self.df["timestamp"].dt.dayofweek
+            ts = pd.to_datetime(self.df["timestamp"])
+            self.df["hour"]        = ts.dt.hour
+            self.df["day_of_week"] = ts.dt.dayofweek
         else:
             self.df["hour"]        = 0
             self.df["day_of_week"] = 0
         return self
 
-    # -----------------------------
-    # SESSION ENCODING
-    # -----------------------------
     def encode_session(self):
         mapping = {"Tokyo": 0, "London": 1, "NewYork": 2}
         if "session" in self.df.columns:
@@ -31,9 +69,6 @@ class DatasetBuilder:
             self.df["session"] = -1
         return self
 
-    # -----------------------------
-    # PAIR ENCODING
-    # -----------------------------
     def encode_pair(self):
         if "pair" in self.df.columns:
             unique_pairs = self.df["pair"].unique()
@@ -43,43 +78,25 @@ class DatasetBuilder:
             self.df["pair"] = 0
         return self
 
-    # -----------------------------
-    # TARGET — RISK/REWARD AWARE (UPGRADED)
-    #
-    # Old target: "next candle closes higher" — basically coin flip noise.
-    #
-    # New target: within the next `horizon` candles, does price reach
-    # the take-profit level (+rr_ratio * ATR) BEFORE hitting the
-    # stop-loss level (-1 * ATR)?
-    #
-    # Label = 1 (bullish / BUY)   if TP hit first
-    # Label = 0 (bearish / SELL)  if SL hit first or neither
-    #
-    # Why ATR-based levels? Because ATR already reflects the pair's
-    # natural volatility — the same pip distance means different things
-    # on EURUSD vs GOLD.
-    #
-    # rr_ratio=1.5 means we only label rows where 1.5R profit is
-    # achievable before 1R loss — so even a 50% accuracy is profitable.
-    # -----------------------------
-    def create_target(self, horizon: int = 10, rr_ratio: float = 1.5):
-
-        close = self.df["close"].values
+    # ─────────────────────────────────────────────────────────
+    # TARGET — RISK/REWARD AWARE (sin timeouts en train)
+    # ─────────────────────────────────────────────────────────
+    def create_target(self, horizon: int = 10, rr_ratio: float = 1.0):
+        close   = self.df["close"].values
         atr_col = self.df.get("ATR_14")
         if atr_col is None or atr_col.isna().all():
-            # Fallback: use a percentage of close as a synthetic ATR
             atr = (pd.Series(close) * 0.01).values
         else:
             atr = atr_col.fillna(pd.Series(close) * 0.01).values
-        n     = len(close)
-        target = np.zeros(n, dtype=int)
+
+        n      = len(close)
+        target = np.full(n, -1, dtype=int)
 
         for i in range(n - 1):
             entry = close[i]
-            sl    = atr[i]          # 1 * ATR below (stop loss distance)
-            tp    = atr[i] * rr_ratio  # rr_ratio * ATR above (take profit distance)
+            sl    = atr[i]
+            tp    = atr[i] * rr_ratio
 
-            # Skip rows where ATR is zero or NaN — can't define a meaningful target
             if sl <= 0 or np.isnan(sl) or np.isnan(tp) or tp <= 0:
                 continue
 
@@ -92,7 +109,6 @@ class DatasetBuilder:
             for j in range(i + 1, min(i + 1 + horizon, n)):
                 high = self.df["high"].iloc[j]
                 low  = self.df["low"].iloc[j]
-
                 if high >= tp_price:
                     hit_tp = True
                     break
@@ -100,38 +116,29 @@ class DatasetBuilder:
                     hit_sl = True
                     break
 
-            target[i] = 1 if hit_tp and not hit_sl else 0
+            if hit_tp and not hit_sl:
+                target[i] = 1
+            elif hit_sl and not hit_tp:
+                target[i] = 0
 
         self.df["target"] = target
         return self
 
-    # -----------------------------
-    # FEATURE SELECTION
-    # All newly engineered columns are included automatically via
-    # _discover_features(), which is future-proof as features are added.
-    # -----------------------------
+    # ─────────────────────────────────────────────────────────
+    # FEATURE COLUMNS
+    # Incluye features MTF reales (h4_*, d1_*) si están presentes
+    # ─────────────────────────────────────────────────────────
     def build_X(self):
-
-        # Core columns always included
         always_include = [
             "open", "high", "low", "close",
-            "returns",
-            "hour", "day_of_week",
-            "session", "pair",
+            "returns", "hour", "day_of_week", "session", "pair",
         ]
-
-        # Optional pre-computed indicator columns from the CSV
         optional_csv = [
             "volume", "spread",
-            "RSI_14",
-            "MACD", "MACD_signal", "MACD_hist",
-            "ATR_14",
-            "EMA20", "EMA50", "EMA200",
-            "volatility_24h",
-            "BB_upper", "BB_lower",
+            "RSI_14", "MACD", "MACD_signal", "MACD_hist",
+            "ATR_14", "EMA20", "EMA50", "EMA200",
+            "volatility_24h", "BB_upper", "BB_lower",
         ]
-
-        # Auto-detect engineered feature columns (all new computed cols)
         engineered_prefixes = (
             "close_lag_", "returns_lag_",
             "rolling_mean_", "rolling_std_",
@@ -142,37 +149,56 @@ class DatasetBuilder:
             "ADX_14", "plus_DI", "minus_DI",
             "stoch_k", "stoch_d", "stoch_cross",
             "williams_r",
-            "obv", "obv_ema", "obv_diverge",
+            "tick_vol_flow", "obv",
             "bb_width", "bb_squeeze", "bb_pct_b",
             "pattern_",
             "ema20_above_50", "ema50_above_200", "ema_cross_signal",
             "rsi_overbought", "rsi_oversold", "rsi_slope",
+            "price_vs_ema200", "price_in_range_50", "ema20_slope",
+            "session_tokyo", "session_london", "session_newyork",
+            # MTF reales
+            "h4_", "d1_",
+            # Nuevos features alta señal
+            "atr_ratio", "atr_expansion", "trend_align_score",
+            "close_vs_h4", "rsi_divergence", "candle_body_ratio",
+            "momentum_accel", "volume_relative", "h4_rsi_extreme",
         )
-
         engineered_cols = [
             c for c in self.df.columns
             if any(c.startswith(p) for p in engineered_prefixes)
         ]
-
         use_optional = [c for c in optional_csv if c in self.df.columns]
         all_features  = list(dict.fromkeys(always_include + use_optional + engineered_cols))
         present       = [c for c in all_features if c in self.df.columns]
-
+        # Excluir siempre: timestamp, target y pair (pair tiene varianza 0
+        # en CSVs de un solo instrumento y causa feature mismatch train/predict)
+        exclude = {"timestamp", "target", "pair"}
+        present = [c for c in present if c not in exclude]
         return self.df[present]
 
-    # -----------------------------
-    # BUILD y
-    # -----------------------------
     def build_y(self):
         return self.df["target"]
 
-    # -----------------------------
-    # FULL PIPELINE
-    # horizon   : how many future candles to look ahead for TP/SL
-    # rr_ratio  : take-profit multiple (e.g. 1.5 = risk 1, reward 1.5)
-    # -----------------------------
-    def build(self, horizon: int = 10, rr_ratio: float = 1.5):
+    # ─────────────────────────────────────────────────────────
+    # FILTER LOW VARIANCE FEATURES
+    # Elimina features con std ≈ 0 (constantes) que no aportan señal
+    # ─────────────────────────────────────────────────────────
+    @staticmethod
+    def filter_low_variance(X: pd.DataFrame, threshold: float = 1e-6) -> pd.DataFrame:
+        # Siempre preservar MTF reales y columnas clave aunque tengan varianza baja
+        protected = {c for c in X.columns if c.startswith("h4_") or c.startswith("d1_")}
+        var  = X.var()
+        keep = list(var[var > threshold].index) + [c for c in protected if c not in var[var > threshold].index]
+        keep = [c for c in X.columns if c in keep]  # mantener orden original
+        removed = len(X.columns) - len(keep)
+        if removed > 0:
+            print(f"[DATASET] Features baja varianza eliminadas: {removed}")
+        return X[keep]
 
+    # ─────────────────────────────────────────────────────────
+    # BUILD — para TRAINING
+    # ─────────────────────────────────────────────────────────
+    def build(self, horizon: int = 10, rr_ratio: float = 1.0):
         self.process_time()
         self.encode_session()
         self.encode_pair()
@@ -181,14 +207,56 @@ class DatasetBuilder:
         X = self.build_X()
         y = self.build_y()
 
-        # Align indices after NaN drops from feature engineering
         X = X.replace([np.inf, -np.inf], np.nan).dropna()
         y = y.loc[X.index]
 
-        # Drop the last `horizon` rows — their target is incomplete
-        # (we can't confirm TP/SL for the tail rows)
         if len(X) > horizon:
             X = X.iloc[:-horizon]
             y = y.iloc[:-horizon]
 
+        # Eliminar timeouts
+        valid_mask = y != -1
+        X = X[valid_mask]
+        y = y[valid_mask]
+
+        # Eliminar features de baja varianza
+        X = self.filter_low_variance(X)
+
+        timeout_pct = (1 - valid_mask.sum() / len(valid_mask)) * 100
+        buy_pct     = (y == 1).sum() / len(y) * 100
+        sell_pct    = (y == 0).sum() / len(y) * 100
+        print(f"[DATASET] Filas train: {len(X)} | BUY: {buy_pct:.1f}% | SELL: {sell_pct:.1f}% | Timeout: {timeout_pct:.1f}%")
+
         return X, y
+
+    # ─────────────────────────────────────────────────────────
+    # PREDICT FEATURES — última vela real (FIX #1)
+    # ─────────────────────────────────────────────────────────
+    def predict_features(self, n_rows: int = 1,
+                          train_columns: list = None) -> pd.DataFrame:
+        """
+        Extrae features de la(s) última(s) vela(s) para predicción.
+        Si se pasan train_columns, alinea exactamente con las columnas
+        del modelo entrenado (evita feature mismatch).
+        """
+        self.process_time()
+        self.encode_session()
+        self.encode_pair()
+
+        X = self.build_X()
+        X = X.replace([np.inf, -np.inf], np.nan).dropna()
+
+        if len(X) == 0:
+            raise ValueError("Sin filas válidas tras feature engineering.")
+
+        X_tail = X.tail(n_rows)
+
+        # Alinear con columnas del modelo si se proporcionan
+        if train_columns is not None:
+            for col in train_columns:
+                if col not in X_tail.columns:
+                    X_tail = X_tail.copy()
+                    X_tail[col] = 0.0
+            X_tail = X_tail[train_columns]
+
+        return X_tail
