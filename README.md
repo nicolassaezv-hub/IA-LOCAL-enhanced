@@ -4,7 +4,11 @@
 
 - Sube los archivos desde el C:\ASTRA
 
-- Sigue con el [Descargar y abrir archivo HTML en pestaña nueva](astra-roadmap-v4.html)
+- Sigue avanzando con el [Descargar y abrir archivo HTML en pestaña nueva](astra-roadmap-v4.html)
+
+- Usa Base44 por mientras, luego Github Copilot y Replit (ve turnandote como lo veas a tu gusto)
+
+- Para comprobaciones de calidad o estetica consulta con ChatGPT
 
 ## Informacion General
 
