@@ -36,6 +36,14 @@ from typing import Callable, Dict, List, Optional
 
 from colorama import Fore, Style
 
+# Circuit breaker y position sizing
+try:
+    from forex.prediction.circuit_breaker import get_circuit_breaker
+    from forex.prediction.position_sizing import PositionSizer
+    _HAS_RISK_MODULES = True
+except ImportError:
+    _HAS_RISK_MODULES = False
+
 try:
     import schedule as _schedule
     HAS_SCHEDULE = True
@@ -140,6 +148,15 @@ class ActiveEngine:
             ts = time.strftime("%H:%M:%S")
             print(Fore.CYAN + f"[ENGINE:{ts}] Evaluando {clean}..." + Style.RESET_ALL)
             try:
+                # ── CIRCUIT BREAKER — verificar antes de operar ────────
+                if _HAS_RISK_MODULES:
+                    cb     = get_circuit_breaker()
+                    status = cb.check()
+                    if not status["open"]:
+                        print(Fore.RED + f"[ENGINE:{ts}] CIRCUIT BREAKER ACTIVO — {status['reason']}" + Style.RESET_ALL)
+                        print(Fore.RED + f"  Cooldown restante: {status['cooldown_remaining_h']:.1f}h" + Style.RESET_ALL)
+                        return
+
                 from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
                 pipeline = ForexIntegratedPipeline()
                 result   = pipeline.predict(csv_path, pair=clean)
@@ -148,6 +165,18 @@ class ActiveEngine:
                     action = result.get("action", "HOLD")
                     conf   = result.get("confidence", 0)
                     adx    = result.get("adx", 0)
+                    # ── POSITION SIZING ───────────────────────────────
+                    sizing_info = ""
+                    if _HAS_RISK_MODULES and action in ("BUY", "SELL"):
+                        try:
+                            from signal_tracker import get_signals as _gs
+                            hist = _gs(pair=clean, limit=200)
+                            trade_hist = [{"pnl": h.get("pnl", 0)} for h in hist if "pnl" in h]
+                            sizing = PositionSizer(account_balance=10_000).calculate(result, trade_hist)
+                            sizing_info = f"  Risk={sizing['risk_pct']:.2f}%  ${sizing['risk_usd']:.0f}  [{sizing['method']}]"
+                        except Exception:
+                            pass
+
                     # Guardar en historial
                     try:
                         from signal_tracker import save_signal
@@ -164,6 +193,7 @@ class ActiveEngine:
                             f"\n{color}{'═'*54}{Style.RESET_ALL}\n"
                             f"  {color}{icon}  SEÑAL {action} — {clean}  [{ts}]{Style.RESET_ALL}\n"
                             f"  confidence={conf:.2%}  adx={adx:.1f}\n"
+                            f"{sizing_info}\n"
                             f"{color}{'═'*54}{Style.RESET_ALL}\n"
                         )
                     else:

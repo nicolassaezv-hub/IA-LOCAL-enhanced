@@ -8,7 +8,7 @@ from colorama import Fore, Style, init as colorama_init
 colorama_init(autoreset=True)
 
 # ── Lazy imports to keep startup fast ──────────────────────
-from memory import init_db
+from memory import init_db, log_command, guardar_memoria
 from project_memory import (
     init_project_db, session_summary, auto_register_forex_model,
     cmd_list_models, cmd_list_projects, cmd_list_tasks,
@@ -54,6 +54,14 @@ from forex.forex_memory import list_saved_markets
 # ── Business Intelligence imports ───────────────────────────
 from forex.business.business_pipeline import BusinessPipeline
 
+# Risk management
+try:
+    from forex.prediction.circuit_breaker import get_circuit_breaker, cmd_circuit_status, cmd_circuit_reset
+    from forex.prediction.position_sizing import PositionSizer, cmd_position_size as _cmd_position_size
+    _HAS_RISK = True
+except ImportError:
+    _HAS_RISK = False
+
 
 def _print_banner():
     print(Fore.GREEN + "╔══════════════════════════════════════════╗")
@@ -61,6 +69,55 @@ def _print_banner():
     print(Fore.GREEN + "║  Forex · ML · Security · Documents · Web ║")
     print(Fore.GREEN + "╚══════════════════════════════════════════╝")
     print(Fore.CYAN  + f"  {len(TOOLS)} tools loaded  |  type 'ayuda' for commands\n")
+
+
+# ─────────────────────────────────────────────────────────
+# HELPER: extraer par del input del usuario
+# ─────────────────────────────────────────────────────────
+def _extract_pair(user_input: str) -> str | None:
+    """Intenta extraer el par del comando (ej: 'full forex EURUSD.csv' → 'EURUSD')."""
+    import re
+    parts = user_input.upper().split()
+    # Buscar patrón de par (6 letras tipo EURUSD, GBPJPY, AUDCAD)
+    for p in parts:
+        clean = re.sub(r"[^A-Z]", "", p)
+        if len(clean) == 6 and clean.isalpha():
+            return clean
+    # Buscar dentro del nombre de archivo
+    for p in parts:
+        m = re.search(r"([A-Z]{6})", re.sub(r"[^A-Z]", "", p))
+        if m:
+            return m.group(1)
+    return None
+
+
+def _category_from_cmd(user_input: str) -> str:
+    """Clasifica el tipo de comando."""
+    u = user_input.lower()
+    if any(k in u for k in ["forex", "train", "tune", "full", "scan", "predict", "backtest", "señal"]):
+        return "forex"
+    if any(k in u for k in ["circuit", "position size", "sizing", "risk"]):
+        return "risk"
+    if any(k in u for k in ["modelo", "model", "mis model"]):
+        return "model"
+    if any(k in u for k in ["schedule", "watch", "schedule"]):
+        return "schedule"
+    return "general"
+
+
+def _summarize_result(respuesta) -> str:
+    """Extrae un resumen de máx 400 chars del resultado de un comando."""
+    import re
+    if respuesta is None:
+        return "(sin resultado)"
+    text = json.dumps(respuesta, ensure_ascii=False) if isinstance(respuesta, dict) else str(respuesta)
+    # Quitar códigos ANSI
+    text = re.sub(r'\x1b\[[0-9;]*m', '', text)
+    text = re.sub(r'\[\d+[mA-Z]', '', text)
+    # Quitar líneas de barras decorativas
+    lines = [l.strip() for l in text.splitlines() if l.strip() and not re.match(r"^[═─╔╗╚╝╠╣╦╩╪│┼]+$", l.strip())]
+    summary = " | ".join(lines[:6])
+    return summary[:400]
 
 
 def _print_result(respuesta):
@@ -580,6 +637,10 @@ def _ayuda():
                 pair_arg = parts[2] if len(parts) > 2 else None
                 respuesta = cmd_signal_stats(pair_arg)
 
+{Fore.CYAN}── RISK MANAGEMENT ────────────────────────────────────────{Style.RESET_ALL}
+  circuit status                 Estado del circuit breaker (pérdida diaria/semanal/drawdown)
+  circuit reset                  Resetear manualmente el circuit breaker
+  position size <par> [balance]  Calcular position sizing con Kelly (ej: position size EURUSD 10000)
 {Fore.CYAN}── FOREX WATCHER Y SEÑALES (FASE 2) ──────────────────────{Style.RESET_ALL}
   watch forex <par> <csv> [seg]  Monitoreo continuo de un par (thread background)
   watch stop <par>               Detener monitoreo de un par
@@ -758,6 +819,51 @@ if __name__ == "__main__":
                 symbol = user_input[len("compara forex "):].strip()
                 respuesta = _forex_compara(symbol)
 
+            # ── MEMORIA DE COMANDOS ──────────────────────────────
+            elif user_input.lower() in ["que hice", "historial comandos", "mis acciones", "log"]:
+                try:
+                    from memory import get_command_log
+                    entries = get_command_log(limit=10)
+                    if not entries:
+                        respuesta = "No hay comandos registrados aún."
+                    else:
+                        lines = ["\n Últimos comandos ejecutados:\n"]
+                        for e in entries:
+                            pair_tag = f" [{e['pair']}]" if e["pair"] else ""
+                            lines.append(f"  [{e['executed_at']}]{pair_tag}  {e['command']}")
+                            lines.append(f"       → {e['summary'][:120]}")
+                        respuesta = "\n".join(lines)
+                except Exception as ex:
+                    respuesta = f"Error al leer historial: {ex}"
+
+            elif user_input.lower().startswith("que hice con ") or user_input.lower().startswith("historial "):
+                try:
+                    from memory import get_command_log
+                    parts_h  = user_input.strip().split()
+                    pair_h   = parts_h[-1].upper() if len(parts_h) > 2 else None
+                    entries  = get_command_log(limit=10, pair=pair_h)
+                    if not entries:
+                        respuesta = f"Sin registros para {pair_h or 'ese par'}."
+                    else:
+                        lines = [f"\n Historial para {pair_h or 'todos'}:\n"]
+                        for e in entries:
+                            lines.append(f"  [{e['executed_at']}]  {e['command']}")
+                            lines.append(f"       → {e['summary'][:120]}")
+                        respuesta = "\n".join(lines)
+                except Exception as ex:
+                    respuesta = f"Error: {ex}"
+
+            # ── RISK MANAGEMENT ──────────────────────────────────
+            elif user_input.lower() in ["circuit status", "estado circuit", "circuit breaker"]:
+                respuesta = cmd_circuit_status() if _HAS_RISK else "Módulo risk no disponible."
+            elif user_input.lower() in ["circuit reset", "resetear circuit"]:
+                respuesta = cmd_circuit_reset() if _HAS_RISK else "Módulo risk no disponible."
+            elif user_input.lower().startswith("position size ") or user_input.lower().startswith("sizing "):
+                # uso: position size <par> [balance]
+                parts = user_input.strip().split()
+                pair_ps  = parts[2] if len(parts) > 2 else "EURUSD"
+                bal_ps   = float(parts[3]) if len(parts) > 3 else 10_000
+                respuesta = _cmd_position_size(pair_ps, bal_ps) if _HAS_RISK else "Módulo risk no disponible."
             # ── BUSINESS INTELLIGENCE ─────────────────────────
             elif user_input.startswith("consulta negocio ") or user_input.startswith("consultar negocio "):
                 csv_path = user_input.split(" ", 2)[-1].strip()
@@ -1052,3 +1158,15 @@ if __name__ == "__main__":
 
         if respuesta is not None and respuesta != "":
             _print_result(respuesta)
+            # ── Guardar en memoria para que el LLM sepa qué ejecutaste ──
+            try:
+                if user_input and not user_input.lower() in ["ayuda", "help", "?", "salir", "exit", "quit"]:
+                    # Solo registrar comandos no triviales
+                    _cat   = _category_from_cmd(user_input)
+                    _pair  = _extract_pair(user_input)
+                    _summ  = _summarize_result(respuesta)
+                    if _summ and len(_summ) > 10:
+                        log_command(user_input, _summ, pair=_pair, category=_cat)
+                        guardar_memoria(user_input, _summ)
+            except Exception:
+                pass

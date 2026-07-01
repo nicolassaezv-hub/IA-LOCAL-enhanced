@@ -75,6 +75,20 @@ def init_db():
         )
     """)
 
+    # ── Registro de comandos ejecutados ──────────────────────────
+    # Almacena cada comando con su resultado resumido para que el LLM
+    # sepa qué acciones ejecutó el usuario sin necesidad de re-ejecutar.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS command_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            command     TEXT    NOT NULL,
+            summary     TEXT    NOT NULL,
+            pair        TEXT,
+            category    TEXT,
+            executed_at TEXT    NOT NULL
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -153,3 +167,92 @@ def contar_entradas() -> int:
         return count
     except Exception:
         return 0
+
+
+# ══════════════════════════════════════════════════════════
+#  COMMAND LOG — registro de comandos con resultado
+# ══════════════════════════════════════════════════════════
+
+def log_command(command: str, summary: str, pair: str = None, category: str = "general") -> int:
+    """
+    Registra un comando ejecutado con su resultado resumido.
+    Esto permite que el LLM sepa qué acciones se realizaron
+    sin necesidad de repetirlas.
+
+    Parameters
+    ----------
+    command  : str — comando tal como lo escribió el usuario
+    summary  : str — resultado resumido (máx 500 chars)
+    pair     : str — par Forex si aplica
+    category : str — "forex", "risk", "model", "system", "general"
+
+    Returns
+    -------
+    int — id del registro
+    """
+    # Recortar summary a 500 chars para no saturar el contexto
+    summary_short = str(summary)[:500].replace("\033[", "").replace("[0m", "")
+    # Limpiar códigos ANSI
+    import re
+    summary_short = re.sub(r'\x1b\[[0-9;]*m', '', summary_short)
+    summary_short = re.sub(r'\[\d+[mA-Z]', '', summary_short)
+
+    conn = sqlite3.connect(DB_PATH)
+    c    = conn.cursor()
+    c.execute(
+        """INSERT INTO command_log (command, summary, pair, category, executed_at)
+           VALUES (?, ?, ?, ?, ?)""",
+        (command, summary_short.strip(), pair, category, time.ctime())
+    )
+    row_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return row_id
+
+
+def get_command_log(limit: int = 10, category: str = None, pair: str = None) -> list:
+    """
+    Devuelve los últimos N comandos registrados, opcionalmente filtrados.
+    """
+    conn  = sqlite3.connect(DB_PATH)
+    c     = conn.cursor()
+    where = []
+    params = []
+    if category:
+        where.append("category = ?")
+        params.append(category)
+    if pair:
+        where.append("pair = ?")
+        params.append(pair.upper())
+    where_clause = ("WHERE " + " AND ".join(where)) if where else ""
+    params.append(limit)
+    c.execute(
+        f"""SELECT command, summary, pair, category, executed_at
+            FROM command_log {where_clause}
+            ORDER BY id DESC LIMIT ?""",
+        params
+    )
+    rows = c.fetchall()
+    conn.close()
+    return [
+        {"command": r[0], "summary": r[1], "pair": r[2],
+         "category": r[3], "executed_at": r[4]}
+        for r in reversed(rows)
+    ]
+
+
+def get_command_context_for_llm(limit: int = 6) -> str:
+    """
+    Devuelve los últimos comandos como bloque de texto para inyectar
+    en el prompt del LLM. Así ASTRA sabe qué ejecutaste recientemente.
+    """
+    entries = get_command_log(limit=limit)
+    if not entries:
+        return ""
+    lines = ["=== ACCIONES RECIENTES DEL USUARIO ==="]
+    for e in entries:
+        pair_tag = f" [{e['pair']}]" if e["pair"] else ""
+        lines.append(f"[{e['executed_at']}]{pair_tag} {e['command']}")
+        lines.append(f"  → {e['summary']}")
+    lines.append("=== FIN ACCIONES ===")
+    return "\n".join(lines)

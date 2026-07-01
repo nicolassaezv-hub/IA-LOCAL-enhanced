@@ -886,3 +886,455 @@ Devuelve la decisión final con desglose de ambos componentes:
 | Estado scheduler | `schedule status` |
 | Noticias + sentimiento | `noticias EURUSD` |
 | Señal combinada | `noticias predice EURUSD CSVs/H1/EURUSD.csv` |
+
+---
+
+## PARTE 9 — Predicción Forex para Inversión Real (Guía Paso a Paso)
+
+> Esta sección cubre el flujo completo recomendado para usar ASTRA en trading real,
+> incluyendo todos los controles de riesgo. Sigue los pasos en orden y no saltes ninguno.
+
+---
+
+### 9.1 Qué necesitas antes de empezar
+
+Antes de ejecutar el primer comando, verifica que tienes:
+
+| Requisito | Dónde obtenerlo |
+|-----------|----------------|
+| Archivo CSV del par en H1 | MetaTrader 5 → Historia → exportar |
+| Mismo par en H4 y D1 | Misma carpeta raíz, subcarpetas H4/ y D1/ |
+| Al menos 5.000 filas H1 (≈ 2 años) | Sin este mínimo el modelo no generaliza |
+| Python con dependencias instaladas | `python setup_windows.py verify` |
+
+**Estructura de carpetas obligatoria:**
+
+```
+CSVs/
+├── H1/
+│   └── EURUSD.csv       ← archivo principal
+├── H4/
+│   └── EURUSD.csv       ← mismo par, timeframe H4
+└── D1/
+    └── EURUSD.csv        ← mismo par, timeframe D1
+```
+
+> **Por qué importa:** El sistema detecta automáticamente H4 y D1 buscando en las
+> carpetas hermanas. Si la estructura no es esta, el pipeline corre solo con H1 y la
+> precisión cae entre 5–10%.
+
+---
+
+### 9.2 Paso 1 — Verificar el CSV antes de entrenar
+
+Antes de entrenar, comprueba que tu CSV no tiene problemas que contaminen el modelo.
+
+```
+Tú: analiza forex EURUSD CSVs/H1/EURUSD.csv
+```
+
+ASTRA mostrará un resumen del par. Lo que debes verificar:
+
+- **Filas cargadas:** mínimo 5.000 (idealmente 10.000+)
+- **NaN < 5%:** si hay más, el CSV tiene datos faltantes
+- **Gaps de fin de semana:** el sistema los filtra automáticamente — verás algo como
+  `[CSV ADAPTER] Gap filter: 438 velas post-gap eliminadas` (esto es normal y correcto)
+
+**Ejemplo de salida correcta:**
+
+```
+[CSV ADAPTER] Gap filter: 438 velas post-gap eliminadas
+[CSV ADAPTER] MTF H4 merged: 9 cols
+[CSV ADAPTER] MTF D1 merged: 9 cols
+[CSV ADAPTER] Rows: 16877 | Pair: EURUSD | Columns: 39
+```
+
+**Si ves `MTF H4 merged: 0 cols`** → no encuentra el H4. Verifica la estructura de carpetas.
+
+---
+
+### 9.3 Paso 2 — Ejecutar el pipeline completo (full forex)
+
+El comando `full forex` hace en un solo paso:
+1. Tuneo de hiperparámetros con Optuna (75 trials)
+2. Entrenamiento con Walk-Forward Validation (5 folds)
+3. Señal sobre la última vela disponible
+4. Backtesting sobre datos históricos
+
+```
+Tú: full forex CSVs/H1/EURUSD.csv
+```
+
+**Qué mirar en la salida:**
+
+```
+[WFV] avg_prec=68.21%  median_prec=67.50%  avg_acc=64.10%
+[WFV] ✓ APROBADO — avg=68.21%  median=67.50%
+```
+
+El modelo se aprueba si `avg_prec >= 65%`. Si ves `✗ NO APROBADO`, el modelo
+no está listo — ver sección 9.5 (solución de problemas).
+
+**Métricas del backtesting:**
+
+```
+Trades: 1079  |  Win Rate: 57.5%  |  PF: 2.23  |  E[R]: 0.0000
+```
+
+Para trading real necesitas:
+- **Win Rate ≥ 52%** con RR=1.0, o ≥ 45% con RR=2.0
+- **Profit Factor ≥ 1.5** (cuánto ganas por cada dólar perdido)
+- **Sharpe > 0.5** (más es mejor; > 1.0 es bueno)
+
+---
+
+### 9.4 Paso 3 — Interpretar la señal generada
+
+```
+╔══ ASTRA FOREX SIGNAL ══╗
+  Signal     : ▼ SELL
+  Pair       : EURUSD
+  Confidence : 0.84
+  Strength   : [███████░░░] 77.9/100
+  ADX        : 24.2
+  Regime     : weak trend
+  Rows       : 16877
+```
+
+**Qué significa cada campo:**
+
+| Campo | Qué indica | Umbral para operar |
+|-------|-----------|-------------------|
+| `Signal` | Dirección: BUY / SELL / HOLD | Solo operar en BUY o SELL |
+| `Confidence` | Probabilidad calibrada del modelo (0–1) | ≥ 0.62 para operar |
+| `Strength` | Combina confianza + ADX en escala 0–100 | ≥ 50 para considerar |
+| `ADX` | Fuerza de tendencia del mercado | ≥ 22 (mercado con tendencia) |
+| `Regime` | Clasificación del mercado actual | Preferir "moderate/strong trend" |
+
+> **Regla de oro:** Si el modelo dice HOLD, no operes. El sistema usa ADX como filtro
+> de régimen — en mercados laterales (ranging) las señales son ruido.
+
+---
+
+### 9.5 Paso 4 — Verificar el circuit breaker antes de cada operación
+
+El circuit breaker protege tu capital deteniendo el trading automáticamente si las
+pérdidas superan los límites configurados.
+
+```
+Tú: circuit status
+```
+
+**Salida cuando todo está bien:**
+
+```
+══════════════════════════════════════════════════════
+  CIRCUIT BREAKER — 🟢 ABIERTO
+──────────────────────────────────────────────────────
+  Balance actual   :  $10,000.00
+  Peak histórico   :  $10,250.00
+  Pérdida diaria   :   1.20%  (límite: 3%)
+  Pérdida semanal  :   2.10%  (límite: 6%)
+  Drawdown         :   2.44%  (límite: 10%)
+══════════════════════════════════════════════════════
+```
+
+**Salida cuando está bloqueado (no debes operar):**
+
+```
+══════════════════════════════════════════════════════
+  CIRCUIT BREAKER — 🔴 BLOQUEADO
+──────────────────────────────────────────────────────
+  🚨 Motivo bloqueo : Pérdida diaria 3.30% ≥ límite 3.00%
+  ⏱  Cooldown resto : 22.5h
+══════════════════════════════════════════════════════
+```
+
+Los límites que activan el bloqueo son:
+
+| Límite | Valor | Cooldown tras activación |
+|--------|-------|--------------------------|
+| Pérdida diaria | 3% del balance del día | 24 horas |
+| Pérdida semanal | 6% del balance semanal | 24 horas |
+| Drawdown máximo | 10% desde el pico histórico | 24 horas |
+
+> **No resetees el circuit breaker manualmente salvo que hayas identificado y
+> corregido la causa de las pérdidas.** Usar `circuit reset` para evitar el cooldown
+> es la forma más rápida de perder el capital.
+
+---
+
+### 9.6 Paso 5 — Calcular el tamaño de posición (position sizing)
+
+Una vez que tienes señal válida (BUY o SELL) y el circuit breaker está abierto,
+calcula cuánto arriesgar en la operación.
+
+```
+Tú: position size EURUSD 10000
+```
+
+**Salida:**
+
+```
+══════════════════════════════════════════════════════
+  POSITION SIZING — EURUSD
+──────────────────────────────────────────────────────
+  Balance       : $10,000.00
+  Señal         : BUY  (conf=80.00%)
+  Método        : Kelly Fraccionado (x0.25)
+  Kelly raw     : 0.3200
+  Riesgo        : 1.600%  →  $160.00
+  Unidades      : 8,000.00
+  Trades hist.  : 47
+══════════════════════════════════════════════════════
+```
+
+**Cómo leer el resultado:**
+
+- **Kelly raw:** el Kelly teórico puro calculado del historial de trades
+- **Riesgo %:** el Kelly ya fraccionado (x0.25) y clampeado entre 0.5%–2.0%
+- **Riesgo USD:** el dinero máximo que puedes perder en esta operación
+- **Unidades:** tamaño aproximado de posición (ajusta según el apalancamiento de tu broker)
+- **Método "conservative":** si tienes menos de 20 trades en historial, se usa 0.5% fijo
+
+> **Regla crítica:** El riesgo máximo por operación está clampeado al 2% del balance.
+> Nunca aumentes este límite aunque el modelo tenga alta confianza.
+
+---
+
+### 9.7 Paso 6 — Monitoreo continuo con el scheduler
+
+Para que ASTRA evalúe el par automáticamente cada hora sin que tengas que escribir
+comandos manualmente:
+
+```
+Tú: schedule forex EURUSD CSVs/H1/EURUSD.csv 60
+```
+
+Cada 60 minutos ASTRA:
+1. Verifica el circuit breaker (si está bloqueado, no evalúa)
+2. Carga el CSV actualizado y genera la señal
+3. Guarda la señal en historial
+4. Muestra el position sizing si la señal es BUY o SELL
+5. Notifica en pantalla solo si hay acción (no spam con HOLDs)
+
+**Para ver el historial de señales generadas:**
+
+```
+Tú: señales EURUSD
+```
+
+**Para detener el monitoreo:**
+
+```
+Tú: schedule stop EURUSD
+```
+
+---
+
+### 9.8 Paso 7 — Validar el modelo con múltiples pares (scan)
+
+Antes de operar con dinero real, escanea todos tus pares a la vez para tener
+una visión global de las oportunidades:
+
+```
+Tú: scan forex CSVs/H1/
+```
+
+ASTRA procesará todos los CSV en esa carpeta y mostrará un ranking:
+
+```
+╔══ MULTI-PAIR SCANNER — 8 pairs ══╗
+  BUY Signals (2):
+    ▲  EURUSD  conf=0.81  strength=74.2  ADX=26.1
+    ▲  GBPJPY  conf=0.76  strength=68.0  ADX=23.8
+
+  SELL Signals (1):
+    ▼  USDJPY  conf=0.79  strength=71.0  ADX=28.4
+
+  HOLD (5):
+    AUDCAD, NZDUSD, EURCAD, GBPUSD, XAUUSD
+```
+
+Cada señal generada por el scanner queda registrada automáticamente en el
+historial. Puedes verla con `señales <par>`.
+
+---
+
+### 9.9 Checklist completo antes de cada operación real
+
+Usa esta lista antes de abrir cualquier posición con dinero real:
+
+```
+[ ] 1. El modelo del par está entrenado y aprobado (WFV avg ≥ 65%)
+[ ] 2. La señal es BUY o SELL (no HOLD)
+[ ] 3. Confidence ≥ 0.62
+[ ] 4. ADX ≥ 22 (mercado con tendencia)
+[ ] 5. Circuit breaker está ABIERTO (verde)
+[ ] 6. Position sizing calculado (riesgo ≤ 2% del balance)
+[ ] 7. Stop loss definido antes de abrir la posición
+[ ] 8. Take profit definido (TP = SL × RR, donde RR ≥ 1.0)
+[ ] 9. No hay noticias de alto impacto en las próximas 2 horas
+         (verificar en https://www.forexfactory.com/calendar)
+[ ] 10. Has esperado al menos 3 meses de paper trading con este par
+```
+
+> **Si algún punto del checklist está en rojo → no operes.** El modelo puede
+> generar señales técnicamente correctas y aun así perder dinero si el contexto
+> macroeconómico va en contra. Las noticias de banco central (FOMC, BCE, BOJ)
+> anulan cualquier señal técnica.
+
+---
+
+### 9.10 Solución de problemas comunes
+
+#### El WFV no se aprueba (avg_prec < 65%)
+
+**Causa más frecuente:** datos insuficientes o el par tiene mucha variabilidad entre períodos.
+
+**Solución paso a paso:**
+1. Verificar que tienes al menos 5.000 filas H1: `analiza forex EURUSD CSVs/H1/EURUSD.csv`
+2. Añadir H4 y D1 en la estructura correcta
+3. Re-ejecutar con tuneo explícito primero:
+   ```
+   Tú: tune forex CSVs/H1/EURUSD.csv
+   Tú: train forex CSVs/H1/EURUSD.csv
+   ```
+4. Si sigue sin aprobar, el par no es predecible con los datos actuales —
+   busca otro par o espera a tener más datos históricos.
+
+#### La señal siempre es HOLD
+
+**Causa:** ADX < 22 (mercado lateral) o confidence < 0.62 (modelo inseguro).
+
+**Esto es correcto.** El sistema está diseñado para no operar en condiciones desfavorables.
+Espera a que el mercado entre en tendencia. Puedes verificar el ADX actual con:
+```
+Tú: analiza forex EURUSD CSVs/H1/EURUSD.csv
+```
+
+#### El circuit breaker está bloqueado inesperadamente
+
+**Causa:** pérdidas acumuladas del día/semana superaron el límite.
+
+**No resetees de inmediato.** Primero:
+1. Revisa el historial: `señales EURUSD`
+2. Analiza si las pérdidas son del modelo o de condiciones de mercado excepcionales
+3. Si es mercado excepcional (noticia inesperada, gap de apertura), puedes resetear:
+   ```
+   Tú: circuit reset
+   ```
+4. Si son pérdidas del modelo, espera el cooldown de 24h y ajusta los parámetros.
+
+#### `[DATASET] Filas train: X | BUY: 20% | SELL: 80%`
+
+**Causa:** desbalance extremo en las etiquetas. Con rr_ratio=1.0, el mercado actual
+es muy bajista o muy alcista en los datos de entrenamiento.
+
+**Solución:** el sistema aplica SMOTE automáticamente para balancear. Si el desbalance
+es mayor de 80/20, considera actualizar el CSV con datos más recientes.
+
+---
+
+### 9.11 Flujo recomendado para un par nuevo
+
+Si vas a añadir un par nuevo que nunca has entrenado, sigue este flujo exacto:
+
+```bash
+# Paso 1: Obtener datos (si usas yfinance)
+python creando.py --modo yfinance --pares GBPJPY --dias 730
+
+# Paso 2: Verificar el CSV
+Tú: analiza forex GBPJPY CSVs/H1/GBPJPY.csv
+
+# Paso 3: Pipeline completo (tune + train + signal + backtest)
+Tú: full forex CSVs/H1/GBPJPY.csv
+
+# Paso 4: Revisar métricas
+#   - WFV avg_prec ≥ 65% → continuar
+#   - Win Rate ≥ 52% → continuar
+#   - PF ≥ 1.5 → continuar
+
+# Paso 5: Verificar circuit breaker
+Tú: circuit status
+
+# Paso 6: Calcular position sizing para la primera operación
+Tú: position size GBPJPY 10000
+
+# Paso 7: Activar monitoreo continuo
+Tú: schedule forex GBPJPY CSVs/H1/GBPJPY.csv 60
+
+# Paso 8 (OBLIGATORIO antes de dinero real):
+# Opera en demo al menos 60 días y registra los resultados manualmente.
+# Solo pasa a real si el win rate real >= 50% y el P&L es positivo.
+```
+
+**Ejemplo de resultado esperado tras `full forex CSVs/H1/GBPJPY.csv`:**
+
+```
+[WFV] avg_prec=67.80%  median_prec=66.50%  avg_acc=62.10%
+[WFV] ✓ APROBADO — avg=67.80%  median=66.50%
+
+╔══ ASTRA FOREX SIGNAL ══╗
+  Signal     : ▲ BUY
+  Pair       : GBPJPY
+  Confidence : 0.79
+  Strength   : [███████░░░] 72.3/100
+  ADX        : 31.4
+  Regime     : moderate trend
+
+Trades: 847  |  Win Rate: 58.2%  |  PF: 1.87  |  Sharpe: 0.74
+```
+
+Con estos números el modelo es candidato para paper trading. Con Sharpe > 1.0
+y 90+ días de demo positivos, es candidato para trading real con capital pequeño.
+
+---
+
+### 9.12 Resumen del flujo de producción (diagrama)
+
+```
+                    ┌─────────────────────┐
+                    │   Nuevo par / CSV   │
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │  full forex <csv>   │  ← tune + train + signal + backtest
+                    └──────────┬──────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                 │
+         WFV ≥ 65%?      Win Rate ≥ 52%?    PF ≥ 1.5?
+              │                │                 │
+           SI ✓             SI ✓              SI ✓
+              └────────────────┴─────────────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │  60+ días de demo   │  ← schedule forex + registrar resultados
+                    └──────────┬──────────┘
+                               │
+                    ¿Demo P&L positivo?
+                               │
+                            SI ✓
+                               │
+                    ┌──────────▼──────────┐
+                    │  circuit status     │  ← antes de CADA operación
+                    └──────────┬──────────┘
+                               │
+                    ¿Circuit ABIERTO?
+                               │
+                            SI ✓
+                               │
+                    ┌──────────▼──────────┐
+                    │  position size      │  ← cuánto arriesgar
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │  Abrir posición     │  ← stop loss + take profit definidos
+                    │  en el broker       │
+                    └─────────────────────┘
+```
+
+---
+
+*Parte 9 añadida el 30 de junio de 2026 — ASTRA v3.0 (Risk Management integrado)*

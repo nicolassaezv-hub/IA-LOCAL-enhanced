@@ -118,6 +118,82 @@ INTENT_PATTERNS = {
         "saved markets",
         "analyzed markets",
     ],
+    # ── Fase 2: Active Engine ──────────────────────────────
+    "schedule_forex": [
+        "schedule forex",
+        "programar forex",
+        "schedule stop",
+        "schedule status",
+        "schedule run",
+        "programar señal",
+    ],
+
+    "watch_forex": [
+        "watch forex",
+        "watch stop",
+        "watch status",
+        "watch check",
+        "monitorear forex",
+        "monitor forex",
+        "watcher",
+    ],
+
+    # ── Fase 2: Signal Tracker ────────────────────────────
+    "signal_history": [
+        "signals",
+        "señales",
+        "historial señales",
+        "signal history",
+        "últimas señales",
+        "ultimas señales",
+        "ver señales",
+    ],
+
+    "signal_stats": [
+        "stats señales",
+        "estadísticas señales",
+        "estadisticas señales",
+        "signal stats",
+    ],
+
+    # ── Fase 2: Project Memory ────────────────────────────
+    "list_models_memory": [
+        "models memory",
+        "modelos guardados",
+        "list models",
+        "ver modelos",
+        "mis modelos",
+        "models status",
+    ],
+
+    "list_projects": [
+        "projects",
+        "proyectos",
+        "list projects",
+        "ver proyectos",
+        "mis proyectos",
+    ],
+
+    # ── Fase 4: News Intelligence ─────────────────────────
+    "news_forex": [
+        "news",
+        "noticias",
+        "noticias forex",
+        "news forex",
+        "noticias eurusd",
+        "noticias xauusd",
+    ],
+
+    "news_predict": [
+        "news predict",
+        "predict news",
+        "noticias prediccion",
+        "prediccion noticias",
+        "señal con noticias",
+        "combined signal",
+    ],
+
+
     
     "audio_analysis": [
         "analiza audio",

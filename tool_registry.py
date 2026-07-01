@@ -185,6 +185,39 @@ def run_forex_analysis(
 # REGISTRO CENTRAL
 # ==========================================
 
+
+# ==========================================
+# COGNITIVE CORE — Fase 1 & 2
+# ==========================================
+
+from project_memory import (
+    register_model,
+    get_model,
+    list_models,
+    save_project,
+    list_projects,
+    session_summary,
+    auto_register_forex_model,
+)
+
+from signal_tracker import (
+    save_signal,
+    get_signals,
+    get_last_signal,
+    signal_stats,
+    cmd_signal_history,
+    cmd_signal_stats,
+)
+
+from active_engine import get_engine as get_active_engine
+
+from news_intelligence import (
+    fetch_news,
+    analyze_sentiment,
+    cmd_news,
+    cmd_news_predict,
+)
+
 TOOLS = {
     # ---------- SELF ANALYSIS --------- #
     "self_analysis": generate_self_analysis,
@@ -296,6 +329,34 @@ TOOLS = {
 
     # ---------- SQL ----------
     "guardar_usuario": guardar_usuario,
+
+    # ── Cognitive Core ─────────────────────────────────
+    "register_model":          register_model,
+    "get_model":               get_model,
+    "list_models":             list_models,
+    "save_project":            save_project,
+    "list_projects":           list_projects,
+    "session_summary":         session_summary,
+    "auto_register_model":     auto_register_forex_model,
+
+    # ── Signal Tracker ──────────────────────────────────
+    "save_signal":             save_signal,
+    "get_signals":             get_signals,
+    "get_last_signal":         get_last_signal,
+    "signal_stats":            signal_stats,
+    "signal_history":          cmd_signal_history,
+    "signal_stats_cmd":        cmd_signal_stats,
+
+    # ── Active Engine ───────────────────────────────────
+    "get_engine":              get_active_engine,
+
+    # ── News Intelligence ───────────────────────────────
+    "fetch_news":              fetch_news,
+    "analyze_sentiment":       analyze_sentiment,
+    "news_cmd":                cmd_news,
+    "news_predict_cmd":        cmd_news_predict,
+
+
 }
 
 # ==========================================
