@@ -6,7 +6,7 @@
 
 - Sigue avanzando con el [Download File](astra-roadmap-v4.html)
 
-- Usa Base44 por mientras, luego Github Copilot y Replit (ve turnandote como lo veas a tu gusto)
+- Usa Base44 para ir completando las ramificaciones/partes del proyecto, de no estar disponible pasa luego a Github Copilot y Replit (ve turnandote como lo veas a tu gusto)
 
 - Para comprobaciones de calidad o estetica consulta con ChatGPT
 
