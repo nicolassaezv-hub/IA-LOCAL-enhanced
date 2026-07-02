@@ -1,271 +1,291 @@
 """
-ASTRA — Fase 5.3: Feasibility Engine ⭐
+prediction_lab/feasibility_engine.py — Fase 5.3 (Prediction Lab) ⭐
 
-COMPONENTE CENTRAL de Prediction Lab.
+Componente central del Prediction Lab. Responde la pregunta que decide si
+vale la pena seguir: "¿puede construirse un predictor útil con esto?"
 
-Responde: "¿puede construirse un predictor útil con esto?"
+Combina el ProblemSpec (5.1 — qué se quiere predecir) con el DatasetReport
+(5.2 — qué tan bueno es el dataset disponible) y calcula un Índice de
+Viabilidad 0-100 ponderado:
 
-Calcula Índice de Viabilidad 0-100 ponderando:
-  25% - Cantidad de datos (rows)
-  20% - Calidad (completeness)
-  15% - Balance de target
-  20% - Señal predictiva (varianza/correlación)
-  10% - Complejidad
-  10% - Horizonte
+    cantidad de datos   25%
+    calidad del dataset 20%
+    balance del target  15%
+    señal predictiva    20%
+    complejidad         10%   (más simple el problema → más viable)
+    horizonte           10%   (más claro/realista el horizonte → más viable)
 
-Si viabilidad < 40% → explica qué falta y NO procede.
+Si viabilidad < 40 → NO procede: explica exactamente qué falta y cómo
+mejorarlo, en vez de seguir generando un pipeline condenado a fallar.
+
+API pública:
+  assess_feasibility(csv_path, idea, target_variable=None) -> FeasibilityReport
+  assess_feasibility_from(problem_spec, dataset_report)     -> FeasibilityReport
+  cmd_lab_viabilidad(csv_path, idea)                        -> str
 """
 
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
-import pandas as pd
-import numpy as np
+from dataclasses import dataclass, field, asdict
+from typing import Optional, List, Dict
 
-from .dataset_analyzer import DatasetAnalyzer, DatasetAnalysis
-from .prompt_analyzer import ProblemSpec
+from .prompt_analyzer   import analyze_prompt, ProblemSpec
+from .dataset_analyzer  import analyze_dataset, DatasetReport
 
 
-# ═══════════════════════════════════════════════════════════════════════
-#  TIPOS
-# ═══════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+#  PESOS
+# ══════════════════════════════════════════════════════════
+
+WEIGHTS = {
+    "datos":        0.25,
+    "calidad":      0.20,
+    "balance":      0.15,
+    "senal":        0.20,
+    "complejidad":  0.10,
+    "horizonte":    0.10,
+}
+
+VIABILITY_THRESHOLD = 40.0
+
+
+# ══════════════════════════════════════════════════════════
+#  FEASIBILITY REPORT
+# ══════════════════════════════════════════════════════════
 
 @dataclass
-class FeasibilityScore:
-    """Resultado de análisis de viabilidad"""
-    viability_index: float  # 0-100
-    is_viable: bool  # > 40%
-    problem_type: str
-    dataset_analysis: DatasetAnalysis
-    scores: Dict[str, float]  # {"data_volume": 75, "quality": 60, ...}
-    bottlenecks: List[str]  # qué falta
-    recommendations: List[str]  # qué hacer
-    estimated_effort: str  # "low", "medium", "high"
+class FeasibilityReport:
+    ok:                 bool = True
+    error:              Optional[str] = None
+
+    problem_type:       str = "unknown"
+    domain:             str = "general"
+    target_variable:    Optional[str] = None
+
+    dimension_scores:   Dict[str, float] = field(default_factory=dict)
+    weights:            Dict[str, float] = field(default_factory=lambda: dict(WEIGHTS))
+    viability_index:    float = 0.0
+    is_viable:          bool = False
+    verdict:            str = ""
+
+    blocking_issues:    List[str] = field(default_factory=list)
+    suggestions:        List[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    def summary(self) -> str:
+        if not self.ok:
+            return f"[FEASIBILITY ENGINE] Error: {self.error}"
+
+        lines = [
+            "═" * 62,
+            " FEASIBILITY ENGINE — ¿Se puede construir un predictor útil?",
+            "═" * 62,
+            f" Problema  : {self.problem_type}  |  Dominio: {self.domain}",
+            f" Target    : {self.target_variable or '(no identificado)'}",
+            "-" * 62,
+            " Dimensiones (score x peso):",
+        ]
+        for dim, score in self.dimension_scores.items():
+            w = self.weights.get(dim, 0.0)
+            lines.append(f"   {dim:<12}: {score:5.1f}  x {w:.0%} = {score * w:5.1f}")
+
+        lines.append("-" * 62)
+        lines.append(f" ÍNDICE DE VIABILIDAD: {self.viability_index:5.1f} / 100")
+        lines.append(f" Veredicto: {self.verdict}")
+
+        if self.blocking_issues:
+            lines.append("-" * 62)
+            lines.append(" 🚫 Por qué NO procede todavía:")
+            for issue in self.blocking_issues:
+                lines.append(f"   - {issue}")
+
+        if self.suggestions:
+            lines.append("-" * 62)
+            lines.append(" 💡 Sugerencias para mejorar:")
+            for s in self.suggestions:
+                lines.append(f"   - {s}")
+
+        lines.append("═" * 62)
+        return "\n".join(lines)
 
 
-# ═══════════════════════════════════════════════════════════════════════
-#  FEASIBILITY ENGINE
-# ═══════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+#  SCORING POR DIMENSIÓN
+# ══════════════════════════════════════════════════════════
 
-class FeasibilityEngine:
-    """Evalúa viabilidad de construir un predictor con datos dados"""
+def _score_datos(n_rows: int) -> float:
+    if n_rows <= 0:
+        return 0.0
+    if n_rows < 100:
+        return round(n_rows / 100 * 40, 1)
+    if n_rows < 300:
+        return round(40 + (n_rows - 100) / 200 * 30, 1)
+    if n_rows < 1000:
+        return round(70 + (n_rows - 300) / 700 * 20, 1)
+    return round(min(90 + (n_rows - 1000) / 9000 * 10, 100.0), 1)
 
-    def __init__(self):
-        self.dataset_analyzer = DatasetAnalyzer()
 
-    def assess(
-        self,
-        csv_path: str,
-        problem_spec: ProblemSpec,
-    ) -> FeasibilityScore:
-        """Evalúa viabilidad de un proyecto predictivo"""
+def _score_complejidad(problem_spec: ProblemSpec) -> float:
+    base = {
+        "classification": 90.0,
+        "regression":      85.0,
+        "clustering":      70.0,
+        "timeseries":      65.0,
+        "unknown":         50.0,
+    }.get(problem_spec.problem_type, 50.0)
 
-        # Analizar dataset
-        dataset_analysis = self.dataset_analyzer.analyze(
-            csv_path,
-            target_col=problem_spec.target_variable
-        )
+    if len(problem_spec.candidate_features) > 30:
+        base -= 15
+    elif len(problem_spec.candidate_features) > 15:
+        base -= 7
 
-        # Calcular scores por dimensión
-        scores = self._calculate_scores(dataset_analysis, problem_spec)
+    if problem_spec.domain == "forex":
+        base -= 10   # series financieras: ruido alto, señal débil por naturaleza
+    elif problem_spec.domain == "general":
+        base -= 5
 
-        # Score ponderado
-        viability_index = (
-            scores["data_volume"] * 0.25 +
-            scores["quality"] * 0.20 +
-            scores["target_balance"] * 0.15 +
-            scores["signal"] * 0.20 +
-            scores["complexity"] * 0.10 +
-            scores["horizon"] * 0.10
-        )
+    return round(max(0.0, min(base, 100.0)), 1)
 
-        # Detectar cuellos de botella
-        bottlenecks = self._detect_bottlenecks(scores, dataset_analysis)
 
-        # Generar recomendaciones
-        recommendations = self._generate_recommendations(bottlenecks, dataset_analysis)
+def _score_horizonte(problem_spec: ProblemSpec) -> float:
+    if not problem_spec.horizon:
+        return 50.0   # ambiguo — se puede asumir un default pero resta certeza
 
-        # Estimar esfuerzo
-        effort = self._estimate_effort(viability_index, problem_spec.problem_type)
+    horizon_lower = problem_spec.horizon.lower()
+    long_term_words = ["mes", "meses", "trimestre", "año", "anio", "semestre"]
+    short_term_words = ["vela", "velas", "hora", "horas", "día", "dia", "días", "dias"]
 
-        # Determinar viabilidad
-        is_viable = viability_index >= 40.0
+    score = 85.0
+    if problem_spec.domain == "forex" and any(w in horizon_lower for w in long_term_words):
+        # horizonte muy largo para datos intradía de forex -> desalineado
+        score -= 30
+    if problem_spec.domain == "business" and any(w in horizon_lower for w in short_term_words):
+        # horizonte muy corto para un problema de negocio (ventas/churn) -> poco realista
+        score -= 15
 
-        return FeasibilityScore(
-            viability_index=float(viability_index),
-            is_viable=is_viable,
+    return round(max(0.0, min(score, 100.0)), 1)
+
+
+# ══════════════════════════════════════════════════════════
+#  API PÚBLICA
+# ══════════════════════════════════════════════════════════
+
+def assess_feasibility_from(problem_spec: ProblemSpec, dataset_report: DatasetReport) -> FeasibilityReport:
+    """Calcula viabilidad ya con ProblemSpec + DatasetReport en mano (para encadenar en el pipeline)."""
+    if not dataset_report.ok:
+        return FeasibilityReport(ok=False, error=dataset_report.error)
+
+    # dataset_report.target_variable ya fue validado contra las columnas reales del CSV
+    # (ver dataset_analyzer._guess_target / validación) — tiene prioridad sobre el texto
+    # crudo que haya extraído el Prompt Analyzer, que puede no ser un nombre de columna real.
+    # BUGFIX: el fallback a problem_spec.target_variable también debe validarse contra
+    # las columnas reales — si no, un target "sucio" (ej. "algo interesante" extraído
+    # por el heurístico de texto libre) se colaba sin pasar por el gate duro de abajo.
+    all_columns = set(dataset_report.numeric_cols) | set(dataset_report.non_numeric_cols)
+    raw_candidate = problem_spec.target_variable
+    validated_candidate = raw_candidate if raw_candidate in all_columns else None
+    resolved_target = dataset_report.target_variable or validated_candidate
+
+    # Gate duro: sin variable objetivo no hay forma de validar señal/balance real —
+    # no tiene sentido reportar "viable" con métricas calculadas sobre un target inexistente.
+    if not resolved_target:
+        return FeasibilityReport(
+            ok=True,
             problem_type=problem_spec.problem_type,
-            dataset_analysis=dataset_analysis,
-            scores=scores,
-            bottlenecks=bottlenecks,
-            recommendations=recommendations,
-            estimated_effort=effort,
+            domain=problem_spec.domain,
+            target_variable=None,
+            dimension_scores={},
+            viability_index=0.0,
+            is_viable=False,
+            verdict="NO VIABLE — no se pudo identificar la variable objetivo.",
+            blocking_issues=[
+                "No se pudo identificar la variable objetivo ni en la idea ni por nombre de columna en el dataset. "
+                "Indícala explícitamente, ej: lab dataset <csv> <nombre_columna_target>, o reformula la idea "
+                "mencionando claramente qué quieres predecir."
+            ],
+            suggestions=[
+                f"Columnas disponibles en el dataset: {', '.join(dataset_report.numeric_cols + dataset_report.non_numeric_cols)}"
+            ],
         )
 
-    def _calculate_scores(
-        self,
-        analysis: DatasetAnalysis,
-        spec: ProblemSpec
-    ) -> Dict[str, float]:
-        """Calcula scores por dimensión"""
-        
-        scores = {}
+    dims = {
+        "datos":       _score_datos(dataset_report.n_rows),
+        "calidad":     dataset_report.overall_quality,
+        "balance":     dataset_report.quality_scores.get("balance", 100.0),
+        "senal":       dataset_report.quality_scores.get("signal", 40.0),
+        "complejidad": _score_complejidad(problem_spec),
+        "horizonte":   _score_horizonte(problem_spec),
+    }
 
-        # 1. Data Volume (25%)
-        rows = analysis.shape[0]
-        cols = analysis.shape[1]
-        
-        # Necesitamos N mínimo según complejidad esperada
-        # Simple: 100+ filas, Medium: 500+ filas, Complex: 1000+ filas
-        min_rows = 100 if cols < 5 else (500 if cols < 20 else 1000)
-        volume_score = min(100, (rows / min_rows) * 100) if rows >= 50 else (rows / 50 * 50)
-        scores["data_volume"] = float(volume_score)
+    viability = sum(dims[d] * WEIGHTS[d] for d in WEIGHTS)
+    viability = round(viability, 1)
+    is_viable = viability >= VIABILITY_THRESHOLD
 
-        # 2. Quality (20%) - % NaN y duplicados
-        null_pct = analysis.null_summary["null_pct"]
-        quality_score = max(0, 100 - null_pct * 2)  # Penalizar 2x por cada % NaN
-        scores["quality"] = float(quality_score)
+    if viability >= 80:
+        verdict = "MUY VIABLE — dataset e idea alineados, se puede proceder con confianza."
+    elif viability >= 60:
+        verdict = "VIABLE — se puede construir un predictor razonable."
+    elif viability >= VIABILITY_THRESHOLD:
+        verdict = "VIABLE CON RESERVAS — procede, pero revisa las sugerencias antes de confiar en el modelo."
+    else:
+        verdict = "NO VIABLE — el dataset o la idea necesitan trabajo antes de construir un pipeline."
 
-        # 3. Target Balance (15%)
-        balance_score = 50  # neutral
-        if analysis.target_balance:
-            if spec.problem_type == "classification":
-                # Si classification, evaluar balance
-                imbalance_ratio = analysis.target_balance.get("imbalance_ratio", 1.0)
-                if imbalance_ratio < 1.5:
-                    balance_score = 100  # Perfect balance
-                elif imbalance_ratio < 3:
-                    balance_score = 75  # Good
-                elif imbalance_ratio < 10:
-                    balance_score = 50  # Acceptable
-                else:
-                    balance_score = 25  # Poor
-            else:
-                # Si regression, verificar que no sea constante
-                if len(analysis.target_balance) > 1:
-                    balance_score = 100
-                else:
-                    balance_score = 0  # Target casi constante
+    blocking_issues = []
+    suggestions = []
 
-        scores["target_balance"] = float(balance_score)
-
-        # 4. Signal (20%) - varianza y correlaciones
-        signal_score = 0
-        numeric_cols = [c for c in analysis.columns if c.dtype.startswith("int") or c.dtype.startswith("float")]
-        
-        if len(numeric_cols) > 1:
-            # Contar features con varianza > 0
-            features_with_signal = len(numeric_cols)
-            signal_score = min(100, (features_with_signal / max(cols, 1)) * 100)
-            
-            # Bonus si hay correlaciones
-            high_corr_count = len(analysis.correlations.get("high_correlations", []))
-            if high_corr_count > 0:
-                signal_score = min(100, signal_score + 10)
-        
-        scores["signal"] = float(signal_score)
-
-        # 5. Complexity (10%) - número de features
-        # 5-30 features es óptimo; menos es simple, más es complejo
-        complexity_score = 100 if 5 <= cols <= 30 else (100 - abs(cols - 17.5) / 17.5 * 50)
-        complexity_score = max(0, complexity_score)
-        scores["complexity"] = float(complexity_score)
-
-        # 6. Horizon (10%) - ratio filas / features
-        ratio = rows / max(cols, 1)
-        # Necesitamos mínimo 10 filas por feature
-        horizon_score = min(100, (ratio / 10) * 100)
-        scores["horizon"] = float(horizon_score)
-
-        return scores
-
-    def _detect_bottlenecks(
-        self,
-        scores: Dict[str, float],
-        analysis: DatasetAnalysis
-    ) -> List[str]:
-        """Detecta qué limita la viabilidad"""
-        bottlenecks = []
-
-        if scores["data_volume"] < 50:
-            bottlenecks.append("📊 Volumen de datos insuficiente")
-
-        if scores["quality"] < 50:
-            bottlenecks.append("🔍 Baja calidad de datos (muchos NaN)")
-
-        if scores["target_balance"] < 30:
-            bottlenecks.append("⚖️  Target muy desbalanceado")
-
-        if scores["signal"] < 30:
-            bottlenecks.append("📈 Baja señal predictiva (poca varianza)")
-
-        if scores["complexity"] < 30:
-            bottlenecks.append("🔧 Datos muy complejos (demasiadas features)")
-
-        if scores["horizon"] < 50:
-            bottlenecks.append("⏱️  Ratio datos/features bajo (riesgo overfitting)")
-
-        return bottlenecks
-
-    def _generate_recommendations(
-        self,
-        bottlenecks: List[str],
-        analysis: DatasetAnalysis
-    ) -> List[str]:
-        """Genera acciones concretas para mejorar viabilidad"""
-        recs = []
-
-        if any("volumen" in b.lower() for b in bottlenecks):
-            recs.append("💡 Recolectar más datos (objetivo: 1000+ filas)")
-
-        if any("calidad" in b.lower() for b in bottlenecks):
-            recs.append("💡 Aplicar imputación o remover columnas muy vacías")
-
-        if any("desbalanceado" in b.lower() for b in bottlenecks):
-            recs.append("💡 Usar SMOTE o pesos de clase en el modelo")
-
-        if any("señal" in b.lower() for b in bottlenecks):
-            recs.append("💡 Crear nuevas features o usar feature engineering")
-
-        if any("complejos" in b.lower() for b in bottlenecks):
-            recs.append("💡 Seleccionar features más relevantes (eliminar colineales)")
-
-        if any("ratio" in b.lower() for b in bottlenecks):
-            recs.append("💡 Reducir número de features o aumentar datos")
-
-        # Recommendations generales
-        if analysis.recommendations:
-            recs.extend([f"💡 {r}" for r in analysis.recommendations])
-
-        return recs[:5]  # Top 5
-
-    def _estimate_effort(self, viability: float, problem_type: str) -> str:
-        """Estima esfuerzo de implementación"""
-        if viability < 40:
-            return "infeasible"
-        elif viability < 60:
-            return "high"
-        elif viability < 75:
-            return "medium"
+    if dims["datos"] < 40:
+        msg = f"Muy pocas filas ({dataset_report.n_rows}) — se recomienda un mínimo de 300 para entrenar con confianza."
+        (blocking_issues if not is_viable else suggestions).append(msg)
+    if dims["calidad"] < 50:
+        msg = f"Calidad general del dataset baja ({dataset_report.overall_quality:.0f}/100) — revisa NaN, outliers y multicolinealidad (ver reporte de Dataset Analyzer)."
+        (blocking_issues if not is_viable else suggestions).append(msg)
+    if dims["balance"] < 50:
+        msg = "El target está muy desbalanceado — considera SMOTE, undersampling, o ajustar el umbral de decisión."
+        (blocking_issues if not is_viable else suggestions).append(msg)
+    if dims["senal"] < 40:
+        msg = "Ninguna feature muestra correlación fuerte con el target — la señal predictiva es débil, considera agregar features nuevas o revisar la hipótesis."
+        (blocking_issues if not is_viable else suggestions).append(msg)
+    if dims["horizonte"] < 60:
+        if not problem_spec.horizon:
+            suggestions.append("El horizonte temporal no fue especificado — se recomienda indicarlo explícitamente (ej. '10 velas', '3 meses').")
         else:
-            return "low"
+            suggestions.append(f"El horizonte '{problem_spec.horizon}' no está bien alineado con el dominio '{problem_spec.domain}' — revisa si es razonable dada la granularidad del dataset.")
+    if not blocking_issues and viability < VIABILITY_THRESHOLD:
+        blocking_issues.append("La combinación de factores (datos + calidad + señal) no alcanza el umbral mínimo de viabilidad (40/100).")
+
+    return FeasibilityReport(
+        ok=True,
+        problem_type=problem_spec.problem_type,
+        domain=problem_spec.domain,
+        target_variable=resolved_target,
+        dimension_scores=dims,
+        viability_index=viability,
+        is_viable=is_viable,
+        verdict=verdict,
+        blocking_issues=blocking_issues,
+        suggestions=suggestions,
+    )
 
 
-# ═══════════════════════════════════════════════════════════════════════
-#  FUNCIONES DE CONVENIENCIA
-# ═══════════════════════════════════════════════════════════════════════
+def assess_feasibility(csv_path: str, idea: str, target_variable: Optional[str] = None) -> FeasibilityReport:
+    """
+    Punto de entrada de alto nivel: idea en lenguaje natural + CSV -> viabilidad.
+    Encadena internamente prompt_analyzer -> dataset_analyzer -> feasibility scoring.
+    """
+    problem_spec = analyze_prompt(idea)
+    dataset_report = analyze_dataset(
+        csv_path,
+        target_variable=target_variable,
+        problem_spec=problem_spec,
+    )
+    return assess_feasibility_from(problem_spec, dataset_report)
 
-_engine = None
 
-def get_engine() -> FeasibilityEngine:
-    global _engine
-    if _engine is None:
-        _engine = FeasibilityEngine()
-    return _engine
-
-
-def calculate_feasibility(
-    csv_path: str,
-    problem_spec: ProblemSpec,
-) -> FeasibilityScore:
-    """Calcula viabilidad de un proyecto predictivo"""
-    return get_engine().assess(csv_path, problem_spec)
+def cmd_lab_viabilidad(csv_path: str, idea: str, target_variable=None) -> str:
+    """Comando CLI: 'lab viabilidad <csv> \"<idea>\" [target]' — para wiring en main.py.
+    target_variable es opcional: úsalo cuando el nombre de la columna objetivo
+    no se pueda inferir de la idea ni por heurística de nombres de columna."""
+    if not csv_path or not idea:
+        return 'Uso: lab viabilidad <archivo.csv> "<describe tu idea>" [columna_target]'
+    report = assess_feasibility(csv_path, idea, target_variable=target_variable)
+    return report.summary()
