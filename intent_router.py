@@ -193,6 +193,24 @@ INTENT_PATTERNS = {
         "combined signal",
     ],
 
+    # ── Fase 5: Prediction Lab ─────────────────────────────
+    "lab_analiza": [
+        "lab analiza",
+        "analiza mi idea",
+        "prediction lab",
+        "lab dataset",
+        "lab viabilidad",
+        "lab planea",
+        "lab genera",
+        "lab valida",
+        "lab modelos",
+        "lab generar",
+        "lab entrenar",
+        "lab comparar",
+        "lab reporte",
+        "lab proyectos",
+    ],
+
 
     
     "audio_analysis": [

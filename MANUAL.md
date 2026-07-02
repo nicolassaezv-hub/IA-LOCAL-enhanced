@@ -889,7 +889,7 @@ Devuelve la decisión final con desglose de ambos componentes:
 
 ---
 
-## PARTE 9 — Predicción Forex para Inversión Real (Guía Paso a Paso)
+## PARTE 13 — Predicción Forex para Inversión Real (Guía Paso a Paso)
 
 > Esta sección cubre el flujo completo recomendado para usar ASTRA en trading real,
 > incluyendo todos los controles de riesgo. Sigue los pasos en orden y no saltes ninguno.
@@ -1338,3 +1338,184 @@ y 90+ días de demo positivos, es candidato para trading real con capital peque�
 ---
 
 *Parte 9 añadida el 30 de junio de 2026 — ASTRA v3.0 (Risk Management integrado)*
+
+## PARTE 14 — PREDICTION LAB (FASE 5, COMPLETA)
+
+Sistema que toma una idea en lenguaje natural + un CSV y evalúa si se puede
+construir un predictor útil, antes de invertir tiempo entrenando modelos.
+Estado actual: 7 de 7 módulos construidos, probados end-to-end con datos
+reales (COTTON) e integrados a `main.py`. Los resultados de `lab valida` se
+persisten como JSON en `lab_reports/` y se consultan con 5.7 (abajo).
+
+### 5.1 — Analizar una idea
+```
+lab analiza "quiero predecir si el precio sube o baja en las próximas 10 velas usando RSI y MACD"
+```
+Extrae un `ProblemSpec`: tipo de problema, dominio, variable objetivo,
+features candidatas, horizonte, tipo de salida esperada. Usa LLM
+(Groq/Llama) si hay API key; si no, cae a un heurístico por keywords/regex.
+
+### 5.2 — Analizar un dataset
+```
+lab dataset ruta/al/archivo.csv [target_variable]
+```
+Analiza el CSV en profundidad: filas/columnas, % de NaN, balance del
+target, correlaciones, multicolinealidad (VIF), outliers, skew/kurtosis.
+Devuelve un score de calidad 0-100 por 6 dimensiones. Si no se especifica
+`target_variable`, intenta detectarlo por nombre común (target, label,
+churn, signal, etc.) y lo valida contra las columnas reales del CSV.
+
+### 5.3 — Evaluar viabilidad ⭐
+```
+lab viabilidad ruta/al/archivo.csv "describe tu idea aquí"
+```
+Componente central: encadena 5.1 + 5.2 y calcula un Índice de Viabilidad
+0-100 (datos 25%, calidad 20%, balance 15%, señal 20%, complejidad 10%,
+horizonte 10%). Si no se puede identificar un target real, fuerza
+viabilidad = 0 y "NO VIABLE" — nunca reporta un score calculado sobre
+datos inexistentes. Umbral de viabilidad: 40/100.
+
+### 5.4 — Generar plan de modelo
+```
+lab planea ruta/al/archivo.csv "describe tu idea aquí"
+```
+Encadena 5.1 + 5.2 + 5.3 y, si la viabilidad alcanza el umbral, genera un
+plan concreto: qué algoritmos usar (XGBoost/LightGBM/RandomForest/baseline,
+según tamaño del dataset y tipo de problema), qué features crear/imputar/
+codificar/descartar, qué estrategia de validación aplicar (walk-forward
+para series de tiempo/forex, k-fold o holdout según el tamaño), si conviene
+SMOTE (balance <55) y calibración. Si el dominio es forex o business,
+señala explícitamente que ya existe un pipeline propio (`forex/prediction/`
+o `forex/business/`) antes de sugerir construir uno nuevo desde cero. Si la
+viabilidad es insuficiente, no genera plan — explica el motivo.
+
+### 5.5 — Generar pipeline ejecutable
+```
+lab genera ruta/al/archivo.csv "describe tu idea aquí"
+```
+Encadena 5.1-5.4 y, si el plan es válido, construye un `sklearn.Pipeline`
+real y ejecutable (`ColumnTransformer` con imputación numérica/categórica +
+OneHotEncoder + el ensemble de algoritmos del plan vía Voting), más el
+código Python equivalente para copiar y correr fuera del CLI. Si falta
+xgboost/lightgbm, sustituye por un equivalente sklearn del mismo tipo de
+problema (nunca cambia classifier↔regressor) y lo deja registrado en las
+notas — nunca en silencio. Si el tipo de problema no quedó claro en la
+idea, se infiere del target real del dataset (numérico → regresión,
+categórico → clasificación) en vez de asumir clasificación por defecto.
+Las features de dominio sugeridas (RSI, lags, etc.) no se generan
+automáticamente — si el dominio es forex/business, recuerda reutilizar
+los módulos de feature engineering ya existentes.
+
+
+### 5.6 — Entrenar y validar (score real)
+```
+lab valida ruta/al/archivo.csv "describe tu idea aquí"
+```
+Encadena 5.1-5.5 y entrena de verdad el pipeline con la estrategia que
+definió el Model Planner: holdout, k-fold (con StratifiedKFold si aplica),
+o walk-forward con purge gap para forex/timeseries (ventana/step se
+adaptan al tamaño real del dataset, se degrada solo si es muy chico).
+Aplica SMOTE si el plan lo indica (con fallback si `imblearn` no está
+instalado). Reporta score medio ± desviación entre folds, veredicto
+PASA/NO PASA contra la métrica mínima esperada, y las features más
+importantes (alineadas correctamente incluso con columnas one-hot
+expandidas). Para regresión, el veredicto usa R² (0-1, comparable con
+clasificación) en vez de una métrica derivada de RMSE que dependía de la
+magnitud absoluta del target.
+
+### 5.7 — Generar reporte final y consultar proyectos
+```
+lab reporte ruta/al/archivo.csv "describe tu idea aquí" [target_variable]
+lab proyectos
+lab info proyecto <nombre_o_id>
+```
+`lab reporte` encadena 5.1-5.6 completo y arma un reporte final PASA/NO
+PASA con el veredicto, el score real de validación, las features más
+importantes y una recomendación (desplegar / reentrenar / descartar). Se
+guarda automáticamente como JSON en `lab_reports/`. `lab proyectos` lista
+todos los reportes generados hasta ahora (uno por corrida). `lab info
+proyecto <nombre>` muestra el detalle completo de un reporte guardado.
+Los 5 comandos `lab` (viabilidad/planea/genera/valida/reporte) aceptan un
+`target_variable` explícito opcional al final del comando — si no se
+especifica, se usa la misma heurística de detección de 5.2.
+
+---
+
+## PARTE 15 — FEEDBACK SYSTEM (FASE 6, COMPLETA)
+
+Sistema de retroalimentación humana sobre señales y modelos: permite votar
+si una señal fue acertada o no, analiza el patrón de aprobación por par/
+componente, ajusta umbrales de confianza/ADX de forma adaptativa según ese
+feedback, y guarda una capa de "memoria contextual" con lo aprendido.
+Todo se persiste en `memoria.db` (misma DB que usa el resto de ASTRA).
+
+```
+feedback votar <target_id> <voto>      # voto: 1 (acierto) o -1 (fallo)
+feedback ver <target_id>               # historial de votos de una señal/componente
+feedback analisis                      # patrón de aprobación agregado por componente
+feedback dashboard                     # resumen visual del estado del feedback
+thresholds ver                         # umbrales de confianza/ADX actuales por par
+contextual memoria                     # qué ha "aprendido" el sistema del feedback reciente
+```
+
+> **Nota importante:** los umbrales que ajusta `thresholds` (Fase 6) todavía
+> NO son leídos por el predictor real (`forex/prediction/predictor.py` usa
+> siempre `MIN_CONFIDENCE=0.65`/`MIN_ADX=22.0` fijos). Por ahora esta capa
+> es de seguimiento/aprendizaje y alimenta las propuestas de Fase 7 — la
+> conexión directa con el predictor queda pendiente para una fase futura.
+
+Al terminar cada `full forex`, el sistema imprime `Signal ID: <PAR>_<id>` —
+ese es el ID que se usa en `feedback votar <id> <voto>`.
+
+---
+
+## PARTE 16 — EVOLUTION ENGINE (FASE 7, COMPLETA)
+
+Motor que analiza el estado del sistema (feedback, modelos, señales) y
+detecta oportunidades de mejora reales (reentrenar un par con pocos datos,
+ajustar umbrales de un componente con feedback consistente, etc.), las
+convierte en propuestas concretas, y las aplica cuando corresponde.
+
+```
+monitor snapshot                       # estado actual: señales, modelos, feedback
+monitor historial [n]                  # snapshots anteriores
+mejoras detectar                       # detecta oportunidades de mejora sin generar propuestas
+evolucionar                            # detecta oportunidades Y genera propuestas formales
+propuestas ver [status]                # lista propuestas (pending/approved/rejected/applied)
+propuesta aplicar <id>                 # aplica una propuesta ya aprobada
+```
+`propuesta aprobar <id>` y `propuesta rechazar <id>` viven ahora en la
+Parte 17 (Constitution) — el aprobar de Fase 7 fue reemplazado por el
+flujo constitucional real.
+
+El feedback de un par específico (ej. EURUSD) solo mueve los umbrales de
+ESE par — nunca se mezcla con el de otros pares/commodities.
+
+---
+
+## PARTE 17 — CONSTITUTION ENGINE (FASE 8, COMPLETA)
+
+Capa de gobernanza sobre la Fase 7: ninguna propuesta de ajuste de
+umbrales se aplica sin pasar antes por reglas constitucionales duras
+(ej. nunca por debajo de 65% de confianza o ADX 22, alineado con los
+valores reales del predictor de producción). Cada aprobación crea un
+punto de restauración (rollback point) automático, y toda decisión queda
+en un registro de auditoría inmutable.
+
+```
+reglas ver                             # las 7 reglas constitucionales activas
+propuesta validar <id>                 # vista previa: valida una propuesta sin aprobarla
+propuesta aprobar <id>                 # valida + aprueba + crea rollback point automático
+propuesta rechazar <id>                # rechaza una propuesta pendiente
+audit ver [n]                          # historial de decisiones (aprobar/rechazar/bloquear)
+rollback ver                           # lista los rollback points disponibles
+rollback aplicar <id>                  # restaura los umbrales de un par a un punto anterior
+```
+
+Si un ajuste de umbral (Fase 6/7) intentaría bajar la confianza o el ADX
+por debajo del mínimo constitucional, `propuesta aplicar <id>` lo
+**bloquea automáticamente** (queda como `rejected` con el motivo exacto)
+en vez de aplicarlo silenciosamente — esto es lo que impide que el
+sistema se auto-debilite con el tiempo.
+
+---

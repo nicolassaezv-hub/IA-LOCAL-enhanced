@@ -28,6 +28,45 @@ from news_intelligence import (
     cmd_news, cmd_news_predict
 )
 
+from prediction_lab.prompt_analyzer import cmd_lab_analiza
+from prediction_lab.dataset_analyzer import cmd_lab_dataset
+from prediction_lab.feasibility_engine import cmd_lab_viabilidad
+from prediction_lab.model_planner import cmd_lab_planea
+from prediction_lab.pipeline_generator import cmd_lab_genera
+from prediction_lab.validation_engine import cmd_lab_valida
+from prediction_lab.report_generator import cmd_lab_reporte, cmd_lab_proyectos, cmd_lab_info_proyecto
+from feedback import (
+    cmd_feedback_votar, cmd_feedback_ver, cmd_feedback_analisis, cmd_feedback_dashboard,
+    cmd_thresholds_ver, cmd_contextual_memory, cmd_evolution_history,
+)
+from evolution import (
+    cmd_monitor_snapshot, cmd_monitor_historial,
+    cmd_mejoras_detectar, cmd_evolucionar,
+    cmd_proposals_ver, cmd_aplicar_propuesta,
+)
+# Fase 8 (Constitucion): reemplaza el aprobar/rechazar "ciego" de Fase 7 por un
+# flujo que valida contra reglas constitucionales y crea un rollback point real
+# antes de aprobar. cmd_aprobar_propuesta/cmd_rechazar_propuesta de evolution/
+# quedan sin usar (se conservan ahi por compatibilidad de imports internos).
+from constitution import (
+    cmd_aprobar_propuesta, cmd_rechazar_propuesta,
+    cmd_reglas_ver, cmd_validar_propuesta, cmd_audit_log,
+    cmd_rollback_ver, cmd_rollback_aplicar,
+)
+import re as _re_lab
+
+
+def _parse_lab_args(rest: str):
+    """Parsea 'lab <sub> <csv> "<idea>" [target_col]' -> (csv_path, idea, target_variable|None).
+    El target es opcional: cuando el dataset no permite inferir la columna
+    objetivo por heurística de nombres, se puede pasar explícito al final."""
+    rest = rest.strip()
+    m = _re_lab.match(r'^(\S+)\s+["\'](.+?)["\'](?:\s+(\S+))?\s*$', rest)
+    if not m:
+        return None, None, None
+    csv_path, idea, target = m.group(1), m.group(2), m.group(3)
+    return csv_path, idea, target
+
 
 
 from io_files import leer_pdf, leer_word, leer_excel, leer_csv, escribe_pdf, escribe_word, escribe_excel, escribe_csv
@@ -49,7 +88,8 @@ from forex.market_universe import (
     normalize_symbol, is_supported_market, get_market_type
 )
 from forex_analytics import analyze_market_file, market_history, compare_market_history
-from forex.forex_memory import list_saved_markets
+from forex.forex_memory import list_saved_markets, save_analysis
+from forex.forex_report import ForexReport
 
 # ── Business Intelligence imports ───────────────────────────
 from forex.business.business_pipeline import BusinessPipeline
@@ -285,6 +325,55 @@ def _resolve_mtf_paths(csv_h1: str):
     return path_h4, path_d1
 
 
+def _register_analyzed_market(pair: str, train_r: dict, pred_r: dict, back_r: dict) -> None:
+    """
+    Registra el par/commodity en 'mercados analizados' (forex_memory) usando
+    UNICAMENTE datos reales ya calculados por el pipeline (nada inventado).
+    Se llama automaticamente al final de 'full forex' para que CUALQUIER
+    par/commodity de market_universe quede registrado tras su primer analisis.
+    """
+    try:
+        action   = pred_r.get("action", "HOLD") if isinstance(pred_r, dict) else "HOLD"
+        trend    = {"BUY": "alcista", "SELL": "bajista", "HOLD": "neutral"}.get(action, "neutral")
+        conf     = float(pred_r.get("confidence", 0) or 0) if isinstance(pred_r, dict) else 0.0
+        adx      = pred_r.get("adx", 0) if isinstance(pred_r, dict) else 0
+        regime   = pred_r.get("regime", "unknown") if isinstance(pred_r, dict) else "unknown"
+        strength = pred_r.get("signal_strength", 0) if isinstance(pred_r, dict) else 0
+
+        acc  = train_r.get("accuracy", 0) if isinstance(train_r, dict) else 0
+        prec = train_r.get("precision", 0) if isinstance(train_r, dict) else 0
+        rows = train_r.get("rows", 0) if isinstance(train_r, dict) else 0
+        wfv  = train_r.get("wfv", {}) if isinstance(train_r, dict) else {}
+
+        trades = back_r.get("total_trades", 0) if isinstance(back_r, dict) else 0
+        wr     = back_r.get("win_rate", 0) if isinstance(back_r, dict) else 0
+        pf     = back_r.get("profit_factor", 0) if isinstance(back_r, dict) else 0
+
+        technical = (f"ADX={adx:.1f}  Regimen={regime}  Fuerza señal={strength:.1f}/100  "
+                     f"Filas entrenamiento={rows}")
+        summary = (f"Modelo entrenado con accuracy={acc:.2%}, precision={prec:.2%} "
+                   f"(WFV avg={wfv.get('avg_precision', 0):.2%}). "
+                   f"Backtest: {trades} trades, win rate={wr:.1%}, profit factor={pf:.2f}. "
+                   f"Última señal: {action} (confianza {conf:.2f}).")
+
+        report = ForexReport(
+            symbol=pair,
+            market_type=get_market_type(pair),
+            trend=trend,
+            confidence=conf,
+            technical_analysis=technical,
+            ai_summary=summary,
+            source="full_forex_pipeline",
+            metadata={"accuracy": acc, "precision": prec, "rows": rows,
+                      "wfv_avg_precision": wfv.get("avg_precision", 0),
+                      "backtest_trades": trades, "backtest_win_rate": wr,
+                      "backtest_profit_factor": pf},
+        )
+        save_analysis(report)
+    except Exception:
+        pass
+
+
 def _forex_full(csv_path: str):
     """
     Pipeline completo: tune -> train -> predict -> backtest.
@@ -345,12 +434,20 @@ def _forex_full(csv_path: str):
     # ── 3/4 PREDICT ───────────────────────────────────────────
     print(Fore.YELLOW + "\n[3/4] Generando senal de la ultima vela..." + Style.RESET_ALL)
     pred_r = pipeline.predict(csv_path, path_h4=path_h4, path_d1=path_d1)
+    signal_id = None
     if isinstance(pred_r, dict) and "error" not in pred_r:
         try:
-            save_signal(pred_r, csv_path)
+            # BUGFIX: el id real de la señal (fila de forex_signals) se
+            # descartaba silenciosamente — sin él el usuario no tenía forma
+            # de referenciar esta señal específica para votar feedback después.
+            signal_id = save_signal(pred_r, csv_path)
         except Exception:
             pass
         print(_format_signal(pred_r))
+        if signal_id is not None:
+            pair_clean = (pred_r.get("pair") or "UNKNOWN").upper().replace("/", "").replace("_", "")
+            fb_target = f"{pair_clean}_{signal_id}"
+            print(f"  Signal ID  : {fb_target}   (usa 'feedback votar {fb_target} 1|-1' para calificarla)")
     else:
         print(pred_r)
 
@@ -367,6 +464,12 @@ def _forex_full(csv_path: str):
         print(Fore.YELLOW + f"     Backtest: {back_r.get('error','?')}" + Style.RESET_ALL)
     else:
         print(back_r)
+
+    # Registrar el mercado en 'mercados analizados' con datos reales del pipeline
+    pair_for_registry = (train_r.get("pair") if isinstance(train_r, dict) else None) or csv_path
+    _register_analyzed_market(pair_for_registry, train_r if isinstance(train_r, dict) else {},
+                               pred_r if isinstance(pred_r, dict) else {},
+                               back_r if isinstance(back_r, dict) else {})
 
     print()
     print(Fore.GREEN + "[ASTRA] ══ FULL PIPELINE COMPLETADO ══" + Style.RESET_ALL)
@@ -545,6 +648,43 @@ def _ayuda():
   cifra archivo <path>           Encrypt a file with Fernet
   paramiko demo                  SSH client demo
 
+{Fore.CYAN}── PREDICTION LAB (FASE 5) ────────────────────────────────────{Style.RESET_ALL}
+  lab analiza "<idea>"           Extrae ProblemSpec de una idea en lenguaje natural
+  lab dataset <csv> [target]     Analiza un CSV en profundidad (calidad, señal, VIF)
+  lab viabilidad <csv> "<idea>"  Índice de Viabilidad 0-100 (¿vale la pena construir esto?)
+  lab planea <csv> "<idea>"      Plan de modelo: algoritmos, features, validación
+  lab genera <csv> "<idea>"      Construye el sklearn Pipeline ejecutable + código
+  lab valida <csv> "<idea>"      Entrena y valida (holdout/kfold/WFV) — score real
+  lab reporte <csv> "<idea>"     Corre TODO 5.1->5.6 y compila+guarda el reporte final
+  lab proyectos                  Lista todos los reportes del Lab guardados
+  lab info proyecto <n|nombre>   Detalle completo de un reporte guardado
+
+{Fore.CYAN}── FEEDBACK Y APRENDIZAJE (FASE 6) ────────────────────────────{Style.RESET_ALL}
+  feedback votar <id> <1|-1> [comentario]   Vota si una señal/predicción fue correcta
+  feedback ver <id>               Ver todo el feedback registrado para un target
+  feedback analisis                Patrones agregados: aprobación, tendencia, insights
+  feedback dashboard               Panel completo: feedback + umbrales + contextos + evolución
+  thresholds ver                   Umbrales adaptativos de confianza/ADX por par
+  contextual memoria                Tasa de éxito por contexto de mercado guardado
+  evolucion historial [n]          Historial de eventos de auto-ajuste del sistema
+
+{Fore.CYAN}── MOTOR DE EVOLUCIÓN (FASE 7) ─────────────────────────────────{Style.RESET_ALL}
+  monitor snapshot                 Toma una foto del rendimiento actual del sistema
+  monitor historial [n]            Historial de snapshots + tendencia general
+  mejoras detectar                 Detecta oportunidades de mejora (retrain, umbrales, etc.)
+  evolucionar                      Detecta mejoras y genera propuestas concretas
+  propuestas ver [status]           Lista propuestas (pending/approved/applied/rejected)
+  propuesta aprobar <id>            Valida contra la constitucion y aprueba (crea rollback point)
+  propuesta rechazar <id>           Rechaza una propuesta pendiente
+  propuesta aplicar <id>            Aplica una propuesta aprobada (auto o instrucción manual)
+
+{Fore.CYAN}── CONSTITUCION (FASE 8) ───────────────────────────────────────{Style.RESET_ALL}
+  reglas ver                        Lista las reglas constitucionales (limites duros del sistema)
+  propuesta validar <id>            Vista previa: valida una propuesta contra la constitucion
+  audit ver [n]                     Historial de decisiones (aprobaciones, rechazos, bloqueos)
+  rollback ver                      Lista los puntos de rollback disponibles
+  rollback aplicar <id>             Restaura umbrales de un par a un rollback point anterior
+
 {Fore.CYAN}── SYSTEM & UTILS ─────────────────────────────────────────────{Style.RESET_ALL}
   estado pc                      CPU + RAM usage
   barra progreso                 Animated progress bar demo
@@ -559,6 +699,141 @@ def _ayuda():
   rich <text>                    Rich-formatted text output
   crear pdf <path> <text>        Create PDF via ReportLab
   imagen                         Scikit-image edge detection demo
+
+            # ── PREDICTION LAB (FASE 5) ───────────────────────────
+            elif user_input.lower().startswith("lab analiza "):
+                _idea = user_input[12:].strip().strip('"').strip("'")
+                respuesta = cmd_lab_analiza(_idea)
+
+            elif user_input.lower().startswith("lab dataset "):
+                _parts_ds = user_input[12:].strip().split()
+                if len(_parts_ds) >= 2:
+                    respuesta = cmd_lab_dataset(_parts_ds[0], _parts_ds[1])
+                elif len(_parts_ds) == 1:
+                    respuesta = cmd_lab_dataset(_parts_ds[0])
+                else:
+                    respuesta = "Uso: lab dataset <archivo.csv> [target_variable]"
+
+            elif user_input.lower().startswith("lab viabilidad "):
+                _csv_v, _idea_v, _tgt_v = _parse_lab_args(user_input[15:])
+                if _csv_v:
+                    respuesta = cmd_lab_viabilidad(_csv_v, _idea_v, target_variable=_tgt_v)
+                else:
+                    respuesta = 'Uso: lab viabilidad <archivo.csv> "<describe tu idea>" [columna_target]'
+
+            elif user_input.lower().startswith("lab planea "):
+                _csv_p, _idea_p, _tgt_p = _parse_lab_args(user_input[11:])
+                if _csv_p:
+                    respuesta = cmd_lab_planea(_csv_p, _idea_p, target_variable=_tgt_p)
+                else:
+                    respuesta = 'Uso: lab planea <archivo.csv> "<describe tu idea>" [columna_target]'
+
+            elif user_input.lower().startswith("lab genera "):
+                _csv_g, _idea_g, _tgt_g = _parse_lab_args(user_input[11:])
+                if _csv_g:
+                    respuesta = cmd_lab_genera(_csv_g, _idea_g, target_variable=_tgt_g)
+                else:
+                    respuesta = 'Uso: lab genera <archivo.csv> "<describe tu idea>" [columna_target]'
+
+            elif user_input.lower().startswith("lab valida "):
+                _csv_val, _idea_val, _tgt_val = _parse_lab_args(user_input[11:])
+                if _csv_val:
+                    respuesta = cmd_lab_valida(_csv_val, _idea_val, target_variable=_tgt_val)
+                else:
+                    respuesta = 'Uso: lab valida <archivo.csv> "<describe tu idea>" [columna_target]'
+
+            elif user_input.lower().startswith("lab reporte "):
+                _csv_r, _idea_r, _tgt_r = _parse_lab_args(user_input[12:])
+                if _csv_r:
+                    respuesta = cmd_lab_reporte(_csv_r, _idea_r, target_variable=_tgt_r)
+                else:
+                    respuesta = 'Uso: lab reporte <archivo.csv> "<describe tu idea>" [columna_target]'
+
+            elif user_input.lower().strip() == "lab proyectos":
+                respuesta = cmd_lab_proyectos()
+
+            elif user_input.lower().startswith("lab info proyecto "):
+                _ident = user_input[19:].strip()
+                respuesta = cmd_lab_info_proyecto(_ident) if _ident else "Uso: lab info proyecto <numero|nombre>"
+
+            elif user_input.lower().startswith("feedback votar "):
+                _rest_fv = user_input[15:].strip().split(None, 2)
+                if len(_rest_fv) >= 2:
+                    _tid, _vote = _rest_fv[0], _rest_fv[1]
+                    _comment = _rest_fv[2].strip().strip('"').strip("'") if len(_rest_fv) == 3 else ""
+                    respuesta = cmd_feedback_votar(_tid, _vote, _comment)
+                else:
+                    respuesta = 'Uso: feedback votar <id> <1|-1> ["comentario"]'
+
+            elif user_input.lower().startswith("feedback ver "):
+                _tid_v = user_input[13:].strip()
+                respuesta = cmd_feedback_ver(_tid_v) if _tid_v else "Uso: feedback ver <id>"
+
+            elif user_input.lower().strip() == "feedback analisis":
+                respuesta = cmd_feedback_analisis()
+
+            elif user_input.lower().strip() == "feedback dashboard":
+                respuesta = cmd_feedback_dashboard()
+
+            elif user_input.lower().strip() == "thresholds ver":
+                respuesta = cmd_thresholds_ver()
+
+            elif user_input.lower().strip() == "contextual memoria":
+                respuesta = cmd_contextual_memory()
+
+            elif user_input.lower().startswith("evolucion historial"):
+                _rest_eh = user_input[20:].strip()
+                _limit_eh = int(_rest_eh) if _rest_eh.isdigit() else 10
+                respuesta = cmd_evolution_history(_limit_eh)
+
+            elif user_input.lower().strip() == "monitor snapshot":
+                respuesta = cmd_monitor_snapshot()
+
+            elif user_input.lower().startswith("monitor historial"):
+                _rest_mh = user_input[18:].strip()
+                _limit_mh = int(_rest_mh) if _rest_mh.isdigit() else 10
+                respuesta = cmd_monitor_historial(_limit_mh)
+
+            elif user_input.lower().strip() == "mejoras detectar":
+                respuesta = cmd_mejoras_detectar()
+
+            elif user_input.lower().strip() == "evolucionar":
+                respuesta = cmd_evolucionar(False)
+
+            elif user_input.lower().startswith("propuestas ver"):
+                _rest_pv = user_input[14:].strip()
+                respuesta = cmd_proposals_ver(_rest_pv if _rest_pv else None)
+
+            elif user_input.lower().startswith("propuesta aprobar "):
+                _pid_ap = user_input[18:].strip()
+                respuesta = cmd_aprobar_propuesta(_pid_ap) if _pid_ap else "Uso: propuesta aprobar <id>"
+
+            elif user_input.lower().startswith("propuesta rechazar "):
+                _pid_rj = user_input[19:].strip()
+                respuesta = cmd_rechazar_propuesta(_pid_rj) if _pid_rj else "Uso: propuesta rechazar <id>"
+
+            elif user_input.lower().startswith("propuesta aplicar "):
+                _pid_apl = user_input[18:].strip()
+                respuesta = cmd_aplicar_propuesta(_pid_apl) if _pid_apl else "Uso: propuesta aplicar <id>"
+
+            elif user_input.lower().strip() == "reglas ver":
+                respuesta = cmd_reglas_ver()
+
+            elif user_input.lower().startswith("propuesta validar "):
+                _pid_val = user_input[18:].strip()
+                respuesta = cmd_validar_propuesta(_pid_val) if _pid_val else "Uso: propuesta validar <id>"
+
+            elif user_input.lower().startswith("audit ver"):
+                _rest_av = user_input[9:].strip()
+                _limit_av = int(_rest_av) if _rest_av.isdigit() else 20
+                respuesta = cmd_audit_log(_limit_av)
+
+            elif user_input.lower().strip() == "rollback ver":
+                respuesta = cmd_rollback_ver()
+
+            elif user_input.lower().startswith("rollback aplicar "):
+                _pid_rb = user_input[17:].strip()
+                respuesta = cmd_rollback_aplicar(_pid_rb) if _pid_rb else "Uso: rollback aplicar <id>"
 
             # ── NEWS INTELLIGENCE (FASE 4) ───────────────────────
             elif user_input.lower().startswith("noticias predice "):

@@ -218,6 +218,13 @@ from news_intelligence import (
     cmd_news_predict,
 )
 
+from prediction_lab.prompt_analyzer import analyze_prompt, cmd_lab_analiza
+from prediction_lab.dataset_analyzer import analyze_dataset, cmd_lab_dataset
+from prediction_lab.feasibility_engine import assess_feasibility, cmd_lab_viabilidad
+from prediction_lab.model_planner import plan_model, cmd_lab_planea
+from prediction_lab.pipeline_generator import generate_pipeline, cmd_lab_genera
+from prediction_lab.validation_engine import validate_pipeline, cmd_lab_valida
+
 TOOLS = {
     # ---------- SELF ANALYSIS --------- #
     "self_analysis": generate_self_analysis,
@@ -356,6 +363,19 @@ TOOLS = {
     "news_cmd":                cmd_news,
     "news_predict_cmd":        cmd_news_predict,
 
+    # ── Prediction Lab (Fase 5) ─────────────────────────
+    "lab_analyze_prompt":      analyze_prompt,
+    "lab_analiza_cmd":         cmd_lab_analiza,
+    "lab_analyze_dataset":     analyze_dataset,
+    "lab_dataset_cmd":         cmd_lab_dataset,
+    "lab_assess_feasibility":  assess_feasibility,
+    "lab_viabilidad_cmd":      cmd_lab_viabilidad,
+    "lab_plan_model":          plan_model,
+    "lab_planea_cmd":          cmd_lab_planea,
+    "lab_generate_pipeline":   generate_pipeline,
+    "lab_genera_cmd":          cmd_lab_genera,
+    "lab_validate_pipeline":   validate_pipeline,
+    "lab_valida_cmd":          cmd_lab_valida,
 
 }
 

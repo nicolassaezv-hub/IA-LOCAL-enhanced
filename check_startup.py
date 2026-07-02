@@ -309,7 +309,10 @@ def phase5_smoke():
     try:
         from forex.market_universe import find_market, normalize_symbol, get_all_forex_pairs
         assert find_market("eurusd") == "EUR/USD", "find_market eurusd mismatch"
-        assert find_market("bitcoin") is None, "find_market should return None for unsupported"
+        # BUGFIX: "bitcoin" se agrego como mercado soportado (BTC/USD) en una fase
+        # anterior — el test seguia asumiendo que era un texto no soportado y por eso
+        # este smoke test fallaba siempre (falso positivo, nada roto en el pipeline real).
+        assert find_market("notarealmarket123") is None, "find_market should return None for unsupported"
         assert len(get_all_forex_pairs()) > 30, "Too few pairs"
         _ok("forex.market_universe: find_market, normalize_symbol, get_all_forex_pairs work")
     except Exception as e:
