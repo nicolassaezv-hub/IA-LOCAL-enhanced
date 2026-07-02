@@ -8,7 +8,7 @@
 
 - Usa Base44 para ir completando las ramificaciones/partes del proyecto, de no estar disponible pasa luego a Github Copilot y Replit (ve turnandote como lo veas a tu gusto)
 
-- Para comprobaciones de calidad o estetica consulta con ChatGPT
+- Para comprobaciones de calidad de usuario (XUA) o estetica consulta con ChatGPT
 
 ## Informacion General
 
@@ -42,7 +42,7 @@ Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 
 # Estructura
 
-Esta IA Local se compone de mas de 20 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
+Esta IA Local se compone de mas de 40 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
 El programa puente (main.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
 
 Se incluyen dos codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python.
@@ -58,6 +58,7 @@ El nucleo del esqueleto organiza las entradas del usuario y repone todo en una f
 
 <details>
 <summary>Ver comandos</summary>
+
 
 - `aiohttp demo`    
 - `analiza audio [nombre_archivo]`
