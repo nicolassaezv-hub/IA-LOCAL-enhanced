@@ -1519,3 +1519,50 @@ en vez de aplicarlo silenciosamente — esto es lo que impide que el
 sistema se auto-debilite con el tiempo.
 
 ---
+
+## PARTE 18 — CICLO EVOLUTIVO COMPLETO (FASE 9, COMPLETA)
+
+Orquesta en un solo comando las Fases 6, 7 y 8: monitorea el rendimiento del
+sistema, detecta oportunidades de mejora, genera propuestas, las valida
+contra la constitución, las aprueba o rechaza, ajusta umbrales de feedback
+y registra todo en el audit log — de punta a punta, sin intervención manual
+paso a paso.
+
+```
+evolucionar ciclo                # ciclo completo, sin auto-aprobar ajustes menores
+evolucionar ciclo auto           # igual, pero auto-aprueba ajustes menores de umbral
+salud sistema                    # reporte combinado: snapshot + propuestas + audit log
+```
+
+**Flujo interno de `evolucionar ciclo`:**
+
+```
+monitor snapshot (toma foto del estado actual)
+      ↓
+detecta oportunidades de mejora (Fase 7)
+      ↓
+genera propuestas concretas
+      ↓
+valida cada propuesta contra la constitución (Fase 8)
+      ↓
+aprueba o rechaza (con rollback point automático si aprueba)
+      ↓
+ajusta umbrales de feedback donde corresponda (Fase 6)
+      ↓
+registra todo en el audit log (Fase 8)
+```
+
+Probado de punta a punta con datos 100% reales de COTTON: `full forex`
+generó una señal real → se votó feedback real sobre ella → `evolucionar
+ciclo` detectó 1 oportunidad real, generó 1 propuesta, la validó y la
+aprobó → `salud sistema` confirmó el estado consistente (señales, modelos,
+pares activos, eventos evolutivos y entradas de audit log, todo cuadrando).
+
+Con esto, el roadmap de Fases 1 a 9 queda cerrado: ASTRA no solo predice y
+opera, sino que monitorea su propio rendimiento, propone sus propias
+mejoras, las valida contra reglas fijas y aprende de la aprobación/rechazo
+del usuario — el ciclo evolutivo autónomo completo.
+
+---
+
+*Parte 18 añadida el 3 de julio de 2026 — ASTRA Roadmap v4.0 completo (Fases 1–9) ✅*
