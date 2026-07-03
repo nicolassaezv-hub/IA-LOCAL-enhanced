@@ -1,0 +1,23 @@
+{
+    "symbol": "COTTON",
+    "market_type": "commodity",
+    "trend": "neutral",
+    "confidence": 0.5,
+    "technical_analysis": "ADX=22.6  Regimen=weak trend  Fuerza señal=51.6/100  Filas entrenamiento=5372",
+    "fundamental_analysis": "",
+    "support_levels": [],
+    "resistance_levels": [],
+    "news_items": [],
+    "ai_summary": "Modelo entrenado con accuracy=66.27%, precision=83.59% (WFV avg=88.76%). Backtest: 1074 trades, win rate=62.5%, profit factor=2.98. Última señal: HOLD (confianza 0.50).",
+    "source": "full_forex_pipeline",
+    "created_at": "2026-07-03T02:13:06.725398",
+    "metadata": {
+        "accuracy": 0.6627,
+        "precision": 0.8359,
+        "rows": 5372,
+        "wfv_avg_precision": 0.8876,
+        "backtest_trades": 1074,
+        "backtest_win_rate": 0.6248,
+        "backtest_profit_factor": 2.9807
+    }
+}
