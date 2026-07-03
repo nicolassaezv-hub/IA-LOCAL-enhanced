@@ -53,6 +53,9 @@ from constitution import (
     cmd_reglas_ver, cmd_validar_propuesta, cmd_audit_log,
     cmd_rollback_ver, cmd_rollback_aplicar,
 )
+# Fase 9 (Ciclo Evolutivo): orquesta monitor->detector->proposer->constitucion->
+# aprobacion->feedback->audit en un solo comando ('evolucionar ciclo').
+from evolutionary_cycle import cmd_ciclo_evolutivo, cmd_health_report
 import re as _re_lab
 
 
@@ -427,6 +430,19 @@ def _forex_full(csv_path: str):
         print(f"     Filas    : {rows}  |  Features: {train_r.get('features',0)} ({mtf_f} MTF)")
         print(f"     Accuracy : {acc:.2%}  |  Precision: {prec:.2%}  [{col}{'VALIDO' if valid else 'INVALIDO < 65%'}{Style.RESET_ALL}]")
         print(f"     WFV avg  : {wfv_p:.2%}  median: {wfv_m:.2%}  [{'OK' if wfv_ok else 'BAJO'}]")
+
+        # BUGFIX: si el WFV reprueba, train_with_wfv() ya no guarda el modelo
+        # (ver xgb_trainer.py). Sin esto, predict() caía al modelo "latest
+        # genérico" de OTRO par y mostraba una señal real pero con el modelo
+        # equivocado, sin avisar. Ahora se bloquea explícitamente aquí.
+        if wfv.get("model_deployed") is False:
+            print(Fore.RED + f"\n[BLOQUEADO] El modelo de {pair} reprobó Walk-Forward "
+                  f"Validation y NO fue guardado." + Style.RESET_ALL)
+            print(Fore.RED + f"            No se genera señal ni backtest — evita usar "
+                  f"por error el modelo genérico de otro par." + Style.RESET_ALL)
+            print(Fore.YELLOW + f"            Sugerencia: 'tune forex {csv_path}' para "
+                  f"optimizar hiperparámetros y reintenta 'full forex'." + Style.RESET_ALL)
+            return ""
     else:
         print(Fore.RED + f"     Entrenamiento fallo: {train_r}" + Style.RESET_ALL)
         return ""
@@ -673,6 +689,9 @@ def _ayuda():
   monitor historial [n]            Historial de snapshots + tendencia general
   mejoras detectar                 Detecta oportunidades de mejora (retrain, umbrales, etc.)
   evolucionar                      Detecta mejoras y genera propuestas concretas
+  evolucionar ciclo                Ciclo completo: monitor->detecta->propone->constitucion->feedback->audit
+  evolucionar ciclo auto           Igual, pero auto-aprueba ajustes menores de umbral
+  salud sistema                    Reporte de salud: snapshot + propuestas + audit log
   propuestas ver [status]           Lista propuestas (pending/approved/applied/rejected)
   propuesta aprobar <id>            Valida contra la constitucion y aprueba (crea rollback point)
   propuesta rechazar <id>           Rechaza una propuesta pendiente
@@ -799,6 +818,15 @@ def _ayuda():
 
             elif user_input.lower().strip() == "evolucionar":
                 respuesta = cmd_evolucionar(False)
+
+            elif user_input.lower().strip() == "evolucionar ciclo":
+                respuesta = cmd_ciclo_evolutivo(auto_approve=False)
+
+            elif user_input.lower().strip() == "evolucionar ciclo auto":
+                respuesta = cmd_ciclo_evolutivo(auto_approve=True)
+
+            elif user_input.lower().strip() == "salud sistema":
+                respuesta = cmd_health_report()
 
             elif user_input.lower().startswith("propuestas ver"):
                 _rest_pv = user_input[14:].strip()
