@@ -405,7 +405,7 @@ class ForexEnsembleTrainer:
 # ─────────────────────────────────────────────────────────────
 # ENTRENAMIENTO CON WFV DESLIZANTE
 # ─────────────────────────────────────────────────────────────
-def train_with_wfv(X, y, pair: str = None, save: bool = True):
+def train_with_wfv(X, y, pair: str = None, save: bool = True, force: bool = False):
     print(f"\n{'═'*58}")
     print(f" ENTRENAMIENTO CON WALK-FORWARD DESLIZANTE")
     print(f" Par: {pair or '?'} | Filas: {len(X)} | Features: {len(X.columns)}")
@@ -414,19 +414,32 @@ def train_with_wfv(X, y, pair: str = None, save: bool = True):
     wfv   = WalkForwardValidator(purge=20, n_folds=5)
     wfv_r = wfv.evaluate(ForexEnsembleTrainer, X, y, pair=pair)
 
+    # BUGFIX: el WFV es el chequeo "honesto" (out-of-sample, sin leakage). Si
+    # reprueba, el modelo NO debe guardarse ni quedar disponible para señales
+    # reales, sin importar qué tan bien le vaya en el split de calibración
+    # final (ese split es un solo corte del mismo dataset y puede engañar).
+    # Antes este resultado solo se imprimía como texto y no bloqueaba nada.
+    wfv_ok = (not force) and (not wfv_r.get("error")) and wfv_r.get("wfv_passed", False)
+    can_save = save and (wfv_ok or force)
+
     if "error" in wfv_r:
         print(f"[WFV] Error: {wfv_r['error']}")
     else:
         status = "✓ APROBADO" if wfv_r["wfv_passed"] else "✗ NO APROBADO"
         print(f"\n[WFV] {status} — avg={wfv_r['avg_precision']:.2%}  median={wfv_r['median_precision']:.2%}")
 
+    if save and not can_save:
+        print(f"[WFV] ⛔ Modelo NO se guardará ni quedará disponible para señales reales "
+              f"— reprobó Walk-Forward Validation (< {MIN_PRECISION_THRESHOLD:.0%}).")
+        print(f"[WFV]   Usa 'tune forex <csv>' para optimizar hiperparámetros y reintenta.")
+
     # Entrenamiento final con dataset completo
     print(f"\n[ENSEMBLE] Entrenamiento final (dataset completo)...")
     trainer   = ForexEnsembleTrainer(pair=pair)
-    acc, prec = trainer.train(X, y, save=save)
+    acc, prec = trainer.train(X, y, save=can_save)
 
     # Guardar también las feature_names en el modelo final
-    if save and trainer.model is not None and trainer.best_model is not None:
+    if can_save and trainer.model is not None and trainer.best_model is not None:
         from .model_storage import ModelStorage
         ModelStorage().save_model(
             trainer.best_model,
@@ -434,5 +447,7 @@ def train_with_wfv(X, y, pair: str = None, save: bool = True):
             pair=pair,
             feature_names=list(X.columns),
         )
+
+    wfv_r["model_deployed"] = bool(can_save and trainer.best_model is not None)
 
     return trainer, wfv_r, acc, prec
