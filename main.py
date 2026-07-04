@@ -719,226 +719,6 @@ def _ayuda():
   crear pdf <path> <text>        Create PDF via ReportLab
   imagen                         Scikit-image edge detection demo
 
-            # ── PREDICTION LAB (FASE 5) ───────────────────────────
-            elif user_input.lower().startswith("lab analiza "):
-                _idea = user_input[12:].strip().strip('"').strip("'")
-                respuesta = cmd_lab_analiza(_idea)
-
-            elif user_input.lower().startswith("lab dataset "):
-                _parts_ds = user_input[12:].strip().split()
-                if len(_parts_ds) >= 2:
-                    respuesta = cmd_lab_dataset(_parts_ds[0], _parts_ds[1])
-                elif len(_parts_ds) == 1:
-                    respuesta = cmd_lab_dataset(_parts_ds[0])
-                else:
-                    respuesta = "Uso: lab dataset <archivo.csv> [target_variable]"
-
-            elif user_input.lower().startswith("lab viabilidad "):
-                _csv_v, _idea_v, _tgt_v = _parse_lab_args(user_input[15:])
-                if _csv_v:
-                    respuesta = cmd_lab_viabilidad(_csv_v, _idea_v, target_variable=_tgt_v)
-                else:
-                    respuesta = 'Uso: lab viabilidad <archivo.csv> "<describe tu idea>" [columna_target]'
-
-            elif user_input.lower().startswith("lab planea "):
-                _csv_p, _idea_p, _tgt_p = _parse_lab_args(user_input[11:])
-                if _csv_p:
-                    respuesta = cmd_lab_planea(_csv_p, _idea_p, target_variable=_tgt_p)
-                else:
-                    respuesta = 'Uso: lab planea <archivo.csv> "<describe tu idea>" [columna_target]'
-
-            elif user_input.lower().startswith("lab genera "):
-                _csv_g, _idea_g, _tgt_g = _parse_lab_args(user_input[11:])
-                if _csv_g:
-                    respuesta = cmd_lab_genera(_csv_g, _idea_g, target_variable=_tgt_g)
-                else:
-                    respuesta = 'Uso: lab genera <archivo.csv> "<describe tu idea>" [columna_target]'
-
-            elif user_input.lower().startswith("lab valida "):
-                _csv_val, _idea_val, _tgt_val = _parse_lab_args(user_input[11:])
-                if _csv_val:
-                    respuesta = cmd_lab_valida(_csv_val, _idea_val, target_variable=_tgt_val)
-                else:
-                    respuesta = 'Uso: lab valida <archivo.csv> "<describe tu idea>" [columna_target]'
-
-            elif user_input.lower().startswith("lab reporte "):
-                _csv_r, _idea_r, _tgt_r = _parse_lab_args(user_input[12:])
-                if _csv_r:
-                    respuesta = cmd_lab_reporte(_csv_r, _idea_r, target_variable=_tgt_r)
-                else:
-                    respuesta = 'Uso: lab reporte <archivo.csv> "<describe tu idea>" [columna_target]'
-
-            elif user_input.lower().strip() == "lab proyectos":
-                respuesta = cmd_lab_proyectos()
-
-            elif user_input.lower().startswith("lab info proyecto "):
-                _ident = user_input[19:].strip()
-                respuesta = cmd_lab_info_proyecto(_ident) if _ident else "Uso: lab info proyecto <numero|nombre>"
-
-            elif user_input.lower().startswith("feedback votar "):
-                _rest_fv = user_input[15:].strip().split(None, 2)
-                if len(_rest_fv) >= 2:
-                    _tid, _vote = _rest_fv[0], _rest_fv[1]
-                    _comment = _rest_fv[2].strip().strip('"').strip("'") if len(_rest_fv) == 3 else ""
-                    respuesta = cmd_feedback_votar(_tid, _vote, _comment)
-                else:
-                    respuesta = 'Uso: feedback votar <id> <1|-1> ["comentario"]'
-
-            elif user_input.lower().startswith("feedback ver "):
-                _tid_v = user_input[13:].strip()
-                respuesta = cmd_feedback_ver(_tid_v) if _tid_v else "Uso: feedback ver <id>"
-
-            elif user_input.lower().strip() == "feedback analisis":
-                respuesta = cmd_feedback_analisis()
-
-            elif user_input.lower().strip() == "feedback dashboard":
-                respuesta = cmd_feedback_dashboard()
-
-            elif user_input.lower().strip() == "thresholds ver":
-                respuesta = cmd_thresholds_ver()
-
-            elif user_input.lower().strip() == "contextual memoria":
-                respuesta = cmd_contextual_memory()
-
-            elif user_input.lower().startswith("evolucion historial"):
-                _rest_eh = user_input[20:].strip()
-                _limit_eh = int(_rest_eh) if _rest_eh.isdigit() else 10
-                respuesta = cmd_evolution_history(_limit_eh)
-
-            elif user_input.lower().strip() == "monitor snapshot":
-                respuesta = cmd_monitor_snapshot()
-
-            elif user_input.lower().startswith("monitor historial"):
-                _rest_mh = user_input[18:].strip()
-                _limit_mh = int(_rest_mh) if _rest_mh.isdigit() else 10
-                respuesta = cmd_monitor_historial(_limit_mh)
-
-            elif user_input.lower().strip() == "mejoras detectar":
-                respuesta = cmd_mejoras_detectar()
-
-            elif user_input.lower().strip() == "evolucionar":
-                respuesta = cmd_evolucionar(False)
-
-            elif user_input.lower().strip() == "evolucionar ciclo":
-                respuesta = cmd_ciclo_evolutivo(auto_approve=False)
-
-            elif user_input.lower().strip() == "evolucionar ciclo auto":
-                respuesta = cmd_ciclo_evolutivo(auto_approve=True)
-
-            elif user_input.lower().strip() == "salud sistema":
-                respuesta = cmd_health_report()
-
-            elif user_input.lower().startswith("propuestas ver"):
-                _rest_pv = user_input[14:].strip()
-                respuesta = cmd_proposals_ver(_rest_pv if _rest_pv else None)
-
-            elif user_input.lower().startswith("propuesta aprobar "):
-                _pid_ap = user_input[18:].strip()
-                respuesta = cmd_aprobar_propuesta(_pid_ap) if _pid_ap else "Uso: propuesta aprobar <id>"
-
-            elif user_input.lower().startswith("propuesta rechazar "):
-                _pid_rj = user_input[19:].strip()
-                respuesta = cmd_rechazar_propuesta(_pid_rj) if _pid_rj else "Uso: propuesta rechazar <id>"
-
-            elif user_input.lower().startswith("propuesta aplicar "):
-                _pid_apl = user_input[18:].strip()
-                respuesta = cmd_aplicar_propuesta(_pid_apl) if _pid_apl else "Uso: propuesta aplicar <id>"
-
-            elif user_input.lower().strip() == "reglas ver":
-                respuesta = cmd_reglas_ver()
-
-            elif user_input.lower().startswith("propuesta validar "):
-                _pid_val = user_input[18:].strip()
-                respuesta = cmd_validar_propuesta(_pid_val) if _pid_val else "Uso: propuesta validar <id>"
-
-            elif user_input.lower().startswith("audit ver"):
-                _rest_av = user_input[9:].strip()
-                _limit_av = int(_rest_av) if _rest_av.isdigit() else 20
-                respuesta = cmd_audit_log(_limit_av)
-
-            elif user_input.lower().strip() == "rollback ver":
-                respuesta = cmd_rollback_ver()
-
-            elif user_input.lower().startswith("rollback aplicar "):
-                _pid_rb = user_input[17:].strip()
-                respuesta = cmd_rollback_aplicar(_pid_rb) if _pid_rb else "Uso: rollback aplicar <id>"
-
-            # ── NEWS INTELLIGENCE (FASE 4) ───────────────────────
-            elif user_input.lower().startswith("noticias predice "):
-                parts = user_input[17:].strip().split()
-                if len(parts) >= 2:
-                    respuesta = cmd_news_predict(parts[0], parts[1])
-                else:
-                    respuesta = "Uso: noticias predice <par> <csv>  ej: noticias predice EURUSD CSVs/H1/EURUSD.csv"
-
-            elif user_input.lower().startswith("noticias "):
-                respuesta = cmd_news(user_input[9:].strip())
-
-            elif user_input.lower().startswith("news "):
-                respuesta = cmd_news(user_input[5:].strip())
-
-            # ── ACTIVE ENGINE SCHEDULER (FASE 3) ─────────────────
-            elif user_input.lower().startswith("schedule forex "):
-                # uso: schedule forex <par> <csv> [minutos]
-                parts = user_input[15:].strip().split()
-                if len(parts) >= 2:
-                    _pair = parts[0]
-                    _csv  = parts[1]
-                    _min  = int(parts[2]) if len(parts) > 2 else 60
-                    respuesta = cmd_schedule_forex(_pair, _csv, _min)
-                else:
-                    respuesta = "Uso: schedule forex <par> <csv> [minutos]  ej: schedule forex EURUSD CSVs/H1/EURUSD.csv 60"
-
-            elif user_input.lower().startswith("schedule stop "):
-                respuesta = cmd_schedule_stop(user_input[14:].strip())
-
-            elif user_input.lower() == "schedule stop":
-                respuesta = cmd_schedule_stop("all")
-
-            elif user_input.lower() in ["schedule status", "schedule"]:
-                respuesta = cmd_schedule_status()
-
-            elif user_input.lower().startswith("schedule run "):
-                respuesta = cmd_schedule_run(user_input[13:].strip())
-
-            # ── FOREX WATCHER (FASE 2) ────────────────────────────
-            elif user_input.lower().startswith("watch forex "):
-                # uso: watch forex <par> <csv> [intervalo_segundos]
-                parts = user_input[12:].strip().split()
-                if len(parts) >= 2:
-                    _pair  = parts[0]
-                    _csv   = parts[1]
-                    _intv  = int(parts[2]) if len(parts) > 2 else 60
-                    respuesta = cmd_watch_start(_pair, _csv, _intv)
-                else:
-                    respuesta = "Uso: watch forex <par> <csv> [intervalo]  ej: watch forex EURUSD CSVs/H1/EURUSD.csv 60"
-
-            elif user_input.lower().startswith("watch stop "):
-                respuesta = cmd_watch_stop(user_input[11:].strip())
-
-            elif user_input.lower() == "watch stop":
-                respuesta = cmd_watch_stop("all")
-
-            elif user_input.lower() in ["watch status", "watch"]:
-                respuesta = cmd_watch_status()
-
-            elif user_input.lower().startswith("watch check "):
-                respuesta = cmd_watch_check(user_input[12:].strip())
-
-            # ── HISTORIAL DE SEÑALES (FASE 2) ────────────────────
-            elif user_input.lower().startswith("señales "):
-                respuesta = cmd_signal_history(user_input[8:].strip())
-
-            elif user_input.lower().startswith("signals "):
-                respuesta = cmd_signal_history(user_input[8:].strip())
-
-            elif user_input.lower() in ["señales", "signals", "historial señales"]:
-                respuesta = cmd_signal_history()
-
-            elif user_input.lower().startswith("stats señales"):
-                parts = user_input.split()
-                pair_arg = parts[2] if len(parts) > 2 else None
-                respuesta = cmd_signal_stats(pair_arg)
 
 {Fore.CYAN}── RISK MANAGEMENT ────────────────────────────────────────{Style.RESET_ALL}
   circuit status                 Estado del circuit breaker (pérdida diaria/semanal/drawdown)
@@ -1447,6 +1227,227 @@ if __name__ == "__main__":
                     respuesta = "\n".join(out)
                 else:
                     respuesta = f"No hay modelo para '{pair}'. Usa: train forex <csv>"
+
+            # ── PREDICTION LAB (FASE 5) ───────────────────────────
+            elif user_input.lower().startswith("lab analiza "):
+                _idea = user_input[12:].strip().strip('"').strip("'")
+                respuesta = cmd_lab_analiza(_idea)
+
+            elif user_input.lower().startswith("lab dataset "):
+                _parts_ds = user_input[12:].strip().split()
+                if len(_parts_ds) >= 2:
+                    respuesta = cmd_lab_dataset(_parts_ds[0], _parts_ds[1])
+                elif len(_parts_ds) == 1:
+                    respuesta = cmd_lab_dataset(_parts_ds[0])
+                else:
+                    respuesta = "Uso: lab dataset <archivo.csv> [target_variable]"
+
+            elif user_input.lower().startswith("lab viabilidad "):
+                _csv_v, _idea_v, _tgt_v = _parse_lab_args(user_input[15:])
+                if _csv_v:
+                    respuesta = cmd_lab_viabilidad(_csv_v, _idea_v, target_variable=_tgt_v)
+                else:
+                    respuesta = 'Uso: lab viabilidad <archivo.csv> "<describe tu idea>" [columna_target]'
+
+            elif user_input.lower().startswith("lab planea "):
+                _csv_p, _idea_p, _tgt_p = _parse_lab_args(user_input[11:])
+                if _csv_p:
+                    respuesta = cmd_lab_planea(_csv_p, _idea_p, target_variable=_tgt_p)
+                else:
+                    respuesta = 'Uso: lab planea <archivo.csv> "<describe tu idea>" [columna_target]'
+
+            elif user_input.lower().startswith("lab genera "):
+                _csv_g, _idea_g, _tgt_g = _parse_lab_args(user_input[11:])
+                if _csv_g:
+                    respuesta = cmd_lab_genera(_csv_g, _idea_g, target_variable=_tgt_g)
+                else:
+                    respuesta = 'Uso: lab genera <archivo.csv> "<describe tu idea>" [columna_target]'
+
+            elif user_input.lower().startswith("lab valida "):
+                _csv_val, _idea_val, _tgt_val = _parse_lab_args(user_input[11:])
+                if _csv_val:
+                    respuesta = cmd_lab_valida(_csv_val, _idea_val, target_variable=_tgt_val)
+                else:
+                    respuesta = 'Uso: lab valida <archivo.csv> "<describe tu idea>" [columna_target]'
+
+            elif user_input.lower().startswith("lab reporte "):
+                _csv_r, _idea_r, _tgt_r = _parse_lab_args(user_input[12:])
+                if _csv_r:
+                    respuesta = cmd_lab_reporte(_csv_r, _idea_r, target_variable=_tgt_r)
+                else:
+                    respuesta = 'Uso: lab reporte <archivo.csv> "<describe tu idea>" [columna_target]'
+
+            elif user_input.lower().strip() == "lab proyectos":
+                respuesta = cmd_lab_proyectos()
+
+            elif user_input.lower().startswith("lab info proyecto "):
+                _ident = user_input[19:].strip()
+                respuesta = cmd_lab_info_proyecto(_ident) if _ident else "Uso: lab info proyecto <numero|nombre>"
+
+            elif user_input.lower().startswith("feedback votar "):
+                _rest_fv = user_input[15:].strip().split(None, 2)
+                if len(_rest_fv) >= 2:
+                    _tid, _vote = _rest_fv[0], _rest_fv[1]
+                    _comment = _rest_fv[2].strip().strip('"').strip("'") if len(_rest_fv) == 3 else ""
+                    respuesta = cmd_feedback_votar(_tid, _vote, _comment)
+                else:
+                    respuesta = 'Uso: feedback votar <id> <1|-1> ["comentario"]'
+
+            elif user_input.lower().startswith("feedback ver "):
+                _tid_v = user_input[13:].strip()
+                respuesta = cmd_feedback_ver(_tid_v) if _tid_v else "Uso: feedback ver <id>"
+
+            elif user_input.lower().strip() == "feedback analisis":
+                respuesta = cmd_feedback_analisis()
+
+            elif user_input.lower().strip() == "feedback dashboard":
+                respuesta = cmd_feedback_dashboard()
+
+            elif user_input.lower().strip() == "thresholds ver":
+                respuesta = cmd_thresholds_ver()
+
+            elif user_input.lower().strip() == "contextual memoria":
+                respuesta = cmd_contextual_memory()
+
+            elif user_input.lower().startswith("evolucion historial"):
+                _rest_eh = user_input[20:].strip()
+                _limit_eh = int(_rest_eh) if _rest_eh.isdigit() else 10
+                respuesta = cmd_evolution_history(_limit_eh)
+
+            elif user_input.lower().strip() == "monitor snapshot":
+                respuesta = cmd_monitor_snapshot()
+
+            elif user_input.lower().startswith("monitor historial"):
+                _rest_mh = user_input[18:].strip()
+                _limit_mh = int(_rest_mh) if _rest_mh.isdigit() else 10
+                respuesta = cmd_monitor_historial(_limit_mh)
+
+            elif user_input.lower().strip() == "mejoras detectar":
+                respuesta = cmd_mejoras_detectar()
+
+            elif user_input.lower().strip() == "evolucionar":
+                respuesta = cmd_evolucionar(False)
+
+            elif user_input.lower().strip() == "evolucionar ciclo":
+                respuesta = cmd_ciclo_evolutivo(auto_approve=False)
+
+            elif user_input.lower().strip() == "evolucionar ciclo auto":
+                respuesta = cmd_ciclo_evolutivo(auto_approve=True)
+
+            elif user_input.lower().strip() == "salud sistema":
+                respuesta = cmd_health_report()
+
+            elif user_input.lower().startswith("propuestas ver"):
+                _rest_pv = user_input[14:].strip()
+                respuesta = cmd_proposals_ver(_rest_pv if _rest_pv else None)
+
+            elif user_input.lower().startswith("propuesta aprobar "):
+                _pid_ap = user_input[18:].strip()
+                respuesta = cmd_aprobar_propuesta(_pid_ap) if _pid_ap else "Uso: propuesta aprobar <id>"
+
+            elif user_input.lower().startswith("propuesta rechazar "):
+                _pid_rj = user_input[19:].strip()
+                respuesta = cmd_rechazar_propuesta(_pid_rj) if _pid_rj else "Uso: propuesta rechazar <id>"
+
+            elif user_input.lower().startswith("propuesta aplicar "):
+                _pid_apl = user_input[18:].strip()
+                respuesta = cmd_aplicar_propuesta(_pid_apl) if _pid_apl else "Uso: propuesta aplicar <id>"
+
+            elif user_input.lower().strip() == "reglas ver":
+                respuesta = cmd_reglas_ver()
+
+            elif user_input.lower().startswith("propuesta validar "):
+                _pid_val = user_input[18:].strip()
+                respuesta = cmd_validar_propuesta(_pid_val) if _pid_val else "Uso: propuesta validar <id>"
+
+            elif user_input.lower().startswith("audit ver"):
+                _rest_av = user_input[9:].strip()
+                _limit_av = int(_rest_av) if _rest_av.isdigit() else 20
+                respuesta = cmd_audit_log(_limit_av)
+
+            elif user_input.lower().strip() == "rollback ver":
+                respuesta = cmd_rollback_ver()
+
+            elif user_input.lower().startswith("rollback aplicar "):
+                _pid_rb = user_input[17:].strip()
+                respuesta = cmd_rollback_aplicar(_pid_rb) if _pid_rb else "Uso: rollback aplicar <id>"
+
+            # ── NEWS INTELLIGENCE (FASE 4) ───────────────────────
+            elif user_input.lower().startswith("noticias predice "):
+                parts = user_input[17:].strip().split()
+                if len(parts) >= 2:
+                    respuesta = cmd_news_predict(parts[0], parts[1])
+                else:
+                    respuesta = "Uso: noticias predice <par> <csv>  ej: noticias predice EURUSD CSVs/H1/EURUSD.csv"
+
+            elif user_input.lower().startswith("noticias "):
+                respuesta = cmd_news(user_input[9:].strip())
+
+            elif user_input.lower().startswith("news "):
+                respuesta = cmd_news(user_input[5:].strip())
+
+            # ── ACTIVE ENGINE SCHEDULER (FASE 3) ─────────────────
+            elif user_input.lower().startswith("schedule forex "):
+                # uso: schedule forex <par> <csv> [minutos]
+                parts = user_input[15:].strip().split()
+                if len(parts) >= 2:
+                    _pair = parts[0]
+                    _csv  = parts[1]
+                    _min  = int(parts[2]) if len(parts) > 2 else 60
+                    respuesta = cmd_schedule_forex(_pair, _csv, _min)
+                else:
+                    respuesta = "Uso: schedule forex <par> <csv> [minutos]  ej: schedule forex EURUSD CSVs/H1/EURUSD.csv 60"
+
+            elif user_input.lower().startswith("schedule stop "):
+                respuesta = cmd_schedule_stop(user_input[14:].strip())
+
+            elif user_input.lower() == "schedule stop":
+                respuesta = cmd_schedule_stop("all")
+
+            elif user_input.lower() in ["schedule status", "schedule"]:
+                respuesta = cmd_schedule_status()
+
+            elif user_input.lower().startswith("schedule run "):
+                respuesta = cmd_schedule_run(user_input[13:].strip())
+
+            # ── FOREX WATCHER (FASE 2) ────────────────────────────
+            elif user_input.lower().startswith("watch forex "):
+                # uso: watch forex <par> <csv> [intervalo_segundos]
+                parts = user_input[12:].strip().split()
+                if len(parts) >= 2:
+                    _pair  = parts[0]
+                    _csv   = parts[1]
+                    _intv  = int(parts[2]) if len(parts) > 2 else 60
+                    respuesta = cmd_watch_start(_pair, _csv, _intv)
+                else:
+                    respuesta = "Uso: watch forex <par> <csv> [intervalo]  ej: watch forex EURUSD CSVs/H1/EURUSD.csv 60"
+
+            elif user_input.lower().startswith("watch stop "):
+                respuesta = cmd_watch_stop(user_input[11:].strip())
+
+            elif user_input.lower() == "watch stop":
+                respuesta = cmd_watch_stop("all")
+
+            elif user_input.lower() in ["watch status", "watch"]:
+                respuesta = cmd_watch_status()
+
+            elif user_input.lower().startswith("watch check "):
+                respuesta = cmd_watch_check(user_input[12:].strip())
+
+            # ── HISTORIAL DE SEÑALES (FASE 2) ────────────────────
+            elif user_input.lower().startswith("señales "):
+                respuesta = cmd_signal_history(user_input[8:].strip())
+
+            elif user_input.lower().startswith("signals "):
+                respuesta = cmd_signal_history(user_input[8:].strip())
+
+            elif user_input.lower() in ["señales", "signals", "historial señales"]:
+                respuesta = cmd_signal_history()
+
+            elif user_input.lower().startswith("stats señales"):
+                parts = user_input.split()
+                pair_arg = parts[2] if len(parts) > 2 else None
+                respuesta = cmd_signal_stats(pair_arg)
 
             # ── EXTRA MODULES ────────────────────────────────
             elif user_input in comandos_extra:

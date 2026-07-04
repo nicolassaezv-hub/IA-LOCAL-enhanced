@@ -359,11 +359,16 @@ def classify_intent(text):
 
     text = text.lower().strip()
 
+    # Los comandos deben ir al INICIO del mensaje (una sola línea, formato comando).
+    # Esto evita que texto conversacional que solo *contiene* una palabra parecida
+    # a un comando (ej. "ramificaciones" contiene "ram") dispare una herramienta
+    # real por error. Si el usuario quiere hablar, debe poder hacerlo sin que
+    # ASTRA interprete su mensaje como un comando de sistema.
     for intent, patterns in INTENT_PATTERNS.items():
 
         for pattern in patterns:
 
-            if pattern in text:
+            if text == pattern or text.startswith(pattern + " "):
                 return intent
 
     return "chat"
