@@ -89,21 +89,47 @@ class KPIEngine:
             return None
         return float(self.df["expenses"].sum() / rev * 100)
 
+    def _trend_slope_and_strength(self):
+        """
+        Linear-regression slope (revenue change per period, in currency
+        units) and R^2 (goodness of fit / trend_strength) on the revenue
+        series. Shared by _trend_direction() and exposed in compute_all()
+        for downstream consumers (sme_consultant.sme_forecast, dashboards).
+        Returns (slope, r_squared) — both 0.0 if not enough data.
+        """
+        if not self._has_revenue:
+            return 0.0, 0.0
+        rev = self.df["revenue"].dropna()
+        if len(rev) < 3:
+            return 0.0, 0.0
+        x = np.arange(len(rev))
+        y = rev.values.astype(float)
+        slope, intercept = np.polyfit(x, y, 1)
+        y_pred = slope * x + intercept
+        ss_res = float(np.sum((y - y_pred) ** 2))
+        ss_tot = float(np.sum((y - y.mean()) ** 2))
+        r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        r_squared = max(0.0, min(1.0, r_squared))
+        return float(slope), float(r_squared)
+
     def _trend_direction(self) -> str:
         """Simple linear-regression slope on revenue to determine trend."""
         if not self._has_revenue or len(self.df) < 3:
             return "unknown"
-        rev = self.df["revenue"].dropna()
-        if len(rev) < 3:
-            return "unknown"
-        x = np.arange(len(rev))
-        y = rev.values
-        slope = np.polyfit(x, y, 1)[0] if len(x) >= 2 else 0
+        slope, _ = self._trend_slope_and_strength()
         if slope > 0:
             return "growing"
         if slope < 0:
             return "declining"
         return "stable"
+
+    def _latest_revenue(self) -> Optional[float]:
+        if not self._has_revenue:
+            return None
+        rev = self.df["revenue"].dropna()
+        if len(rev) == 0:
+            return None
+        return float(rev.iloc[-1])
 
     def _health_score(self) -> int:
         """
@@ -182,16 +208,20 @@ class KPIEngine:
 
     def compute_all(self) -> Dict:
         """Return a dictionary with all computed KPIs."""
+        slope, strength = self._trend_slope_and_strength()
         return {
             "business_type": self.df.attrs.get("business_type", "generic"),
             "rows": len(self.df),
             "total_revenue": self._revenue(),
             "avg_revenue": self._avg_revenue(),
+            "latest_revenue": self._latest_revenue(),
             "growth_rate_pct": self._growth_rate(),
             "gross_margin_pct": self._gross_margin(),
             "net_margin_pct": self._net_margin(),
             "expense_ratio_pct": self._expense_ratio(),
             "trend_direction": self._trend_direction(),
+            "trend_slope": slope,
+            "trend_strength": strength,
             "health_score": self._health_score(),
             "risk_level": self._risk_level(),
             "anomalies": self._anomalies(),

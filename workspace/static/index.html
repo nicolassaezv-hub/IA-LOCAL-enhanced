@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ASTRA Workspace</title>
+<link rel="stylesheet" href="/css/style.css" />
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- ═══════════ 1.1 — Barra superior de estado general ═══════════ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="astra-logo">ASTRA</span>
+      <span class="status-dot" id="astra-status-dot"></span>
+      <span class="topbar-label" id="astra-status-label">conectando…</span>
+    </div>
+    <div class="topbar-right">
+      <span class="topbar-chip" id="chip-project">Proyecto: —</span>
+      <span class="topbar-chip" id="chip-model">Modelo: —</span>
+      <span class="topbar-chip" id="chip-tools">Tools: —</span>
+      <span class="topbar-chip" id="chip-clock">--:--:--</span>
+    </div>
+  </header>
+
+  <div class="workspace-body">
+
+    <!-- ═══════════ 1.2 — Navegación entre ramas principales ═══════════ -->
+    <nav class="sidenav">
+      <button class="nav-item active" data-section="chat">
+        <span class="nav-dot"></span> Chat
+      </button>
+      <button class="nav-item" data-section="forex">
+        <span class="nav-dot"></span> Forex Lab
+      </button>
+      <button class="nav-item" data-section="prediction">
+        <span class="nav-dot"></span> Prediction Lab
+      </button>
+      <button class="nav-item" data-section="business">
+        <span class="nav-dot"></span> Business Lab
+      </button>
+      <button class="nav-item" data-section="cognitive">
+        <span class="nav-dot"></span> Cognitive Core
+      </button>
+      <button class="nav-item" data-section="evolution">
+        <span class="nav-dot"></span> Evolution Engine
+      </button>
+      <button class="nav-item" data-section="config">
+        <span class="nav-dot"></span> Configuración
+      </button>
+    </nav>
+
+    <!-- ═══════════ Área de contenido por sección ═══════════ -->
+    <main class="content">
+
+      <!-- CHAT CENTER -->
+      <section class="panel active" id="panel-chat">
+        <div class="panel-header">
+          <h2>Chat</h2>
+          <span class="panel-sub">Conversación libre con ASTRA — motor real, sin simulación</span>
+          <button class="export-btn" id="export-btn" title="Exportar conversación">⭳ Exportar</button>
+        </div>
+
+        <div class="chat-window" id="chat-window">
+          <div class="drop-hint" id="drop-hint">Suelta un archivo aquí para adjuntarlo</div>
+        </div>
+
+        <div class="attach-preview" id="attach-preview" style="display:none;"></div>
+
+        <form class="chat-input-row" id="chat-form">
+          <input type="file" id="file-input" style="display:none" />
+          <input type="file" id="folder-input" style="display:none" webkitdirectory directory multiple />
+          <button type="button" class="icon-btn" id="attach-file-btn" title="Abrir archivo">📎</button>
+          <button type="button" class="icon-btn" id="attach-folder-btn" title="Abrir carpeta">📁</button>
+          <input type="text" id="chat-input" placeholder="Escribe un mensaje o comando…" autocomplete="off" />
+          <button type="submit">Enviar</button>
+        </form>
+      </section>
+
+      <!-- ═══════════ FOREX LAB WORKSPACE (Sección 4) ═══════════ -->
+      <section class="panel" id="panel-forex">
+        <div class="panel-header">
+          <h2>Forex Lab Workspace</h2>
+          <span class="panel-sub">Dashboard multi-timeframe, gráfico de velas, CSVs, entrenamiento y Circuit Breaker — todo con datos reales</span>
+        </div>
+
+        <div class="forex-toolbar">
+          <label>Par:
+            <select id="forex-pair-select"></select>
+          </label>
+          <label>Timeframe:
+            <select id="forex-tf-select">
+              <option value="H1">H1</option>
+              <option value="H4">H4</option>
+              <option value="D1">D1</option>
+            </select>
+          </label>
+          <label class="checkbox-label"><input type="checkbox" id="forex-sma-toggle" checked /> SMA 20</label>
+          <button class="icon-btn wide" id="forex-add-line-btn" title="Dibujar línea de precio">＋ Línea</button>
+          <button class="icon-btn wide" id="forex-refresh-btn" title="Refrescar">⟳ Refrescar</button>
+        </div>
+
+        <!-- Dashboard por timeframe -->
+        <div class="tf-cards" id="tf-cards">
+          <div class="tf-card" id="tf-card-H1"><h4>H1</h4><p class="tf-loading">—</p></div>
+          <div class="tf-card" id="tf-card-H4"><h4>H4</h4><p class="tf-loading">—</p></div>
+          <div class="tf-card" id="tf-card-D1"><h4>D1</h4><p class="tf-loading">—</p></div>
+        </div>
+
+        <div class="model-summary-card" id="model-summary-card">Sin datos de modelo aún.</div>
+
+        <!-- Gráfico principal -->
+        <div class="chart-card">
+          <div id="forex-chart" class="forex-chart"></div>
+        </div>
+
+        <div class="forex-lower-grid">
+
+          <!-- Gestión de CSV -->
+          <div class="lab-card">
+            <h3>Gestión de CSV</h3>
+            <div id="csv-file-list" class="csv-file-list"></div>
+            <div id="csv-validation" class="csv-validation"></div>
+          </div>
+
+          <!-- Entrenamiento -->
+          <div class="lab-card">
+            <h3>Entrenamiento</h3>
+            <button id="train-start-btn" class="train-btn">▶ Full Forex (tune→train→predict→backtest)</button>
+            <div class="progress-bar-outer"><div class="progress-bar-inner" id="train-progress-bar"></div></div>
+            <div id="train-stage-label" class="train-stage-label">Sin entrenamiento en curso.</div>
+            <div class="train-metrics" id="train-metrics"></div>
+          </div>
+
+          <!-- Circuit Breaker -->
+          <div class="lab-card">
+            <h3>Circuit Breaker</h3>
+            <div id="circuit-status" class="circuit-status">—</div>
+          </div>
+
+          <!-- Alertas -->
+          <div class="lab-card">
+            <h3>Alertas</h3>
+            <div id="alerts-list" class="alerts-list"></div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ═══════════ PREDICTION LAB WORKSPACE (Sección 5) ═══════════ -->
+      <section class="panel" id="panel-prediction">
+        <div class="panel-header">
+          <h2>Prediction Lab Workspace</h2>
+          <span class="panel-sub">Sandbox de ML genérico — prompt + dataset + config, entrenamiento real y comparación de proyectos</span>
+        </div>
+
+        <!-- 5.1 Sandbox unificado -->
+        <div class="lab-card">
+          <h3>Sandbox — nuevo análisis</h3>
+          <div class="lab-sandbox-grid">
+            <label>CSV
+              <select id="lab-csv-select"></select>
+            </label>
+            <label>Variable objetivo (opcional)
+              <input type="text" id="lab-target-input" placeholder="ej. churn, precio, default" />
+            </label>
+          </div>
+          <label class="lab-idea-label">Describe el problema
+            <textarea id="lab-idea-input" rows="2" placeholder="ej. predecir si un cliente va a cancelar su suscripción el próximo mes"></textarea>
+          </label>
+          <button id="lab-run-btn" class="train-btn">▶ Correr Prediction Lab (prompt→dataset→viabilidad→plan→pipeline→validación)</button>
+          <div id="lab-run-status" class="train-stage-label">Sin análisis en curso.</div>
+        </div>
+
+        <!-- 5.2 Comparador de modelos -->
+        <div class="lab-card">
+          <h3>Proyectos guardados (comparador)</h3>
+          <table class="lab-table" id="lab-projects-table">
+            <thead>
+              <tr>
+                <th data-key="index">#</th>
+                <th data-key="name">Proyecto</th>
+                <th data-key="viability_index">Viabilidad</th>
+                <th data-key="mean_score">Score</th>
+                <th data-key="passes">Veredicto</th>
+                <th data-key="timestamp">Fecha</th>
+              </tr>
+            </thead>
+            <tbody id="lab-projects-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- 5.3 / 5.4 Detalle: visualizaciones + antes/después -->
+        <div class="lab-card" id="lab-detail-card" style="display:none;">
+          <h3>Detalle del proyecto — <span id="lab-detail-name"></span></h3>
+
+          <div class="model-summary-card" id="lab-detail-summary"></div>
+
+          <div class="lab-detail-grid">
+            <div>
+              <h4 class="lab-subtitle">Matriz de confusión</h4>
+              <div id="lab-confusion-matrix" class="confusion-matrix"></div>
+            </div>
+            <div>
+              <h4 class="lab-subtitle">Baseline vs Modelo entrenado</h4>
+              <div id="lab-before-after" class="before-after-bars"></div>
+            </div>
+          </div>
+
+          <div class="lab-detail-grid">
+            <div>
+              <h4 class="lab-subtitle">Curva ROC</h4>
+              <canvas id="lab-roc-canvas" height="180"></canvas>
+            </div>
+            <div>
+              <h4 class="lab-subtitle">Curva Precision-Recall</h4>
+              <canvas id="lab-pr-canvas" height="180"></canvas>
+            </div>
+          </div>
+
+          <h4 class="lab-subtitle">Feature Importance</h4>
+          <canvas id="lab-fi-canvas" height="200"></canvas>
+
+          <h4 class="lab-subtitle">Rendimiento por fold</h4>
+          <canvas id="lab-fold-canvas" height="160"></canvas>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-business">
+        <div class="panel-header">
+          <h2>Business Lab Workspace</h2>
+          <span class="panel-sub">Dashboard empresarial dinámico — KPIs, tendencia, forecast y señal ML sobre <code>business/</code> (kpi_engine + business_predictor)</span>
+        </div>
+
+        <!-- 6.1 Selector + correr análisis -->
+        <div class="lab-card">
+          <h3>Análisis de negocio</h3>
+          <div class="lab-sandbox-grid">
+            <label>Archivo (CSV/Excel)
+              <select id="biz-file-select"></select>
+            </label>
+            <label>Meses de proyección
+              <input type="number" id="biz-months-input" value="6" min="1" max="24" />
+            </label>
+          </div>
+          <button id="biz-run-btn" class="train-btn">▶ Correr análisis (KPIs + entrenamiento + predicción + forecast)</button>
+          <div id="biz-run-status" class="train-stage-label">Sin análisis en curso.</div>
+        </div>
+
+        <!-- 6.1 KPI tiles -->
+        <div class="lab-card" id="biz-kpi-card" style="display:none;">
+          <h3>KPIs <span class="tag" id="biz-type-tag"></span></h3>
+          <div class="dashboard-cards" id="biz-kpi-tiles"></div>
+          <div id="biz-anomalies" class="biz-anomalies"></div>
+        </div>
+
+        <!-- Señal ML + salud -->
+        <div class="lab-card" id="biz-signal-card" style="display:none;">
+          <h3>Señal ML del próximo período</h3>
+          <div class="biz-signal-row">
+            <div class="biz-signal-action" id="biz-signal-action">—</div>
+            <div class="biz-signal-meta" id="biz-signal-meta"></div>
+          </div>
+          <div id="biz-train-meta" class="train-stage-label"></div>
+        </div>
+
+        <!-- Forecast chart -->
+        <div class="lab-card" id="biz-forecast-card" style="display:none;">
+          <h3>Proyección de ingresos (optimista / esperado / conservador)</h3>
+          <canvas id="biz-forecast-canvas" height="160"></canvas>
+          <div id="biz-forecast-summary" class="train-stage-label"></div>
+        </div>
+
+        <!-- Vista previa de datos -->
+        <div class="lab-card" id="biz-preview-card" style="display:none;">
+          <h3>Vista previa de datos normalizados</h3>
+          <table class="lab-table" id="biz-preview-table"><thead></thead><tbody></tbody></table>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-cognitive">
+        <div class="panel-header">
+          <h2>Cognitive Center</h2>
+          <span class="panel-sub">Sección 7 del Roadmap IV — próximamente</span>
+        </div>
+        <div class="placeholder-card">
+          Exploración de memoria y búsqueda en lenguaje natural sobre
+          <code>memory.py</code> / <code>project_memory.py</code> se
+          construyen en la Sección 7.
+        </div>
+      </section>
+
+      <section class="panel" id="panel-evolution">
+        <div class="panel-header">
+          <h2>Evolution Center</h2>
+          <span class="panel-sub">Sección 8 del Roadmap IV — próximamente</span>
+        </div>
+        <div class="placeholder-card">
+          Panel del ciclo evolutivo y revisión de propuestas sobre
+          <code>evolution/</code> / <code>constitution/</code> se
+          construyen en la Sección 8.
+        </div>
+      </section>
+
+      <section class="panel" id="panel-config">
+        <div class="panel-header">
+          <h2>Configuración</h2>
+          <span class="panel-sub">Ajustes del Workspace</span>
+        </div>
+        <div class="placeholder-card">
+          Preferencias de tema, modelo y notificaciones — próximamente.
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══════════ 2.1 — Barra de estado permanente (telemetría) ═══════════ -->
+  <footer class="statusbar">
+    <span class="stat-item" id="stat-cpu">CPU —</span>
+    <span class="stat-item" id="stat-ram">RAM —</span>
+    <span class="stat-item" id="stat-gpu">GPU —</span>
+    <span class="stat-sep">|</span>
+    <span class="stat-item" id="stat-engine">Active Engine —</span>
+    <span class="stat-item" id="stat-cognitive">Cognitive Core —</span>
+    <span class="stat-item" id="stat-evolution">Evolution —</span>
+    <span class="stat-sep">|</span>
+    <span class="stat-item" id="stat-requests">Peticiones —</span>
+    <span class="stat-item" id="stat-avgtime">Prom. —</span>
+  </footer>
+
+  <script src="/js/app.js"></script>
+  <script src="/js/forex_lab.js"></script>
+  <script src="/js/prediction_lab.js"></script>
+  <script src="/js/business_lab.js"></script>
+</body>
+</html>

@@ -75,6 +75,17 @@ class ValidationResult:
     trained_pipeline:   Any = None
     warnings_list:      List[str] = field(default_factory=list)
 
+    # ── Diagnósticos reales del último fold/holdout (Workspace, Sección 5.3) ──
+    # Todo se calcula sobre datos de test REALES ya usados en la validación —
+    # nada simulado. Solo se llena para problemas de clasificación cuando hay
+    # al menos un fold con test set no vacío.
+    is_classification: bool = False
+    classes:            Optional[List[Any]] = None
+    confusion_matrix:   Optional[List[List[int]]] = None
+    roc_curve:          Optional[Dict[str, List[float]]] = None   # {"fpr": [...], "tpr": [...]}
+    pr_curve:           Optional[Dict[str, List[float]]] = None   # {"precision": [...], "recall": [...]}
+    baseline_score:     float = 0.0   # accuracy de predecir siempre la clase mayoritaria (clf) o R²=0 (regresión)
+
     def summary(self) -> str:
         if not self.ok:
             return f"[VALIDATION ENGINE] Error: {self.error}"
@@ -244,7 +255,7 @@ def _holdout(pipeline, X, y, strategy: ValidationStrategy, min_expected: float, 
     fitted.fit(X_train, y_train)
     extra = {}
     score = _score(fitted, X_test, y_test, strategy.metric, extra)
-    return ([FoldResult(1, len(X_train), len(X_test), score)], [score], fitted, extra)
+    return ([FoldResult(1, len(X_train), len(X_test), score)], [score], fitted, extra, X_test, y_test)
 
 
 def _kfold(pipeline, X, y, strategy: ValidationStrategy, warn: List[str]):
@@ -261,6 +272,7 @@ def _kfold(pipeline, X, y, strategy: ValidationStrategy, warn: List[str]):
         splits = list(cv.split(X, y))
 
     fold_results, scores, last_fitted, last_extra = [], [], None, {}
+    last_X_test, last_y_test = None, None
     for i, (tr, te) in enumerate(splits, 1):
         X_tr, X_te = X.iloc[tr], X.iloc[te]
         y_tr, y_te = y.iloc[tr], y.iloc[te]
@@ -274,7 +286,8 @@ def _kfold(pipeline, X, y, strategy: ValidationStrategy, warn: List[str]):
         scores.append(s)
         fold_results.append(FoldResult(i, len(X_tr), len(X_te), s))
         last_fitted, last_extra = fitted, extra
-    return fold_results, scores, last_fitted, last_extra
+        last_X_test, last_y_test = X_te, y_te
+    return fold_results, scores, last_fitted, last_extra, last_X_test, last_y_test
 
 
 def _wfv(pipeline, X, y, strategy: ValidationStrategy, warn: List[str]):
@@ -296,6 +309,7 @@ def _wfv(pipeline, X, y, strategy: ValidationStrategy, warn: List[str]):
         warn.append("Dataset pequeño para WFV — se usó una sola ventana ampliada en vez de folds deslizantes.")
 
     fold_results, scores, last_fitted, last_extra = [], [], None, {}
+    last_X_test, last_y_test = None, None
     fold, start = 0, 0
     while start + window + purge + step <= n and fold < n_splits:
         fold += 1
@@ -316,13 +330,14 @@ def _wfv(pipeline, X, y, strategy: ValidationStrategy, warn: List[str]):
         scores.append(s)
         fold_results.append(FoldResult(fold, len(X_tr), len(X_te), s))
         last_fitted, last_extra = fitted, extra
+        last_X_test, last_y_test = X_te, y_te
         start += step
 
     if not scores:
         warn.append("No se pudo formar ni un fold WFV — dataset insuficiente para esta estrategia.")
-        return [FoldResult(1, 0, 0, 0.0)], [0.0], None, {}
+        return [FoldResult(1, 0, 0, 0.0)], [0.0], None, {}, None, None
 
-    return fold_results, scores, last_fitted, last_extra
+    return fold_results, scores, last_fitted, last_extra, last_X_test, last_y_test
 
 
 # ══════════════════════════════════════════════════════════
@@ -357,12 +372,12 @@ def validate_pipeline(generated: GeneratedPipeline, model_plan: ModelPlan, df: p
 
     try:
         if strategy.method == "holdout":
-            fold_results, scores, fitted, extra = _holdout(generated.pipeline, X, y, strategy,
-                                                             model_plan.expected_min_metric, warn)
+            fold_results, scores, fitted, extra, X_te, y_te = _holdout(
+                generated.pipeline, X, y, strategy, model_plan.expected_min_metric, warn)
         elif strategy.method == "kfold":
-            fold_results, scores, fitted, extra = _kfold(generated.pipeline, X, y, strategy, warn)
+            fold_results, scores, fitted, extra, X_te, y_te = _kfold(generated.pipeline, X, y, strategy, warn)
         else:  # wfv
-            fold_results, scores, fitted, extra = _wfv(generated.pipeline, X, y, strategy, warn)
+            fold_results, scores, fitted, extra, X_te, y_te = _wfv(generated.pipeline, X, y, strategy, warn)
     except Exception as e:
         return ValidationResult(ok=False, error=f"Fallo durante el entrenamiento/validación: {e}")
 
@@ -377,6 +392,51 @@ def validate_pipeline(generated: GeneratedPipeline, model_plan: ModelPlan, df: p
 
     fi = _feature_importance(fitted) if fitted is not None else {}
 
+    is_clf = strategy.metric in ("accuracy", "f1", "precision", "roc_auc")
+    classes_out, cm_out, roc_out, pr_out, baseline = None, None, None, None, 0.0
+
+    if fitted is not None and X_te is not None and y_te is not None and len(X_te) > 0:
+        try:
+            y_pred_te = fitted.predict(X_te)
+            if is_clf:
+                from sklearn.metrics import confusion_matrix as _cm
+                classes_sorted = sorted(y_te.unique().tolist())
+                classes_out = classes_sorted
+                cm_out = _cm(y_te, y_pred_te, labels=classes_sorted).tolist()
+
+                # Baseline real: accuracy de predecir siempre la clase mayoritaria del test set.
+                majority_count = int(y_te.value_counts().max())
+                baseline = round(majority_count / len(y_te), 4)
+
+                # ROC / PR solo tienen sentido bien definidos en clasificación BINARIA.
+                if len(classes_sorted) == 2:
+                    try:
+                        pos_label = classes_sorted[-1]
+                        y_prob_te = fitted.predict_proba(X_te)[:, list(fitted.classes_).index(pos_label)]
+                        from sklearn.metrics import roc_curve as _roc, precision_recall_curve as _prc
+
+                        fpr, tpr, _ = _roc(y_te, y_prob_te, pos_label=pos_label)
+                        prec, rec, _ = _prc(y_te, y_prob_te, pos_label=pos_label)
+
+                        def _subsample(arr, max_points=60):
+                            arr = list(arr)
+                            if len(arr) <= max_points:
+                                return arr
+                            step_ = max(1, len(arr) // max_points)
+                            return arr[::step_]
+
+                        roc_out = {"fpr": [round(float(v), 4) for v in _subsample(fpr)],
+                                   "tpr": [round(float(v), 4) for v in _subsample(tpr)]}
+                        pr_out = {"precision": [round(float(v), 4) for v in _subsample(prec)],
+                                  "recall": [round(float(v), 4) for v in _subsample(rec)]}
+                    except Exception as e:
+                        warn.append(f"No se pudo calcular ROC/PR curve: {e}")
+            else:
+                # Regresión: el baseline de R² por definición es 0.0 (predecir siempre la media).
+                baseline = 0.0
+        except Exception as e:
+            warn.append(f"No se pudieron calcular diagnósticos adicionales (matriz/ROC/PR): {e}")
+
     return ValidationResult(
         ok=True,
         method=strategy.method,
@@ -390,6 +450,12 @@ def validate_pipeline(generated: GeneratedPipeline, model_plan: ModelPlan, df: p
         extra_metrics=extra,
         trained_pipeline=fitted,
         warnings_list=warn,
+        is_classification=is_clf,
+        classes=classes_out,
+        confusion_matrix=cm_out,
+        roc_curve=roc_out,
+        pr_curve=pr_out,
+        baseline_score=baseline,
     )
 
 
