@@ -1566,3 +1566,250 @@ del usuario — el ciclo evolutivo autónomo completo.
 ---
 
 *Parte 18 añadida el 3 de julio de 2026 — ASTRA Roadmap v4.0 completo (Fases 1–9) ✅*
+
+## PARTE 19 — WORKSPACE (ROADMAP IV, SECCIONES 1-3)
+
+Transformación de ASTRA de aplicación de consola a un entorno de trabajo
+visual. Sirve una SPA conectada al mismo motor real que usa `main.py` —
+nada de datos simulados.
+
+```
+pip install -r requirements.txt   # incluye fastapi, uvicorn, python-multipart
+python workspace/server.py
+```
+
+Abre **http://localhost:8000** en el navegador.
+
+### Sección 1 — Workspace Principal
+- Barra superior (1.1): estado de conexión, modelo LLM activo, proyecto
+  activo (real, desde `project_memory.py`), cantidad de herramientas
+  cargadas, hora.
+- Navegación (1.2) entre las 7 ramas: Chat, Forex Lab, Prediction Lab,
+  Business Lab, Cognitive Core, Evolution Engine, Configuración. Las 6
+  ramas no-Chat quedan como placeholders navegables — se conectan en las
+  Secciones 4, 5, 6, 7 y 8 del Roadmap IV.
+
+### Sección 2 — Barra de Estado Permanente
+Barra inferior con telemetría real, en vivo (poll cada 5s):
+- CPU / RAM reales vía `psutil` (GPU: reportado honestamente como "no
+  disponible" — el proyecto no tiene librería de monitoreo GPU integrada).
+- Active Engine: watchers de `forex_watcher.py` y jobs programados de
+  `active_engine.py`, conteos reales.
+- Cognitive Core: total de entradas en `memoria.db` + turnos de la sesión
+  actual.
+- Evolution Engine: eventos evolutivos totales + propuestas pendientes
+  reales (`feedback/evolution_memory.py`, `evolution/proposal_store.py`).
+- Contador de peticiones a la API y tiempo promedio de respuesta, medidos
+  en el propio proceso del servidor del Workspace.
+
+### Sección 3 — Chat Center (mejorado)
+- **Motor real completo**: el chat ahora pasa por `main.dispatch_command()`
+  — el mismo dispatcher estricto que usa la consola (`full forex`, `monitor
+  snapshot`, `reglas ver`, `feedback votar`, `evolucionar ciclo`, etc.),
+  con fallback automático a `process_request()` (intent_router + chat)
+  cuando el mensaje no calza con ningún comando estricto. Antes (Sección 1
+  inicial) el chat del Workspace solo tenía acceso al fallback — ahora
+  tiene acceso a TODAS las Fases 1-9 igual que la consola.
+- **3.1 Entrada enriquecida**: botón para adjuntar archivo, botón para
+  adjuntar carpeta completa, y arrastrar-y-soltar directamente sobre la
+  ventana de chat. Los archivos se guardan en `workspace/uploads/` y su
+  ruta se referencia automáticamente en el siguiente mensaje enviado.
+- **3.2 Historial y gestión**: el chat carga el historial real de
+  `memoria.db` al abrir la página (`cargar_turnos()`), botón "Copiar" por
+  mensaje, y botón "Exportar" que descarga la conversación visible como
+  `.txt`.
+- **3.3 Metadatos de respuesta**: cada respuesta de ASTRA muestra el tiempo
+  de ejecución real (medido en el servidor) y una etiqueta del módulo que
+  respondió (Forex Lab, Prediction Lab, Evolution Engine, Constitution
+  Engine, Cognitive Core, Sistema, o Chat General).
+
+Todo lo que se conversa desde el Workspace también se registra en
+`memoria.db` (`log_command` + `guardar_memoria`), igual que la consola —
+por lo que el "acciones recientes del usuario" y el historial de comandos
+reflejan uso desde ambas interfaces por igual.
+
+**Endpoints disponibles:**
+`GET /api/status` · `GET /api/telemetry` · `POST /api/chat {"message": "..."}`
+· `GET /api/chat/history?limit=N` · `POST /api/upload` (multipart/form-data).
+
+---
+
+*Parte 19 actualizada el 6 de julio de 2026 — Roadmap IV, Secciones 1, 2 y 3
+completas. Próximo en la cola: Sección 4 (Forex Lab Workspace).*
+
+## PARTE 20 — PREDICCIÓN MÚLTIPLE DE CSVs + REPORTES EN TEXTO
+
+Antes, `predict forex <csv>` solo aceptaba un archivo a la vez. Ahora acepta
+uno o varios, separados por coma:
+
+```
+predict forex CSVs/H1/COTTON.csv
+predict forex CSVs/H1/COTTON.csv,CSVs/H1/EURUSD.csv,CSVs/H1/XAUUSD.csv
+predecir forex <csv1>,<csv2>,...      # alias en español, mismo comportamiento
+```
+
+**Un solo archivo:** comportamiento idéntico a siempre — la señal se muestra
+en pantalla, nada se guarda en disco extra.
+
+**Múltiples archivos:** cada uno se predice en secuencia y, además de
+mostrarse en pantalla, se guarda como un reporte `.txt` individual en
+`prediction/reports/`, nombrado `<PAR>_<YYYYMMDD_HHMMSS>.txt` (fecha y hora
+de generación). Si dos reportes caen en el mismo segundo (ej. mismo par
+analizado dos veces seguidas), se agrega un sufijo `_2`, `_3`, etc. para no
+sobreescribir. Cada archivo incluye encabezado (par, CSV de origen, fecha de
+generación) + la señal completa (BUY/SELL/HOLD, confianza, fuerza, ADX,
+régimen), sin códigos de color ANSI. Errores en un archivo (ej. ruta
+inexistente) no detienen el resto — se reporta al final cuántos reportes se
+guardaron de cuántos se pidieron.
+
+Disponible también desde el Chat del Workspace (Sección 3) sin cambios
+adicionales, ya que usa el mismo `dispatch_command()` de `main.py`.
+
+---
+
+*Parte 20 añadida el 6 de julio de 2026.*
+
+## PARTE 21 — PREDICTION LAB WORKSPACE (ROADMAP IV, SECCIÓN 5)
+
+Interfaz visual completa sobre `prediction_lab/` (Fase 5, ya auditada e
+integrada desde antes). Todo con datos reales — nada simulado.
+
+**5.1 Sandbox unificado:** selector de CSV (detecta automáticamente los CSVs
+de Forex + archivos subidos al Workspace, o se puede escribir cualquier otra
+ruta), campo de variable objetivo opcional y campo de texto libre para
+describir el problema. Al correr, ejecuta `run_full_lab()` real en un hilo de
+fondo (prompt→dataset→viabilidad→plan→pipeline→validación) y guarda el
+reporte como JSON en `lab_reports/`.
+
+**5.2 Comparador de modelos:** tabla ordenable (click en cualquier columna)
+con todos los proyectos guardados — viabilidad, score, veredicto PASA/NO
+PASA, fecha. Click en una fila abre el detalle completo.
+
+**5.3 Visualizaciones (todas reales, calculadas sobre el test set real del
+último fold/holdout):**
+- Matriz de confusión (clasificación).
+- Curva ROC y Precision-Recall (solo clasificación binaria, cuando el
+  modelo expone `predict_proba`).
+- Feature Importance (ya existía, ahora graficado).
+- Rendimiento por fold (score real de cada fold de la validación — sustituto
+  honesto de "learning curves": el roadmap pedía curvas de aprendizaje
+  (tamaño de dataset vs. score) que requerirían reentrenar el modelo a
+  múltiples tamaños crecientes — no implementado en esta pasada, documentado
+  como pendiente si se quiere más adelante).
+- SHAP: no incluido — requeriría agregar la librería opcional `shap` al
+  proyecto; pendiente si se solicita.
+
+**5.4 Comparación antes/después:** baseline honesto (accuracy de predecir
+siempre la clase mayoritaria en clasificación, o R²=0 en regresión — el
+propio baseline matemático de R²) vs. el score real del modelo entrenado,
+con la mejora en puntos.
+
+**Cambio real en `prediction_lab/validation_engine.py` (aditivo, sin romper
+nada):** `ValidationResult` ahora también captura, del último fold/holdout
+real: `confusion_matrix`, `classes`, `roc_curve`, `pr_curve`,
+`baseline_score`, `is_classification`. Se hilaron los test sets reales
+(`X_test`/`y_test`) de `_holdout`/`_kfold`/`_wfv` de vuelta a
+`validate_pipeline()` para poder calcular estos diagnósticos sin re-entrenar
+nada. Verificado con dataset sintético de clasificación (600 filas, churn
+binario, 65/35): accuracy 96%, matriz de confusión real `[[76,2],[6,36]]`,
+ROC/PR curves reales, sin ninguna regresión en `lab reporte`/`lab
+proyectos`/`lab info proyecto` (comandos CLI existentes probados de nuevo,
+idénticos a antes).
+
+**Bug real encontrado y corregido durante esta sección: la Sección 4 (Forex
+Lab) tenía su archivo `forex_lab.js` completamente perdido** — el HTML y los
+endpoints backend estaban intactos, pero el JS que los conectaba no existía
+en disco (aparentemente no se guardó correctamente en la sesión anterior).
+Se reconstruyó `forex_lab.js` desde cero verificando cada ID de HTML y cada
+endpoint contra el backend real. En el proceso se encontró y corrigió un bug
+real: el Circuit Breaker devuelve `open` (bool) y porcentajes YA
+multiplicados por 100, pero el primer borrador del JS reconstruido asumía
+`trading_allowed` (campo inexistente) y una re-multiplicación por 100 —
+corregido antes de dar por cerrada la sección, verificado contra la
+respuesta real de `/api/forex/circuit`.
+
+**Verificación realizada:** sintaxis JS con `node --check` (ambos archivos),
+cruce automatizado de todos los `getElementById` contra los `id=` reales del
+HTML (sin faltantes), cruce de todas las rutas `fetch()` contra las rutas
+`@app.get/post` reales del backend (sin faltantes ni desajustes), y pruebas
+curl end-to-end de cada endpoint nuevo con datos reales (dashboard, csvs,
+ohlc, circuit, lab/run, lab/projects, lab/projects/{id}).
+
+---
+
+*Parte 21 añadida el 6 de julio de 2026 — Roadmap IV, Sección 5 completa.
+Bonus: se reparó una regresión real en la Sección 4 (forex_lab.js perdido).*
+
+## PARTE 22 — BUSINESS LAB WORKSPACE (ROADMAP IV, SECCIÓN 6)
+
+Dashboard visual completo sobre `forex/business/` (KPIEngine +
+BusinessPredictor, ya existentes y probados por CLI desde antes). Todo con
+datos reales — nada simulado.
+
+**6.1 Análisis de negocio (un solo botón, un solo paso):**
+- Selector de archivo (CSV/Excel subido al Workspace, o ruta manual) + campo
+  de meses de proyección.
+- Al correr `POST /api/business/analyze`, hace en un solo paso síncrono
+  (KPIEngine y la regresión logística sobre datos tabulares de negocio son
+  rápidos — a diferencia del entrenamiento Forex/Optuna, no necesitan hilo de
+  fondo):
+  1. Normaliza el archivo real (`business_csv_adapter.adapt_business_csv`).
+  2. Calcula KPIs reales (`KPIEngine.compute_all()`): ingresos totales/
+     promedio/último período, crecimiento, márgenes bruto/neto, ratio de
+     gastos, tendencia, health score, nivel de riesgo, anomalías (caídas
+     >20%).
+  3. Entrena el predictor real sobre el propio dataset
+     (`BusinessPredictor.train()`).
+  4. Predicción real del próximo período con el modelo recién entrenado (o
+     heurística de tendencia si hay pocos datos — mismo fallback real que ya
+     usa `predice negocio` por CLI).
+  5. Proyección de forecast real a N meses — misma fórmula matemática que
+     `sme_consultant.sme_forecast()` (extrapolación lineal sobre
+     `trend_slope` real + banda de incertidumbre según `trend_strength`/R²
+     real), pero calculada server-side y devuelta como JSON estructurado en
+     vez de un string coloreado para consola.
+
+**Frontend:** tarjetas de KPI (ingresos, márgenes, crecimiento, tendencia,
+health score, riesgo — con colores semánticos verde/rojo según sea bueno o
+malo), lista de anomalías si las hay, tarjeta de señal ML (acción
+GROWING/STABLE/DECLINING + confianza + estado del entrenamiento), gráfico de
+proyección a N meses (Chart.js: banda optimista/esperado/conservador) y
+vista previa de los datos normalizados.
+
+**Bugs reales encontrados y corregidos en `forex/business/` durante esta
+sección (no relacionados con el Workspace en sí, existían desde antes):**
+1. `kpi_engine.py` calculaba internamente `trend_slope`/`trend_strength`
+   pero nunca los incluía en el diccionario devuelto por `compute_all()` —
+   `sme_forecast()` (comando CLI `forecast negocio`) siempre recibía
+   `None`/0 para ambos campos vía `.get()`, por lo que la proyección
+   *siempre* mostraba pendiente $0/mes y 0% de confianza sin importar la
+   tendencia real de los datos. Corregido agregando ambas claves al
+   resultado de `compute_all()`. Verificado con datos reales de
+   `pyme_ecommerce.csv`: pendiente real +1,327.61/mes, R² 0.88, confianza
+   88%, proyección final +11.3% — antes de la corrección esto mostraba
+   0%/0.
+2. El comando `forecast negocio <csv>` estaba **documentado en la ayuda**
+   (`_ayuda()`) pero **nunca conectado al dispatcher** — al escribirlo en
+   consola no hacía nada (caía al chat genérico). Se agregó el dispatch real
+   en `main.py` (`_bi_forecast()` + rama `elif` en `dispatch_command()`),
+   con soporte para meses opcionales (`forecast negocio archivo.csv 12`).
+   Verificado con sesión interactiva real y sin regresión en
+   `analiza negocio` / `predice negocio` / `entrena negocio` / `consulta
+   negocio`.
+
+**Verificación realizada:** sintaxis JS con `node --check`, cruce
+automatizado de `getElementById` contra `id=` del HTML (sin faltantes),
+cruce de rutas `fetch()` contra rutas reales del backend (sin desajustes),
+pruebas curl end-to-end de los 3 endpoints nuevos
+(`/api/business/csvs`, `/api/business/csv/info`, `/api/business/analyze`)
+con datos reales, y manejo correcto de casos límite (archivo inexistente →
+error claro sin crash; CSV no financiero como un OHLC de Forex → degrada a
+`business_type: "generic"` con KPIs en `null`/valores neutros, sin romper la
+UI).
+
+---
+
+*Parte 22 añadida el 6 de julio de 2026 — Roadmap IV, Sección 6 completa.
+Bonus: se corrigieron 2 bugs reales preexistentes en `forex/business/`
+(forecast con pendiente/confianza siempre en 0, y el comando `forecast
+negocio` documentado pero nunca conectado).*

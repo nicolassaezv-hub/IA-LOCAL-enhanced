@@ -57,6 +57,9 @@ from constitution import (
 # aprobacion->feedback->audit en un solo comando ('evolucionar ciclo').
 from evolutionary_cycle import cmd_ciclo_evolutivo, cmd_health_report
 import re as _re_lab
+from datetime import datetime
+
+_ANSI_STRIP_RE = _re_lab.compile(r'\x1b\[[0-9;]*m')
 
 
 def _parse_lab_args(rest: str):
@@ -216,6 +219,95 @@ def _forex_predict(csv_path: str):
             pass
         return _format_signal(result)
     return result
+
+
+_REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prediction", "reports")
+
+
+def _save_prediction_report(pair: str, csv_path: str, formatted_signal: str) -> str:
+    """
+    Guarda el reporte de una predicción individual como archivo de texto en
+    prediction/reports/, nombrado por par + fecha + hora. Si el nombre ya
+    existe (ej. mismo par analizado dos veces en el mismo segundo), agrega
+    un sufijo numérico para no pisar reportes anteriores.
+    """
+    os.makedirs(_REPORTS_DIR, exist_ok=True)
+    pair_clean = _re_lab.sub(r"[^A-Za-z0-9_]", "", (pair or "UNKNOWN").upper().replace("/", "_"))
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_name = f"{pair_clean}_{stamp}"
+    filename = f"{base_name}.txt"
+    path = os.path.join(_REPORTS_DIR, filename)
+    counter = 2
+    while os.path.exists(path):
+        filename = f"{base_name}_{counter}.txt"
+        path = os.path.join(_REPORTS_DIR, filename)
+        counter += 1
+
+    header = (
+        f"ASTRA — Reporte de Predicción Forex\n"
+        f"Par/Commodity : {pair_clean}\n"
+        f"Archivo CSV   : {csv_path}\n"
+        f"Generado      : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"{'=' * 60}\n"
+    )
+    # Quita códigos ANSI de color para que el archivo de texto quede limpio.
+    clean_signal = _ANSI_STRIP_RE.sub("", formatted_signal)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(header + clean_signal + "\n")
+
+    return path
+
+
+def _forex_predict_multi(csv_paths: list):
+    """
+    Predicción sobre MÚLTIPLES CSVs en un solo comando. A diferencia de
+    _forex_predict() (un archivo, solo se muestra en pantalla), aquí cada
+    resultado se guarda ADEMÁS como un reporte de texto individual en
+    prediction/reports/, nombrado por par + fecha + hora — para poder
+    revisar/comparar después sin tener que re-correr el comando.
+    """
+    from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
+
+    pipeline = ForexIntegratedPipeline()
+    lines = [Fore.CYAN + f"\n[ASTRA] ══ PREDICCIÓN MÚLTIPLE ({len(csv_paths)} archivos) ══" + Style.RESET_ALL]
+    saved_paths = []
+    errores = []
+
+    for i, csv_path in enumerate(csv_paths, start=1):
+        csv_path = csv_path.strip()
+        if not csv_path:
+            continue
+        print(Fore.YELLOW + f"\n[{i}/{len(csv_paths)}] Prediciendo: {csv_path}..." + Style.RESET_ALL)
+        try:
+            result = pipeline.predict(csv_path)
+        except Exception as e:
+            errores.append(f"{csv_path}: {e}")
+            lines.append(f"\n  ✗ {csv_path} → ERROR: {e}")
+            continue
+
+        if isinstance(result, dict) and "error" not in result:
+            try:
+                save_signal(result, csv_path)
+            except Exception:
+                pass
+            pair = result.get("pair", os.path.splitext(os.path.basename(csv_path))[0])
+            formatted = _format_signal(result)
+            print(formatted)
+            report_path = _save_prediction_report(pair, csv_path, formatted)
+            saved_paths.append(report_path)
+            action = result.get("action", "HOLD")
+            conf = float(result.get("confidence", 0) or 0)
+            lines.append(f"\n  ✓ {pair:<12} → {action:<5} (confianza {conf:.2f})  |  reporte: {os.path.relpath(report_path, os.path.dirname(os.path.abspath(__file__)))}")
+        else:
+            errores.append(f"{csv_path}: {result}")
+            lines.append(f"\n  ✗ {csv_path} → {result}")
+
+    lines.append(f"\n{'-' * 60}")
+    lines.append(f"  Reportes guardados: {len(saved_paths)}/{len(csv_paths)}  en prediction/reports/")
+    if errores:
+        lines.append(f"  Errores: {len(errores)}")
+
+    return "\n".join(lines)
 
 
 def _forex_tune(csv_path: str):
@@ -567,6 +659,13 @@ def _bi_predice(csv_path: str):
     return result
 
 
+def _bi_forecast(csv_path: str, months: int = 6):
+    """Revenue projection (optimistic/expected/conservative) N months ahead."""
+    show_progress("Business Forecast Projection", 2)
+    from sme_consultant import sme_forecast
+    return sme_forecast(csv_path, months)
+
+
 def _bi_entrena(csv_path: str):
     """Train ML model on business dataset."""
     print(Fore.CYAN + f"\n[ASTRA-BI] Training Business Model: {csv_path}" + Style.RESET_ALL)
@@ -599,6 +698,8 @@ def _ayuda():
   tune forex <csv>               Hyperparameter search (Optuna, 5-15 min) then train
   train forex <csv>              Train ensemble model (XGB + LGBM + RF) on CSV
   predict forex <csv>            Predict BUY/SELL/HOLD signal from trained model
+  predict forex <csv1>,<csv2>,... Predict multiple CSVs at once -> saves each report
+                                  as .txt in prediction/reports/ (pair_fecha_hora.txt)
   multi forex <csv>              Consensus signal across 3 horizons (5/10/20 candles)
   backtest forex <csv>           Backtest model on held-out data
   full forex <csv>               Train + Predict + Backtest in one shot
@@ -767,6 +868,697 @@ def _ayuda():
 #  MAIN LOOP
 # ═══════════════════════════════════════════════════════════
 
+def dispatch_command(user_input: str) -> str:
+    """
+    Motor de despacho central de ASTRA — el mismo dispatcher estricto que
+    usa el loop interactivo de consola (__main__), extraído a función
+    reutilizable para que el backend del Workspace (workspace/server.py)
+    pueda ejecutar los mismos comandos reales (full forex, monitor snapshot,
+    reglas ver, feedback votar, etc.) — no solo el fallback de chat.
+
+    No maneja "salir/exit/quit" — eso es responsabilidad de quien llama
+    (el loop de consola sigue interceptándolo antes de invocar esta función).
+    Siempre devuelve un string (nunca None): si ningún comando estricto
+    calza, cae al fallback de process_request() (intent_router + chat).
+    """
+    respuesta = None
+    try:
+        # ── HELP ─────────────────────────────────────────
+        if user_input.lower() in ["ayuda", "help", "?"]:
+            respuesta = _ayuda()
+
+        # ── FOREX: TUNE (Optuna) ─────────────────────────
+        elif user_input.startswith("tune forex "):
+            csv_path = user_input[len("tune forex "):].strip()
+            respuesta = _forex_tune(csv_path)
+
+        elif user_input.startswith("afinar forex "):
+            csv_path = user_input[len("afinar forex "):].strip()
+            respuesta = _forex_tune(csv_path)
+
+        # ── FOREX: TRAINING ──────────────────────────────
+        elif user_input.startswith("train forex "):
+            csv_path = user_input[len("train forex "):].strip()
+            respuesta = _forex_train(csv_path)
+
+        elif user_input.startswith("entrenar forex "):
+            csv_path = user_input[len("entrenar forex "):].strip()
+            respuesta = _forex_train(csv_path)
+
+        # ── FOREX: PREDICT (soporta multiples CSVs separados por coma) ──
+        elif user_input.startswith("predict forex "):
+            arg = user_input[len("predict forex "):].strip()
+            paths = [p.strip() for p in arg.split(",") if p.strip()]
+            respuesta = _forex_predict(paths[0]) if len(paths) <= 1 else _forex_predict_multi(paths)
+
+        elif user_input.startswith("predecir forex "):
+            arg = user_input[len("predecir forex "):].strip()
+            paths = [p.strip() for p in arg.split(",") if p.strip()]
+            respuesta = _forex_predict(paths[0]) if len(paths) <= 1 else _forex_predict_multi(paths)
+
+        # ── FOREX: MULTI-HORIZON ─────────────────────────
+        elif user_input.startswith("multi forex "):
+            csv_path = user_input[len("multi forex "):].strip()
+            respuesta = _forex_multi(csv_path)
+
+        elif user_input.startswith("multihorizonte forex "):
+            csv_path = user_input[len("multihorizonte forex "):].strip()
+            respuesta = _forex_multi(csv_path)
+
+        # ── FOREX: SCAN FOLDER ───────────────────────────
+        elif user_input.startswith("scan forex "):
+            target = user_input[len("scan forex "):].strip()
+            respuesta = _forex_scan(target)
+
+        elif user_input.startswith("escanear forex "):
+            target = user_input[len("escanear forex "):].strip()
+            respuesta = _forex_scan(target)
+
+        # ── FOREX: BACKTEST ──────────────────────────────
+        elif user_input.startswith("backtest forex "):
+            csv_path = user_input[len("backtest forex "):].strip()
+            respuesta = _forex_backtest(csv_path)
+
+        # ── FOREX: FULL PIPELINE ─────────────────────────
+        elif user_input.startswith("full forex "):
+            csv_path = user_input[len("full forex "):].strip()
+            respuesta = _forex_full(csv_path)
+
+        elif user_input.startswith("completo forex "):
+            csv_path = user_input[len("completo forex "):].strip()
+            respuesta = _forex_full(csv_path)
+
+        # ── FOREX: TECHNICAL ANALYTICS ───────────────────
+        elif user_input.startswith("analiza forex "):
+            # Accept both orderings:  "analiza forex eurusd datos.csv"
+            #                     and "analiza forex datos.csv eurusd"
+            from argument_parser import extract_market_symbol as _ems
+            _rest  = user_input[len("analiza forex "):].strip()
+            _parts = _rest.split()
+            _filepath, _sym = None, None
+            for _p in _parts:
+                if _p.lower().endswith((".csv", ".xlsx", ".xls")):
+                    _filepath = _p
+                else:
+                    _candidate = _ems(_p)
+                    if _candidate:
+                        _sym = _candidate
+            if _filepath and _sym:
+                respuesta = _forex_analiza(_filepath, _sym)
+            elif _sym:
+                respuesta = analyze_market_file(None, _sym)
+            elif _filepath:
+                respuesta = _forex_analiza(_filepath, "")
+            else:
+                respuesta = "Uso: analiza forex <symbol> [csv_path]  ej: analiza forex eurusd datos.csv"
+
+        # ── FOREX: LIST MARKETS ──────────────────────────
+        elif user_input.lower() in ["lista mercados", "list markets", "forex pares"]:
+            respuesta = _forex_lista()
+
+        elif user_input.lower() in ["mercados analizados", "saved markets"]:
+            respuesta = _forex_mercados()
+
+        # ── FOREX: HISTORY ───────────────────────────────
+        elif user_input.startswith("historial forex "):
+            symbol = user_input[len("historial forex "):].strip()
+            respuesta = _forex_historial(symbol)
+
+        elif user_input.startswith("forex history "):
+            symbol = user_input[len("forex history "):].strip()
+            respuesta = _forex_historial(symbol)
+
+        # ── FOREX: COMPARE ───────────────────────────────
+        elif user_input.startswith("compara forex "):
+            symbol = user_input[len("compara forex "):].strip()
+            respuesta = _forex_compara(symbol)
+
+        # ── MEMORIA DE COMANDOS ──────────────────────────────
+        elif user_input.lower() in ["que hice", "historial comandos", "mis acciones", "log"]:
+            try:
+                from memory import get_command_log
+                entries = get_command_log(limit=10)
+                if not entries:
+                    respuesta = "No hay comandos registrados aún."
+                else:
+                    lines = ["\n Últimos comandos ejecutados:\n"]
+                    for e in entries:
+                        pair_tag = f" [{e['pair']}]" if e["pair"] else ""
+                        lines.append(f"  [{e['executed_at']}]{pair_tag}  {e['command']}")
+                        lines.append(f"       → {e['summary'][:120]}")
+                    respuesta = "\n".join(lines)
+            except Exception as ex:
+                respuesta = f"Error al leer historial: {ex}"
+
+        elif user_input.lower().startswith("que hice con ") or user_input.lower().startswith("historial "):
+            try:
+                from memory import get_command_log
+                parts_h  = user_input.strip().split()
+                pair_h   = parts_h[-1].upper() if len(parts_h) > 2 else None
+                entries  = get_command_log(limit=10, pair=pair_h)
+                if not entries:
+                    respuesta = f"Sin registros para {pair_h or 'ese par'}."
+                else:
+                    lines = [f"\n Historial para {pair_h or 'todos'}:\n"]
+                    for e in entries:
+                        lines.append(f"  [{e['executed_at']}]  {e['command']}")
+                        lines.append(f"       → {e['summary'][:120]}")
+                    respuesta = "\n".join(lines)
+            except Exception as ex:
+                respuesta = f"Error: {ex}"
+
+        # ── RISK MANAGEMENT ──────────────────────────────────
+        elif user_input.lower() in ["circuit status", "estado circuit", "circuit breaker"]:
+            respuesta = cmd_circuit_status() if _HAS_RISK else "Módulo risk no disponible."
+        elif user_input.lower() in ["circuit reset", "resetear circuit"]:
+            respuesta = cmd_circuit_reset() if _HAS_RISK else "Módulo risk no disponible."
+        elif user_input.lower().startswith("position size ") or user_input.lower().startswith("sizing "):
+            # uso: position size <par> [balance]
+            parts = user_input.strip().split()
+            pair_ps  = parts[2] if len(parts) > 2 else "EURUSD"
+            bal_ps   = float(parts[3]) if len(parts) > 3 else 10_000
+            respuesta = _cmd_position_size(pair_ps, bal_ps) if _HAS_RISK else "Módulo risk no disponible."
+        # ── BUSINESS INTELLIGENCE ─────────────────────────
+        elif user_input.startswith("consulta negocio ") or user_input.startswith("consultar negocio "):
+            csv_path = user_input.split(" ", 2)[-1].strip()
+            respuesta = _bi_consulta(csv_path)
+
+        elif user_input.startswith("analiza negocio ") or user_input.startswith("analizar negocio "):
+            csv_path = user_input.split(" ", 2)[-1].strip()
+            respuesta = _bi_analiza(csv_path)
+
+        elif user_input.startswith("predice negocio ") or user_input.startswith("predecir negocio "):
+            csv_path = user_input.split(" ", 2)[-1].strip()
+            respuesta = _bi_predice(csv_path)
+
+        elif user_input.startswith("entrena negocio ") or user_input.startswith("entrenar negocio "):
+            csv_path = user_input.split(" ", 2)[-1].strip()
+            respuesta = _bi_entrena(csv_path)
+
+        elif user_input.startswith("forecast negocio "):
+            rest = user_input[len("forecast negocio "):].strip().split()
+            csv_path = rest[0] if rest else ""
+            months = int(rest[1]) if len(rest) > 1 and rest[1].isdigit() else 6
+            respuesta = _bi_forecast(csv_path, months)
+
+        # ── IO FILES ─────────────────────────────────────
+        elif user_input.startswith("analiza codigo"):
+            import ast
+            archivos = user_input.split()[2:] or ["main.py"]
+            for archivo in archivos:
+                try:
+                    with open(archivo, "r", encoding="utf-8") as f:
+                        code = f.read()
+                    tree = ast.parse(code)
+                    funciones = [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
+                    print(f"Funciones en {archivo}: {funciones}")
+                    respuesta = ask_openai("Analiza este código y dame mejoras:\n" + code)
+                    print(f"ASTRA ({archivo}): {respuesta}")
+                except Exception as e:
+                    print(f"Error analizando {archivo}: {e}")
+            return ""
+
+        elif user_input.startswith("crea py "):
+            partes = user_input.split(" ", 2)
+            from io_files import crea_py
+            respuesta = crea_py(partes[1], partes[2] if len(partes) > 2 else "")
+
+        elif user_input.startswith("lee pdf "):
+            show_progress("Reading PDF", 1)
+            respuesta = leer_pdf(user_input[8:].strip())
+
+        elif user_input.startswith("lee word "):
+            respuesta = leer_word(user_input[9:].strip())
+
+        elif user_input.startswith("lee excel "):
+            show_progress("Reading Excel", 2)
+            respuesta = leer_excel(user_input[10:].strip())
+
+        elif user_input.startswith("lee csv "):
+            show_progress("Reading CSV", 1)
+            respuesta = leer_csv(user_input[8:].strip())
+
+        elif user_input.startswith("analiza csv "):
+            show_progress("Analyzing CSV", 2)
+            respuesta = leer_csv(user_input[12:].strip(), analizar=True)
+
+        elif user_input.startswith("escribe pdf "):
+            partes = user_input.split(" ", 3)
+            respuesta = escribe_pdf(partes[2], partes[3] if len(partes) > 3 else "")
+
+        elif user_input.startswith("escribe word "):
+            partes = user_input.split(" ", 3)
+            respuesta = escribe_word(partes[2], partes[3] if len(partes) > 3 else "")
+
+        elif user_input.startswith("escribe excel "):
+            partes = user_input.split(" ", 3)
+            respuesta = escribe_excel(partes[2], partes[3] if len(partes) > 3 else "")
+
+        elif user_input.startswith("escribe csv "):
+            partes = user_input.split(" ", 3)
+            respuesta = escribe_csv(partes[2], partes[3] if len(partes) > 3 else "")
+
+        # ── VISUALIZATION ────────────────────────────────
+        elif user_input.startswith("grafica csv "):
+            respuesta = grafica_csv(user_input[12:].strip())
+
+        elif user_input.startswith("tabla "):
+            import pandas as pd
+            df = pd.read_csv(user_input[6:].strip())
+            respuesta = mostrar_tabla(df)
+
+        elif user_input.startswith("rich "):
+            respuesta = mostrar_rich(user_input[5:].strip())
+
+        elif user_input.startswith("crear pdf "):
+            partes = user_input.split(" ", 3)
+            respuesta = crear_pdf(partes[2], partes[3] if len(partes) > 3 else "")
+
+        elif user_input == "imagen":
+            respuesta = procesar_imagen_skimage()
+
+        elif user_input == "gui":
+            respuesta = mostrar_gui_pyqt()
+
+        # ── WEB ──────────────────────────────────────────
+        elif user_input.startswith("extrae web "):
+            show_progress("Extracting Web Content", 3)
+            respuesta = extrae_web(user_input[11:].strip())
+
+        elif user_input.startswith("traducir "):
+            show_progress("Translating", 2)
+            respuesta = traducir(user_input[9:].strip())
+
+        elif user_input.startswith("youtube "):
+            respuesta = descargar_youtube(user_input[8:].strip())
+
+        elif user_input == "httpx demo":
+            respuesta = httpx_demo()
+
+        elif user_input == "aiohttp demo":
+            import asyncio
+            respuesta = asyncio.run(aiohttp_demo())
+
+        elif user_input == "socketio demo":
+            respuesta = socketio_demo()
+
+        elif user_input == "fastapi demo":
+            respuesta = fastapi_demo()
+
+        elif user_input == "flask demo":
+            respuesta = flask_demo()
+
+        # ── AUDIO / VIDEO ────────────────────────────────
+        elif user_input.startswith("voz a texto"):
+            respuesta = voz_a_texto()
+
+        elif user_input.startswith("texto a voz "):
+            respuesta = texto_a_voz(user_input[12:].strip())
+
+        elif user_input.startswith("analiza audio "):
+            respuesta = analiza_audio(user_input[14:].strip())
+
+        elif user_input.startswith("reproducir audio "):
+            respuesta = reproducir_audio(user_input[17:].strip())
+
+        elif user_input.startswith("convertir audio "):
+            partes = user_input.split(" ", 3)
+            respuesta = convertir_audio(partes[2], partes[3] if len(partes) > 3 else "mp3")
+
+        elif user_input.startswith("descargar audio youtube "):
+            respuesta = descargar_audio_youtube(user_input[24:].strip())
+
+        # ── SECURITY ─────────────────────────────────────
+        elif user_input.startswith("cifra archivo "):
+            respuesta = cifra_archivo(user_input[14:].strip())
+
+        elif user_input.startswith("hash pass "):
+            respuesta = hash_password(user_input[10:].strip())
+
+        elif user_input.startswith("verify pass "):
+            partes = user_input.split(" ", 3)
+            respuesta = verify_password(partes[2], partes[3] if len(partes) > 3 else "")
+
+        elif user_input.startswith("passlib hash "):
+            respuesta = passlib_hash(user_input[13:].strip())
+
+        elif user_input.startswith("passlib verify "):
+            partes = user_input.split(" ", 3)
+            respuesta = passlib_verify(partes[2], partes[3] if len(partes) > 3 else "")
+
+        elif user_input.startswith("crear jwt"):
+            respuesta = crear_jwt({"user": "astra", "role": "admin"})
+
+        elif user_input.startswith("verificar jwt "):
+            respuesta = verificar_jwt(user_input[14:].strip())
+
+        elif user_input == "paramiko demo":
+            respuesta = paramiko_demo()
+
+        # ── UTILS ────────────────────────────────────────
+        elif user_input.startswith("estado pc"):
+            respuesta = utils_status()
+
+        elif user_input == "barra progreso":
+            respuesta = barra_progreso()
+
+        elif user_input == "tarea programada":
+            respuesta = tarea_programada()
+
+        elif user_input.startswith("simular tecla "):
+            respuesta = simular_tecla(user_input[14:].strip())
+
+        elif user_input == "simular click":
+            respuesta = simular_click()
+
+        elif user_input.startswith("bloquear archivo "):
+            respuesta = bloquear_archivo(user_input[17:].strip())
+
+        elif user_input.startswith("monitor archivos "):
+            respuesta = iniciar_monitor(user_input[17:].strip())
+
+        elif user_input == "fecha":
+            respuesta = obtener_fecha_arrow()
+
+        elif user_input == "json":
+            respuesta = serializar_orjson({"msg": "ok", "sistema": "ASTRA"})
+
+        # ── AI MODELS ────────────────────────────────────
+        elif user_input == "torch demo":
+            respuesta = torch_demo()
+
+        elif user_input == "tensorflow demo":
+            respuesta = tensorflow_demo()
+
+        elif user_input == "keras demo":
+            respuesta = keras_demo()
+
+        elif user_input in ("sklearn demo", "sklearn"):
+            respuesta = sklearn_demo()
+
+        elif user_input == "integral":
+            show_progress("Symbolic Integration", 1)
+            respuesta = calcular_integral("x**2", "x", 0, 1)
+
+
+        # ── PROYECTOS Y MODELOS (FASE 1) ─────────────────────
+        elif user_input.lower() in ["mis modelos", "list models", "modelos entrenados"]:
+            respuesta = cmd_list_models()
+
+        elif user_input.lower() in ["mis proyectos", "list projects", "proyectos"]:
+            respuesta = cmd_list_projects()
+
+        elif user_input.lower() in ["tareas", "mis tareas", "pendientes"]:
+            respuesta = cmd_list_tasks()
+
+        elif user_input.lower().startswith("tareas "):
+            respuesta = cmd_list_tasks(user_input[7:].strip())
+
+        elif user_input.lower().startswith("nuevo proyecto "):
+            parts = user_input[15:].strip().split(" ", 1)
+            name  = parts[0]
+            desc  = parts[1] if len(parts) > 1 else ""
+            pid   = save_project(name, desc)
+            respuesta = f"Proyecto '{name}' guardado (id={pid})"
+
+        elif user_input.lower().startswith("cerrar proyecto "):
+            name = user_input[16:].strip()
+            ok   = update_project_status(name, "done")
+            respuesta = f"Proyecto '{name}' completado." if ok else f"No encontré el proyecto '{name}'."
+
+        elif user_input.lower().startswith("pausar proyecto "):
+            name = user_input[16:].strip()
+            ok   = update_project_status(name, "paused")
+            respuesta = f"Proyecto '{name}' pausado." if ok else f"No encontré el proyecto '{name}'."
+
+        elif user_input.lower().startswith("nueva tarea "):
+            rest = user_input[12:].strip()
+            if "|" in rest:
+                proj, desc = rest.split("|", 1)
+                tid = add_task(proj.strip(), desc.strip())
+                respuesta = f"Tarea [{tid}] agregada al proyecto '{proj.strip()}'."
+            else:
+                respuesta = "Uso: nueva tarea <proyecto> | <descripción>"
+
+        elif user_input.lower().startswith("completar tarea "):
+            try:
+                tid = int(user_input[16:].strip())
+                ok  = complete_task(tid)
+                respuesta = f"Tarea [{tid}] completada." if ok else f"No encontré la tarea [{tid}]."
+            except ValueError:
+                respuesta = "Uso: completar tarea <id>  (ej: completar tarea 3)"
+
+        elif user_input.lower().startswith("info modelo "):
+            pair  = user_input[12:].strip()
+            model = get_model(pair)
+            if model:
+                prec = model.get("precision")
+                acc  = model.get("accuracy")
+                rows = model.get("rows_trained")
+                date = (model.get("updated_at") or "")[:16]
+                out  = [f"  Modelo: {model['pair']}"]
+                if prec: out.append(f"  Precision  : {prec:.2%}")
+                if acc:  out.append(f"  Accuracy   : {acc:.2%}")
+                if rows: out.append(f"  Filas      : {rows:,}")
+                out.append(f"  Actualizado: {date}")
+                respuesta = "\n".join(out)
+            else:
+                respuesta = f"No hay modelo para '{pair}'. Usa: train forex <csv>"
+
+        # ── PREDICTION LAB (FASE 5) ───────────────────────────
+        elif user_input.lower().startswith("lab analiza "):
+            _idea = user_input[12:].strip().strip('"').strip("'")
+            respuesta = cmd_lab_analiza(_idea)
+
+        elif user_input.lower().startswith("lab dataset "):
+            _parts_ds = user_input[12:].strip().split()
+            if len(_parts_ds) >= 2:
+                respuesta = cmd_lab_dataset(_parts_ds[0], _parts_ds[1])
+            elif len(_parts_ds) == 1:
+                respuesta = cmd_lab_dataset(_parts_ds[0])
+            else:
+                respuesta = "Uso: lab dataset <archivo.csv> [target_variable]"
+
+        elif user_input.lower().startswith("lab viabilidad "):
+            _csv_v, _idea_v, _tgt_v = _parse_lab_args(user_input[15:])
+            if _csv_v:
+                respuesta = cmd_lab_viabilidad(_csv_v, _idea_v, target_variable=_tgt_v)
+            else:
+                respuesta = 'Uso: lab viabilidad <archivo.csv> "<describe tu idea>" [columna_target]'
+
+        elif user_input.lower().startswith("lab planea "):
+            _csv_p, _idea_p, _tgt_p = _parse_lab_args(user_input[11:])
+            if _csv_p:
+                respuesta = cmd_lab_planea(_csv_p, _idea_p, target_variable=_tgt_p)
+            else:
+                respuesta = 'Uso: lab planea <archivo.csv> "<describe tu idea>" [columna_target]'
+
+        elif user_input.lower().startswith("lab genera "):
+            _csv_g, _idea_g, _tgt_g = _parse_lab_args(user_input[11:])
+            if _csv_g:
+                respuesta = cmd_lab_genera(_csv_g, _idea_g, target_variable=_tgt_g)
+            else:
+                respuesta = 'Uso: lab genera <archivo.csv> "<describe tu idea>" [columna_target]'
+
+        elif user_input.lower().startswith("lab valida "):
+            _csv_val, _idea_val, _tgt_val = _parse_lab_args(user_input[11:])
+            if _csv_val:
+                respuesta = cmd_lab_valida(_csv_val, _idea_val, target_variable=_tgt_val)
+            else:
+                respuesta = 'Uso: lab valida <archivo.csv> "<describe tu idea>" [columna_target]'
+
+        elif user_input.lower().startswith("lab reporte "):
+            _csv_r, _idea_r, _tgt_r = _parse_lab_args(user_input[12:])
+            if _csv_r:
+                respuesta = cmd_lab_reporte(_csv_r, _idea_r, target_variable=_tgt_r)
+            else:
+                respuesta = 'Uso: lab reporte <archivo.csv> "<describe tu idea>" [columna_target]'
+
+        elif user_input.lower().strip() == "lab proyectos":
+            respuesta = cmd_lab_proyectos()
+
+        elif user_input.lower().startswith("lab info proyecto "):
+            _ident = user_input[19:].strip()
+            respuesta = cmd_lab_info_proyecto(_ident) if _ident else "Uso: lab info proyecto <numero|nombre>"
+
+        elif user_input.lower().startswith("feedback votar "):
+            _rest_fv = user_input[15:].strip().split(None, 2)
+            if len(_rest_fv) >= 2:
+                _tid, _vote = _rest_fv[0], _rest_fv[1]
+                _comment = _rest_fv[2].strip().strip('"').strip("'") if len(_rest_fv) == 3 else ""
+                respuesta = cmd_feedback_votar(_tid, _vote, _comment)
+            else:
+                respuesta = 'Uso: feedback votar <id> <1|-1> ["comentario"]'
+
+        elif user_input.lower().startswith("feedback ver "):
+            _tid_v = user_input[13:].strip()
+            respuesta = cmd_feedback_ver(_tid_v) if _tid_v else "Uso: feedback ver <id>"
+
+        elif user_input.lower().strip() == "feedback analisis":
+            respuesta = cmd_feedback_analisis()
+
+        elif user_input.lower().strip() == "feedback dashboard":
+            respuesta = cmd_feedback_dashboard()
+
+        elif user_input.lower().strip() == "thresholds ver":
+            respuesta = cmd_thresholds_ver()
+
+        elif user_input.lower().strip() == "contextual memoria":
+            respuesta = cmd_contextual_memory()
+
+        elif user_input.lower().startswith("evolucion historial"):
+            _rest_eh = user_input[20:].strip()
+            _limit_eh = int(_rest_eh) if _rest_eh.isdigit() else 10
+            respuesta = cmd_evolution_history(_limit_eh)
+
+        elif user_input.lower().strip() == "monitor snapshot":
+            respuesta = cmd_monitor_snapshot()
+
+        elif user_input.lower().startswith("monitor historial"):
+            _rest_mh = user_input[18:].strip()
+            _limit_mh = int(_rest_mh) if _rest_mh.isdigit() else 10
+            respuesta = cmd_monitor_historial(_limit_mh)
+
+        elif user_input.lower().strip() == "mejoras detectar":
+            respuesta = cmd_mejoras_detectar()
+
+        elif user_input.lower().strip() == "evolucionar":
+            respuesta = cmd_evolucionar(False)
+
+        elif user_input.lower().strip() == "evolucionar ciclo":
+            respuesta = cmd_ciclo_evolutivo(auto_approve=False)
+
+        elif user_input.lower().strip() == "evolucionar ciclo auto":
+            respuesta = cmd_ciclo_evolutivo(auto_approve=True)
+
+        elif user_input.lower().strip() == "salud sistema":
+            respuesta = cmd_health_report()
+
+        elif user_input.lower().startswith("propuestas ver"):
+            _rest_pv = user_input[14:].strip()
+            respuesta = cmd_proposals_ver(_rest_pv if _rest_pv else None)
+
+        elif user_input.lower().startswith("propuesta aprobar "):
+            _pid_ap = user_input[18:].strip()
+            respuesta = cmd_aprobar_propuesta(_pid_ap) if _pid_ap else "Uso: propuesta aprobar <id>"
+
+        elif user_input.lower().startswith("propuesta rechazar "):
+            _pid_rj = user_input[19:].strip()
+            respuesta = cmd_rechazar_propuesta(_pid_rj) if _pid_rj else "Uso: propuesta rechazar <id>"
+
+        elif user_input.lower().startswith("propuesta aplicar "):
+            _pid_apl = user_input[18:].strip()
+            respuesta = cmd_aplicar_propuesta(_pid_apl) if _pid_apl else "Uso: propuesta aplicar <id>"
+
+        elif user_input.lower().strip() == "reglas ver":
+            respuesta = cmd_reglas_ver()
+
+        elif user_input.lower().startswith("propuesta validar "):
+            _pid_val = user_input[18:].strip()
+            respuesta = cmd_validar_propuesta(_pid_val) if _pid_val else "Uso: propuesta validar <id>"
+
+        elif user_input.lower().startswith("audit ver"):
+            _rest_av = user_input[9:].strip()
+            _limit_av = int(_rest_av) if _rest_av.isdigit() else 20
+            respuesta = cmd_audit_log(_limit_av)
+
+        elif user_input.lower().strip() == "rollback ver":
+            respuesta = cmd_rollback_ver()
+
+        elif user_input.lower().startswith("rollback aplicar "):
+            _pid_rb = user_input[17:].strip()
+            respuesta = cmd_rollback_aplicar(_pid_rb) if _pid_rb else "Uso: rollback aplicar <id>"
+
+        # ── NEWS INTELLIGENCE (FASE 4) ───────────────────────
+        elif user_input.lower().startswith("noticias predice "):
+            parts = user_input[17:].strip().split()
+            if len(parts) >= 2:
+                respuesta = cmd_news_predict(parts[0], parts[1])
+            else:
+                respuesta = "Uso: noticias predice <par> <csv>  ej: noticias predice EURUSD CSVs/H1/EURUSD.csv"
+
+        elif user_input.lower().startswith("noticias "):
+            respuesta = cmd_news(user_input[9:].strip())
+
+        elif user_input.lower().startswith("news "):
+            respuesta = cmd_news(user_input[5:].strip())
+
+        # ── ACTIVE ENGINE SCHEDULER (FASE 3) ─────────────────
+        elif user_input.lower().startswith("schedule forex "):
+            # uso: schedule forex <par> <csv> [minutos]
+            parts = user_input[15:].strip().split()
+            if len(parts) >= 2:
+                _pair = parts[0]
+                _csv  = parts[1]
+                _min  = int(parts[2]) if len(parts) > 2 else 60
+                respuesta = cmd_schedule_forex(_pair, _csv, _min)
+            else:
+                respuesta = "Uso: schedule forex <par> <csv> [minutos]  ej: schedule forex EURUSD CSVs/H1/EURUSD.csv 60"
+
+        elif user_input.lower().startswith("schedule stop "):
+            respuesta = cmd_schedule_stop(user_input[14:].strip())
+
+        elif user_input.lower() == "schedule stop":
+            respuesta = cmd_schedule_stop("all")
+
+        elif user_input.lower() in ["schedule status", "schedule"]:
+            respuesta = cmd_schedule_status()
+
+        elif user_input.lower().startswith("schedule run "):
+            respuesta = cmd_schedule_run(user_input[13:].strip())
+
+        # ── FOREX WATCHER (FASE 2) ────────────────────────────
+        elif user_input.lower().startswith("watch forex "):
+            # uso: watch forex <par> <csv> [intervalo_segundos]
+            parts = user_input[12:].strip().split()
+            if len(parts) >= 2:
+                _pair  = parts[0]
+                _csv   = parts[1]
+                _intv  = int(parts[2]) if len(parts) > 2 else 60
+                respuesta = cmd_watch_start(_pair, _csv, _intv)
+            else:
+                respuesta = "Uso: watch forex <par> <csv> [intervalo]  ej: watch forex EURUSD CSVs/H1/EURUSD.csv 60"
+
+        elif user_input.lower().startswith("watch stop "):
+            respuesta = cmd_watch_stop(user_input[11:].strip())
+
+        elif user_input.lower() == "watch stop":
+            respuesta = cmd_watch_stop("all")
+
+        elif user_input.lower() in ["watch status", "watch"]:
+            respuesta = cmd_watch_status()
+
+        elif user_input.lower().startswith("watch check "):
+            respuesta = cmd_watch_check(user_input[12:].strip())
+
+        # ── HISTORIAL DE SEÑALES (FASE 2) ────────────────────
+        elif user_input.lower().startswith("señales "):
+            respuesta = cmd_signal_history(user_input[8:].strip())
+
+        elif user_input.lower().startswith("signals "):
+            respuesta = cmd_signal_history(user_input[8:].strip())
+
+        elif user_input.lower() in ["señales", "signals", "historial señales"]:
+            respuesta = cmd_signal_history()
+
+        elif user_input.lower().startswith("stats señales"):
+            parts = user_input.split()
+            pair_arg = parts[2] if len(parts) > 2 else None
+            respuesta = cmd_signal_stats(pair_arg)
+
+        # ── EXTRA MODULES ────────────────────────────────
+        elif user_input in comandos_extra:
+            respuesta = comandos_extra[user_input]()
+
+        # ── GPT FALLBACK ─────────────────────────────────
+        else:
+            respuesta = process_request(user_input)
+
+    except Exception as e:
+        respuesta = f"{Fore.RED}Error: {e}{Style.RESET_ALL}"
+    return respuesta
+
+
 if __name__ == "__main__":
     init_db()
     init_project_db()
@@ -788,677 +1580,12 @@ if __name__ == "__main__":
 
         respuesta = None
 
-        try:
-            # ── EXIT ────────────────────────────────────────
-            if user_input.lower() in ["salir", "exit", "quit"]:
-                print(Fore.GREEN + "¡Hasta luego!")
-                break
+        if user_input.lower() in ["salir", "exit", "quit"]:
+            print(Fore.GREEN + "¡Hasta luego!")
+            break
 
-            # ── HELP ─────────────────────────────────────────
-            elif user_input.lower() in ["ayuda", "help", "?"]:
-                respuesta = _ayuda()
+        respuesta = dispatch_command(user_input)
 
-            # ── FOREX: TUNE (Optuna) ─────────────────────────
-            elif user_input.startswith("tune forex "):
-                csv_path = user_input[len("tune forex "):].strip()
-                respuesta = _forex_tune(csv_path)
-
-            elif user_input.startswith("afinar forex "):
-                csv_path = user_input[len("afinar forex "):].strip()
-                respuesta = _forex_tune(csv_path)
-
-            # ── FOREX: TRAINING ──────────────────────────────
-            elif user_input.startswith("train forex "):
-                csv_path = user_input[len("train forex "):].strip()
-                respuesta = _forex_train(csv_path)
-
-            elif user_input.startswith("entrenar forex "):
-                csv_path = user_input[len("entrenar forex "):].strip()
-                respuesta = _forex_train(csv_path)
-
-            # ── FOREX: PREDICT ───────────────────────────────
-            elif user_input.startswith("predict forex "):
-                csv_path = user_input[len("predict forex "):].strip()
-                respuesta = _forex_predict(csv_path)
-
-            elif user_input.startswith("predecir forex "):
-                csv_path = user_input[len("predecir forex "):].strip()
-                respuesta = _forex_predict(csv_path)
-
-            # ── FOREX: MULTI-HORIZON ─────────────────────────
-            elif user_input.startswith("multi forex "):
-                csv_path = user_input[len("multi forex "):].strip()
-                respuesta = _forex_multi(csv_path)
-
-            elif user_input.startswith("multihorizonte forex "):
-                csv_path = user_input[len("multihorizonte forex "):].strip()
-                respuesta = _forex_multi(csv_path)
-
-            # ── FOREX: SCAN FOLDER ───────────────────────────
-            elif user_input.startswith("scan forex "):
-                target = user_input[len("scan forex "):].strip()
-                respuesta = _forex_scan(target)
-
-            elif user_input.startswith("escanear forex "):
-                target = user_input[len("escanear forex "):].strip()
-                respuesta = _forex_scan(target)
-
-            # ── FOREX: BACKTEST ──────────────────────────────
-            elif user_input.startswith("backtest forex "):
-                csv_path = user_input[len("backtest forex "):].strip()
-                respuesta = _forex_backtest(csv_path)
-
-            # ── FOREX: FULL PIPELINE ─────────────────────────
-            elif user_input.startswith("full forex "):
-                csv_path = user_input[len("full forex "):].strip()
-                respuesta = _forex_full(csv_path)
-
-            elif user_input.startswith("completo forex "):
-                csv_path = user_input[len("completo forex "):].strip()
-                respuesta = _forex_full(csv_path)
-
-            # ── FOREX: TECHNICAL ANALYTICS ───────────────────
-            elif user_input.startswith("analiza forex "):
-                # Accept both orderings:  "analiza forex eurusd datos.csv"
-                #                     and "analiza forex datos.csv eurusd"
-                from argument_parser import extract_market_symbol as _ems
-                _rest  = user_input[len("analiza forex "):].strip()
-                _parts = _rest.split()
-                _filepath, _sym = None, None
-                for _p in _parts:
-                    if _p.lower().endswith((".csv", ".xlsx", ".xls")):
-                        _filepath = _p
-                    else:
-                        _candidate = _ems(_p)
-                        if _candidate:
-                            _sym = _candidate
-                if _filepath and _sym:
-                    respuesta = _forex_analiza(_filepath, _sym)
-                elif _sym:
-                    respuesta = analyze_market_file(None, _sym)
-                elif _filepath:
-                    respuesta = _forex_analiza(_filepath, "")
-                else:
-                    respuesta = "Uso: analiza forex <symbol> [csv_path]  ej: analiza forex eurusd datos.csv"
-
-            # ── FOREX: LIST MARKETS ──────────────────────────
-            elif user_input.lower() in ["lista mercados", "list markets", "forex pares"]:
-                respuesta = _forex_lista()
-
-            elif user_input.lower() in ["mercados analizados", "saved markets"]:
-                respuesta = _forex_mercados()
-
-            # ── FOREX: HISTORY ───────────────────────────────
-            elif user_input.startswith("historial forex "):
-                symbol = user_input[len("historial forex "):].strip()
-                respuesta = _forex_historial(symbol)
-
-            elif user_input.startswith("forex history "):
-                symbol = user_input[len("forex history "):].strip()
-                respuesta = _forex_historial(symbol)
-
-            # ── FOREX: COMPARE ───────────────────────────────
-            elif user_input.startswith("compara forex "):
-                symbol = user_input[len("compara forex "):].strip()
-                respuesta = _forex_compara(symbol)
-
-            # ── MEMORIA DE COMANDOS ──────────────────────────────
-            elif user_input.lower() in ["que hice", "historial comandos", "mis acciones", "log"]:
-                try:
-                    from memory import get_command_log
-                    entries = get_command_log(limit=10)
-                    if not entries:
-                        respuesta = "No hay comandos registrados aún."
-                    else:
-                        lines = ["\n Últimos comandos ejecutados:\n"]
-                        for e in entries:
-                            pair_tag = f" [{e['pair']}]" if e["pair"] else ""
-                            lines.append(f"  [{e['executed_at']}]{pair_tag}  {e['command']}")
-                            lines.append(f"       → {e['summary'][:120]}")
-                        respuesta = "\n".join(lines)
-                except Exception as ex:
-                    respuesta = f"Error al leer historial: {ex}"
-
-            elif user_input.lower().startswith("que hice con ") or user_input.lower().startswith("historial "):
-                try:
-                    from memory import get_command_log
-                    parts_h  = user_input.strip().split()
-                    pair_h   = parts_h[-1].upper() if len(parts_h) > 2 else None
-                    entries  = get_command_log(limit=10, pair=pair_h)
-                    if not entries:
-                        respuesta = f"Sin registros para {pair_h or 'ese par'}."
-                    else:
-                        lines = [f"\n Historial para {pair_h or 'todos'}:\n"]
-                        for e in entries:
-                            lines.append(f"  [{e['executed_at']}]  {e['command']}")
-                            lines.append(f"       → {e['summary'][:120]}")
-                        respuesta = "\n".join(lines)
-                except Exception as ex:
-                    respuesta = f"Error: {ex}"
-
-            # ── RISK MANAGEMENT ──────────────────────────────────
-            elif user_input.lower() in ["circuit status", "estado circuit", "circuit breaker"]:
-                respuesta = cmd_circuit_status() if _HAS_RISK else "Módulo risk no disponible."
-            elif user_input.lower() in ["circuit reset", "resetear circuit"]:
-                respuesta = cmd_circuit_reset() if _HAS_RISK else "Módulo risk no disponible."
-            elif user_input.lower().startswith("position size ") or user_input.lower().startswith("sizing "):
-                # uso: position size <par> [balance]
-                parts = user_input.strip().split()
-                pair_ps  = parts[2] if len(parts) > 2 else "EURUSD"
-                bal_ps   = float(parts[3]) if len(parts) > 3 else 10_000
-                respuesta = _cmd_position_size(pair_ps, bal_ps) if _HAS_RISK else "Módulo risk no disponible."
-            # ── BUSINESS INTELLIGENCE ─────────────────────────
-            elif user_input.startswith("consulta negocio ") or user_input.startswith("consultar negocio "):
-                csv_path = user_input.split(" ", 2)[-1].strip()
-                respuesta = _bi_consulta(csv_path)
-
-            elif user_input.startswith("analiza negocio ") or user_input.startswith("analizar negocio "):
-                csv_path = user_input.split(" ", 2)[-1].strip()
-                respuesta = _bi_analiza(csv_path)
-
-            elif user_input.startswith("predice negocio ") or user_input.startswith("predecir negocio "):
-                csv_path = user_input.split(" ", 2)[-1].strip()
-                respuesta = _bi_predice(csv_path)
-
-            elif user_input.startswith("entrena negocio ") or user_input.startswith("entrenar negocio "):
-                csv_path = user_input.split(" ", 2)[-1].strip()
-                respuesta = _bi_entrena(csv_path)
-
-            # ── IO FILES ─────────────────────────────────────
-            elif user_input.startswith("analiza codigo"):
-                import ast
-                archivos = user_input.split()[2:] or ["main.py"]
-                for archivo in archivos:
-                    try:
-                        with open(archivo, "r", encoding="utf-8") as f:
-                            code = f.read()
-                        tree = ast.parse(code)
-                        funciones = [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
-                        print(f"Funciones en {archivo}: {funciones}")
-                        respuesta = ask_openai("Analiza este código y dame mejoras:\n" + code)
-                        print(f"ASTRA ({archivo}): {respuesta}")
-                    except Exception as e:
-                        print(f"Error analizando {archivo}: {e}")
-                continue
-
-            elif user_input.startswith("crea py "):
-                partes = user_input.split(" ", 2)
-                from io_files import crea_py
-                respuesta = crea_py(partes[1], partes[2] if len(partes) > 2 else "")
-
-            elif user_input.startswith("lee pdf "):
-                show_progress("Reading PDF", 1)
-                respuesta = leer_pdf(user_input[8:].strip())
-
-            elif user_input.startswith("lee word "):
-                respuesta = leer_word(user_input[9:].strip())
-
-            elif user_input.startswith("lee excel "):
-                show_progress("Reading Excel", 2)
-                respuesta = leer_excel(user_input[10:].strip())
-
-            elif user_input.startswith("lee csv "):
-                show_progress("Reading CSV", 1)
-                respuesta = leer_csv(user_input[8:].strip())
-
-            elif user_input.startswith("analiza csv "):
-                show_progress("Analyzing CSV", 2)
-                respuesta = leer_csv(user_input[12:].strip(), analizar=True)
-
-            elif user_input.startswith("escribe pdf "):
-                partes = user_input.split(" ", 3)
-                respuesta = escribe_pdf(partes[2], partes[3] if len(partes) > 3 else "")
-
-            elif user_input.startswith("escribe word "):
-                partes = user_input.split(" ", 3)
-                respuesta = escribe_word(partes[2], partes[3] if len(partes) > 3 else "")
-
-            elif user_input.startswith("escribe excel "):
-                partes = user_input.split(" ", 3)
-                respuesta = escribe_excel(partes[2], partes[3] if len(partes) > 3 else "")
-
-            elif user_input.startswith("escribe csv "):
-                partes = user_input.split(" ", 3)
-                respuesta = escribe_csv(partes[2], partes[3] if len(partes) > 3 else "")
-
-            # ── VISUALIZATION ────────────────────────────────
-            elif user_input.startswith("grafica csv "):
-                respuesta = grafica_csv(user_input[12:].strip())
-
-            elif user_input.startswith("tabla "):
-                import pandas as pd
-                df = pd.read_csv(user_input[6:].strip())
-                respuesta = mostrar_tabla(df)
-
-            elif user_input.startswith("rich "):
-                respuesta = mostrar_rich(user_input[5:].strip())
-
-            elif user_input.startswith("crear pdf "):
-                partes = user_input.split(" ", 3)
-                respuesta = crear_pdf(partes[2], partes[3] if len(partes) > 3 else "")
-
-            elif user_input == "imagen":
-                respuesta = procesar_imagen_skimage()
-
-            elif user_input == "gui":
-                respuesta = mostrar_gui_pyqt()
-
-            # ── WEB ──────────────────────────────────────────
-            elif user_input.startswith("extrae web "):
-                show_progress("Extracting Web Content", 3)
-                respuesta = extrae_web(user_input[11:].strip())
-
-            elif user_input.startswith("traducir "):
-                show_progress("Translating", 2)
-                respuesta = traducir(user_input[9:].strip())
-
-            elif user_input.startswith("youtube "):
-                respuesta = descargar_youtube(user_input[8:].strip())
-
-            elif user_input == "httpx demo":
-                respuesta = httpx_demo()
-
-            elif user_input == "aiohttp demo":
-                import asyncio
-                respuesta = asyncio.run(aiohttp_demo())
-
-            elif user_input == "socketio demo":
-                respuesta = socketio_demo()
-
-            elif user_input == "fastapi demo":
-                respuesta = fastapi_demo()
-
-            elif user_input == "flask demo":
-                respuesta = flask_demo()
-
-            # ── AUDIO / VIDEO ────────────────────────────────
-            elif user_input.startswith("voz a texto"):
-                respuesta = voz_a_texto()
-
-            elif user_input.startswith("texto a voz "):
-                respuesta = texto_a_voz(user_input[12:].strip())
-
-            elif user_input.startswith("analiza audio "):
-                respuesta = analiza_audio(user_input[14:].strip())
-
-            elif user_input.startswith("reproducir audio "):
-                respuesta = reproducir_audio(user_input[17:].strip())
-
-            elif user_input.startswith("convertir audio "):
-                partes = user_input.split(" ", 3)
-                respuesta = convertir_audio(partes[2], partes[3] if len(partes) > 3 else "mp3")
-
-            elif user_input.startswith("descargar audio youtube "):
-                respuesta = descargar_audio_youtube(user_input[24:].strip())
-
-            # ── SECURITY ─────────────────────────────────────
-            elif user_input.startswith("cifra archivo "):
-                respuesta = cifra_archivo(user_input[14:].strip())
-
-            elif user_input.startswith("hash pass "):
-                respuesta = hash_password(user_input[10:].strip())
-
-            elif user_input.startswith("verify pass "):
-                partes = user_input.split(" ", 3)
-                respuesta = verify_password(partes[2], partes[3] if len(partes) > 3 else "")
-
-            elif user_input.startswith("passlib hash "):
-                respuesta = passlib_hash(user_input[13:].strip())
-
-            elif user_input.startswith("passlib verify "):
-                partes = user_input.split(" ", 3)
-                respuesta = passlib_verify(partes[2], partes[3] if len(partes) > 3 else "")
-
-            elif user_input.startswith("crear jwt"):
-                respuesta = crear_jwt({"user": "astra", "role": "admin"})
-
-            elif user_input.startswith("verificar jwt "):
-                respuesta = verificar_jwt(user_input[14:].strip())
-
-            elif user_input == "paramiko demo":
-                respuesta = paramiko_demo()
-
-            # ── UTILS ────────────────────────────────────────
-            elif user_input.startswith("estado pc"):
-                respuesta = utils_status()
-
-            elif user_input == "barra progreso":
-                respuesta = barra_progreso()
-
-            elif user_input == "tarea programada":
-                respuesta = tarea_programada()
-
-            elif user_input.startswith("simular tecla "):
-                respuesta = simular_tecla(user_input[14:].strip())
-
-            elif user_input == "simular click":
-                respuesta = simular_click()
-
-            elif user_input.startswith("bloquear archivo "):
-                respuesta = bloquear_archivo(user_input[17:].strip())
-
-            elif user_input.startswith("monitor archivos "):
-                respuesta = iniciar_monitor(user_input[17:].strip())
-
-            elif user_input == "fecha":
-                respuesta = obtener_fecha_arrow()
-
-            elif user_input == "json":
-                respuesta = serializar_orjson({"msg": "ok", "sistema": "ASTRA"})
-
-            # ── AI MODELS ────────────────────────────────────
-            elif user_input == "torch demo":
-                respuesta = torch_demo()
-
-            elif user_input == "tensorflow demo":
-                respuesta = tensorflow_demo()
-
-            elif user_input == "keras demo":
-                respuesta = keras_demo()
-
-            elif user_input in ("sklearn demo", "sklearn"):
-                respuesta = sklearn_demo()
-
-            elif user_input == "integral":
-                show_progress("Symbolic Integration", 1)
-                respuesta = calcular_integral("x**2", "x", 0, 1)
-
-
-            # ── PROYECTOS Y MODELOS (FASE 1) ─────────────────────
-            elif user_input.lower() in ["mis modelos", "list models", "modelos entrenados"]:
-                respuesta = cmd_list_models()
-
-            elif user_input.lower() in ["mis proyectos", "list projects", "proyectos"]:
-                respuesta = cmd_list_projects()
-
-            elif user_input.lower() in ["tareas", "mis tareas", "pendientes"]:
-                respuesta = cmd_list_tasks()
-
-            elif user_input.lower().startswith("tareas "):
-                respuesta = cmd_list_tasks(user_input[7:].strip())
-
-            elif user_input.lower().startswith("nuevo proyecto "):
-                parts = user_input[15:].strip().split(" ", 1)
-                name  = parts[0]
-                desc  = parts[1] if len(parts) > 1 else ""
-                pid   = save_project(name, desc)
-                respuesta = f"Proyecto '{name}' guardado (id={pid})"
-
-            elif user_input.lower().startswith("cerrar proyecto "):
-                name = user_input[16:].strip()
-                ok   = update_project_status(name, "done")
-                respuesta = f"Proyecto '{name}' completado." if ok else f"No encontré el proyecto '{name}'."
-
-            elif user_input.lower().startswith("pausar proyecto "):
-                name = user_input[16:].strip()
-                ok   = update_project_status(name, "paused")
-                respuesta = f"Proyecto '{name}' pausado." if ok else f"No encontré el proyecto '{name}'."
-
-            elif user_input.lower().startswith("nueva tarea "):
-                rest = user_input[12:].strip()
-                if "|" in rest:
-                    proj, desc = rest.split("|", 1)
-                    tid = add_task(proj.strip(), desc.strip())
-                    respuesta = f"Tarea [{tid}] agregada al proyecto '{proj.strip()}'."
-                else:
-                    respuesta = "Uso: nueva tarea <proyecto> | <descripción>"
-
-            elif user_input.lower().startswith("completar tarea "):
-                try:
-                    tid = int(user_input[16:].strip())
-                    ok  = complete_task(tid)
-                    respuesta = f"Tarea [{tid}] completada." if ok else f"No encontré la tarea [{tid}]."
-                except ValueError:
-                    respuesta = "Uso: completar tarea <id>  (ej: completar tarea 3)"
-
-            elif user_input.lower().startswith("info modelo "):
-                pair  = user_input[12:].strip()
-                model = get_model(pair)
-                if model:
-                    prec = model.get("precision")
-                    acc  = model.get("accuracy")
-                    rows = model.get("rows_trained")
-                    date = (model.get("updated_at") or "")[:16]
-                    out  = [f"  Modelo: {model['pair']}"]
-                    if prec: out.append(f"  Precision  : {prec:.2%}")
-                    if acc:  out.append(f"  Accuracy   : {acc:.2%}")
-                    if rows: out.append(f"  Filas      : {rows:,}")
-                    out.append(f"  Actualizado: {date}")
-                    respuesta = "\n".join(out)
-                else:
-                    respuesta = f"No hay modelo para '{pair}'. Usa: train forex <csv>"
-
-            # ── PREDICTION LAB (FASE 5) ───────────────────────────
-            elif user_input.lower().startswith("lab analiza "):
-                _idea = user_input[12:].strip().strip('"').strip("'")
-                respuesta = cmd_lab_analiza(_idea)
-
-            elif user_input.lower().startswith("lab dataset "):
-                _parts_ds = user_input[12:].strip().split()
-                if len(_parts_ds) >= 2:
-                    respuesta = cmd_lab_dataset(_parts_ds[0], _parts_ds[1])
-                elif len(_parts_ds) == 1:
-                    respuesta = cmd_lab_dataset(_parts_ds[0])
-                else:
-                    respuesta = "Uso: lab dataset <archivo.csv> [target_variable]"
-
-            elif user_input.lower().startswith("lab viabilidad "):
-                _csv_v, _idea_v, _tgt_v = _parse_lab_args(user_input[15:])
-                if _csv_v:
-                    respuesta = cmd_lab_viabilidad(_csv_v, _idea_v, target_variable=_tgt_v)
-                else:
-                    respuesta = 'Uso: lab viabilidad <archivo.csv> "<describe tu idea>" [columna_target]'
-
-            elif user_input.lower().startswith("lab planea "):
-                _csv_p, _idea_p, _tgt_p = _parse_lab_args(user_input[11:])
-                if _csv_p:
-                    respuesta = cmd_lab_planea(_csv_p, _idea_p, target_variable=_tgt_p)
-                else:
-                    respuesta = 'Uso: lab planea <archivo.csv> "<describe tu idea>" [columna_target]'
-
-            elif user_input.lower().startswith("lab genera "):
-                _csv_g, _idea_g, _tgt_g = _parse_lab_args(user_input[11:])
-                if _csv_g:
-                    respuesta = cmd_lab_genera(_csv_g, _idea_g, target_variable=_tgt_g)
-                else:
-                    respuesta = 'Uso: lab genera <archivo.csv> "<describe tu idea>" [columna_target]'
-
-            elif user_input.lower().startswith("lab valida "):
-                _csv_val, _idea_val, _tgt_val = _parse_lab_args(user_input[11:])
-                if _csv_val:
-                    respuesta = cmd_lab_valida(_csv_val, _idea_val, target_variable=_tgt_val)
-                else:
-                    respuesta = 'Uso: lab valida <archivo.csv> "<describe tu idea>" [columna_target]'
-
-            elif user_input.lower().startswith("lab reporte "):
-                _csv_r, _idea_r, _tgt_r = _parse_lab_args(user_input[12:])
-                if _csv_r:
-                    respuesta = cmd_lab_reporte(_csv_r, _idea_r, target_variable=_tgt_r)
-                else:
-                    respuesta = 'Uso: lab reporte <archivo.csv> "<describe tu idea>" [columna_target]'
-
-            elif user_input.lower().strip() == "lab proyectos":
-                respuesta = cmd_lab_proyectos()
-
-            elif user_input.lower().startswith("lab info proyecto "):
-                _ident = user_input[19:].strip()
-                respuesta = cmd_lab_info_proyecto(_ident) if _ident else "Uso: lab info proyecto <numero|nombre>"
-
-            elif user_input.lower().startswith("feedback votar "):
-                _rest_fv = user_input[15:].strip().split(None, 2)
-                if len(_rest_fv) >= 2:
-                    _tid, _vote = _rest_fv[0], _rest_fv[1]
-                    _comment = _rest_fv[2].strip().strip('"').strip("'") if len(_rest_fv) == 3 else ""
-                    respuesta = cmd_feedback_votar(_tid, _vote, _comment)
-                else:
-                    respuesta = 'Uso: feedback votar <id> <1|-1> ["comentario"]'
-
-            elif user_input.lower().startswith("feedback ver "):
-                _tid_v = user_input[13:].strip()
-                respuesta = cmd_feedback_ver(_tid_v) if _tid_v else "Uso: feedback ver <id>"
-
-            elif user_input.lower().strip() == "feedback analisis":
-                respuesta = cmd_feedback_analisis()
-
-            elif user_input.lower().strip() == "feedback dashboard":
-                respuesta = cmd_feedback_dashboard()
-
-            elif user_input.lower().strip() == "thresholds ver":
-                respuesta = cmd_thresholds_ver()
-
-            elif user_input.lower().strip() == "contextual memoria":
-                respuesta = cmd_contextual_memory()
-
-            elif user_input.lower().startswith("evolucion historial"):
-                _rest_eh = user_input[20:].strip()
-                _limit_eh = int(_rest_eh) if _rest_eh.isdigit() else 10
-                respuesta = cmd_evolution_history(_limit_eh)
-
-            elif user_input.lower().strip() == "monitor snapshot":
-                respuesta = cmd_monitor_snapshot()
-
-            elif user_input.lower().startswith("monitor historial"):
-                _rest_mh = user_input[18:].strip()
-                _limit_mh = int(_rest_mh) if _rest_mh.isdigit() else 10
-                respuesta = cmd_monitor_historial(_limit_mh)
-
-            elif user_input.lower().strip() == "mejoras detectar":
-                respuesta = cmd_mejoras_detectar()
-
-            elif user_input.lower().strip() == "evolucionar":
-                respuesta = cmd_evolucionar(False)
-
-            elif user_input.lower().strip() == "evolucionar ciclo":
-                respuesta = cmd_ciclo_evolutivo(auto_approve=False)
-
-            elif user_input.lower().strip() == "evolucionar ciclo auto":
-                respuesta = cmd_ciclo_evolutivo(auto_approve=True)
-
-            elif user_input.lower().strip() == "salud sistema":
-                respuesta = cmd_health_report()
-
-            elif user_input.lower().startswith("propuestas ver"):
-                _rest_pv = user_input[14:].strip()
-                respuesta = cmd_proposals_ver(_rest_pv if _rest_pv else None)
-
-            elif user_input.lower().startswith("propuesta aprobar "):
-                _pid_ap = user_input[18:].strip()
-                respuesta = cmd_aprobar_propuesta(_pid_ap) if _pid_ap else "Uso: propuesta aprobar <id>"
-
-            elif user_input.lower().startswith("propuesta rechazar "):
-                _pid_rj = user_input[19:].strip()
-                respuesta = cmd_rechazar_propuesta(_pid_rj) if _pid_rj else "Uso: propuesta rechazar <id>"
-
-            elif user_input.lower().startswith("propuesta aplicar "):
-                _pid_apl = user_input[18:].strip()
-                respuesta = cmd_aplicar_propuesta(_pid_apl) if _pid_apl else "Uso: propuesta aplicar <id>"
-
-            elif user_input.lower().strip() == "reglas ver":
-                respuesta = cmd_reglas_ver()
-
-            elif user_input.lower().startswith("propuesta validar "):
-                _pid_val = user_input[18:].strip()
-                respuesta = cmd_validar_propuesta(_pid_val) if _pid_val else "Uso: propuesta validar <id>"
-
-            elif user_input.lower().startswith("audit ver"):
-                _rest_av = user_input[9:].strip()
-                _limit_av = int(_rest_av) if _rest_av.isdigit() else 20
-                respuesta = cmd_audit_log(_limit_av)
-
-            elif user_input.lower().strip() == "rollback ver":
-                respuesta = cmd_rollback_ver()
-
-            elif user_input.lower().startswith("rollback aplicar "):
-                _pid_rb = user_input[17:].strip()
-                respuesta = cmd_rollback_aplicar(_pid_rb) if _pid_rb else "Uso: rollback aplicar <id>"
-
-            # ── NEWS INTELLIGENCE (FASE 4) ───────────────────────
-            elif user_input.lower().startswith("noticias predice "):
-                parts = user_input[17:].strip().split()
-                if len(parts) >= 2:
-                    respuesta = cmd_news_predict(parts[0], parts[1])
-                else:
-                    respuesta = "Uso: noticias predice <par> <csv>  ej: noticias predice EURUSD CSVs/H1/EURUSD.csv"
-
-            elif user_input.lower().startswith("noticias "):
-                respuesta = cmd_news(user_input[9:].strip())
-
-            elif user_input.lower().startswith("news "):
-                respuesta = cmd_news(user_input[5:].strip())
-
-            # ── ACTIVE ENGINE SCHEDULER (FASE 3) ─────────────────
-            elif user_input.lower().startswith("schedule forex "):
-                # uso: schedule forex <par> <csv> [minutos]
-                parts = user_input[15:].strip().split()
-                if len(parts) >= 2:
-                    _pair = parts[0]
-                    _csv  = parts[1]
-                    _min  = int(parts[2]) if len(parts) > 2 else 60
-                    respuesta = cmd_schedule_forex(_pair, _csv, _min)
-                else:
-                    respuesta = "Uso: schedule forex <par> <csv> [minutos]  ej: schedule forex EURUSD CSVs/H1/EURUSD.csv 60"
-
-            elif user_input.lower().startswith("schedule stop "):
-                respuesta = cmd_schedule_stop(user_input[14:].strip())
-
-            elif user_input.lower() == "schedule stop":
-                respuesta = cmd_schedule_stop("all")
-
-            elif user_input.lower() in ["schedule status", "schedule"]:
-                respuesta = cmd_schedule_status()
-
-            elif user_input.lower().startswith("schedule run "):
-                respuesta = cmd_schedule_run(user_input[13:].strip())
-
-            # ── FOREX WATCHER (FASE 2) ────────────────────────────
-            elif user_input.lower().startswith("watch forex "):
-                # uso: watch forex <par> <csv> [intervalo_segundos]
-                parts = user_input[12:].strip().split()
-                if len(parts) >= 2:
-                    _pair  = parts[0]
-                    _csv   = parts[1]
-                    _intv  = int(parts[2]) if len(parts) > 2 else 60
-                    respuesta = cmd_watch_start(_pair, _csv, _intv)
-                else:
-                    respuesta = "Uso: watch forex <par> <csv> [intervalo]  ej: watch forex EURUSD CSVs/H1/EURUSD.csv 60"
-
-            elif user_input.lower().startswith("watch stop "):
-                respuesta = cmd_watch_stop(user_input[11:].strip())
-
-            elif user_input.lower() == "watch stop":
-                respuesta = cmd_watch_stop("all")
-
-            elif user_input.lower() in ["watch status", "watch"]:
-                respuesta = cmd_watch_status()
-
-            elif user_input.lower().startswith("watch check "):
-                respuesta = cmd_watch_check(user_input[12:].strip())
-
-            # ── HISTORIAL DE SEÑALES (FASE 2) ────────────────────
-            elif user_input.lower().startswith("señales "):
-                respuesta = cmd_signal_history(user_input[8:].strip())
-
-            elif user_input.lower().startswith("signals "):
-                respuesta = cmd_signal_history(user_input[8:].strip())
-
-            elif user_input.lower() in ["señales", "signals", "historial señales"]:
-                respuesta = cmd_signal_history()
-
-            elif user_input.lower().startswith("stats señales"):
-                parts = user_input.split()
-                pair_arg = parts[2] if len(parts) > 2 else None
-                respuesta = cmd_signal_stats(pair_arg)
-
-            # ── EXTRA MODULES ────────────────────────────────
-            elif user_input in comandos_extra:
-                respuesta = comandos_extra[user_input]()
-
-            # ── GPT FALLBACK ─────────────────────────────────
-            else:
-                respuesta = process_request(user_input)
-
-        except Exception as e:
-            respuesta = f"{Fore.RED}Error: {e}{Style.RESET_ALL}"
 
         if respuesta is not None and respuesta != "":
             _print_result(respuesta)

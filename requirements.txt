@@ -20,6 +20,11 @@ pandas-datareader>=0.10      # Fuente alternativa de datos financieros
 # ── MetaTrader5 (solo Windows con MT5 terminal) ───────────────────────────────
 # MetaTrader5>=5.0.45        # pip install MetaTrader5 (Windows + terminal abierta)
 
+# ── Workspace (Roadmap IV) ────────────────────────────────────────────────────
+fastapi>=0.110               # Backend del Workspace (workspace/server.py)
+uvicorn>=0.29                # Servidor ASGI para correr el Workspace
+python-multipart>=0.0.9      # Requerido por FastAPI para /api/upload (adjuntar archivos)
+
 # ── Web & scraping ───────────────────────────────────────────────────────────
 requests>=2.30              # Fase 4: News Intelligence scraping
 beautifulsoup4>=4.12        # Fase 4: scraping Yahoo Finance / FXStreet
@@ -77,7 +82,6 @@ sympy>=1.12
 # pyttsx3>=2.90               Text-to-speech (requiere dispositivo de audio)
 # llama-index>=0.10           Framework RAG LlamaIndex
 # redis>=5.0                  Cliente Redis
-# fastapi>=0.110               Framework FastAPI
 # flask>=3.0                  Framework Flask
 # httpx>=0.27                 Cliente HTTP asíncrono
 # aiohttp>=3.9                Servidor/cliente HTTP asíncrono
@@ -114,3 +118,16 @@ sympy>=1.12
 #
 #  Fase 9 — evolutionary_cycle.py (Ciclo Evolutivo completo)
 #    Reutiliza feedback/ + evolution/ + constitution/ — sin dependencias nuevas
+#
+#  Roadmap IV — Workspace (Secciones 1-6, ver MANUAL.md Partes 19-22)
+#    fastapi>=0.110, uvicorn>=0.29, python-multipart>=0.0.9 — ya requeridos arriba
+#    openpyxl>=3.1, pandas>=2.0, scikit-learn>=1.4, psutil>=5.9 — ya requeridos arriba
+#    (Sección 4 Forex Lab, Sección 5 Prediction Lab, Sección 6 Business Lab:
+#     sin dependencias Python nuevas — todo reutiliza forex/business/ +
+#     prediction_lab/ + forex/prediction/, ya cubiertos)
+#    Chart.js 4.4.4 y lightweight-charts 4.1.3 se cargan vía CDN en el
+#    frontend (workspace/static/index.html) — no requieren pip install.
+#
+#  Verificado con instalación limpia (venv nuevo + "pip install -r requirements.txt"
+#  únicamente) el 6 de julio de 2026: import workspace.server OK, import
+#  forex.business.* OK, sin paquetes faltantes.
