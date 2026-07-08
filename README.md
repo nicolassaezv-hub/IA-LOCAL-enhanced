@@ -60,6 +60,7 @@ Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecut
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
 # Comandos y Programa Puente (main.py + iniciar_astra.bat)
+
 ### Comandos
 
 El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos 
@@ -668,9 +669,13 @@ def descargar_audio_youtube(url):
 - ### io_files.py
 
  El programa io_files brinda una conexion directa a la creacion/analisis de tipo:
+
  - DOCX
+
  - PDF
+
  - PYTHON (.py)
+
  - EXCEL
 
 Tambien se compone de una funcion extra que es la creacion y/o lectura de base de datos CSV con la implementacion del modulo Pandas
