@@ -32,7 +32,7 @@ GPU:
 
 # API
 
-Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
+Actualmente el funcionamiento de esta IA es gracias a la API de Groq
 
 - name: copi
 
@@ -51,7 +51,10 @@ Se incluyen 5 codigos adicionales para verificar la integridad de los modulos pr
 
 - check_skeleton
 
-- check
+- check_forex 
+
+revisa rama Forex
+
 Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
