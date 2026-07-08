@@ -811,11 +811,14 @@ def escribe_csv(ruta, datos):
 
 ### Comentarios sobre las limitaciones del programa (readme)
 
-La visualizacion de un archivo analizado por el programa se limita a la cantidad de caracteres que permite el API de ChatGPT. Por tanto se hizo un cambio con tal que el "display" este limitado por 70000 tokens (~280.000 caracteres)
+La visualizacion de un archivo analizado por el programa se limita a la cantidad de caracteres que permite el API de Groq. Por tanto se hizo un cambio con tal que el "display" este limitado por  tokens y solicitudes (requests) diarios.
+
+Estos limites se muestran en la ejecucion del programa
 
 # Programa de Calculo Simbolico, Memoria Vectorial y Base De Datos con IA (modules_extra.py)
 
 - ### modules_extra.py
+
 El siguiente programa compprende en mayor parte la memoria en base de datos de Redis,Lllama y SQL para el guardado o indexacion de documentos
 
 <details>
