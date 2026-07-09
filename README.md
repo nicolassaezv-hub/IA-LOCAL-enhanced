@@ -38,7 +38,7 @@ Actualmente el funcionamiento de esta IA es gracias a la API de Groq
 
 - ID: key_3uC3DbwL1KZFUHJa
 
-- model="gpt-3.5-turbo"
+- motor: Llama-70b
 
 # Estructura
 
