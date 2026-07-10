@@ -119,15 +119,18 @@ sympy>=1.12
 #  Fase 9 — evolutionary_cycle.py (Ciclo Evolutivo completo)
 #    Reutiliza feedback/ + evolution/ + constitution/ — sin dependencias nuevas
 #
-#  Roadmap IV — Workspace (Secciones 1-6, ver MANUAL.md Partes 19-22)
+#  Roadmap IV — Workspace (Secciones 1-12 COMPLETAS, ver MANUAL.md Partes 19-28)
 #    fastapi>=0.110, uvicorn>=0.29, python-multipart>=0.0.9 — ya requeridos arriba
 #    openpyxl>=3.1, pandas>=2.0, scikit-learn>=1.4, psutil>=5.9 — ya requeridos arriba
-#    (Sección 4 Forex Lab, Sección 5 Prediction Lab, Sección 6 Business Lab:
-#     sin dependencias Python nuevas — todo reutiliza forex/business/ +
-#     prediction_lab/ + forex/prediction/, ya cubiertos)
+#    (Secciones 4-12 — Forex Lab, Prediction Lab, Business Lab, Cognitive
+#     Center, Evolution Center, Activity Center, Notification Center, Live
+#     Thinking, Identidad Visual: sin dependencias Python nuevas — todo
+#     reutiliza forex/business/, prediction_lab/, forex/prediction/,
+#     feedback/, evolution/, constitution/, memory.py, ya cubiertos arriba)
 #    Chart.js 4.4.4 y lightweight-charts 4.1.3 se cargan vía CDN en el
 #    frontend (workspace/static/index.html) — no requieren pip install.
 #
 #  Verificado con instalación limpia (venv nuevo + "pip install -r requirements.txt"
-#  únicamente) el 6 de julio de 2026: import workspace.server OK, import
-#  forex.business.* OK, sin paquetes faltantes.
+#  únicamente) el 9 de julio de 2026: import workspace.server OK, import main
+#  OK, check_startup.py sin issues críticos, servidor real levantado y los
+#  ~20 endpoints de las 12 secciones del Workspace respondieron 200 vía curl.

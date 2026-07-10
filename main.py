@@ -805,6 +805,10 @@ def _ayuda():
   rollback ver                      Lista los puntos de rollback disponibles
   rollback aplicar <id>             Restaura umbrales de un par a un rollback point anterior
 
+{Fore.CYAN}── COGNITIVE CENTER (ROADMAP IV, SECCION 7) ────────────────────{Style.RESET_ALL}
+  memoria explorar                  Resumen: conversaciones, proyectos, modelos, herramientas, preferencias
+  memoria buscar <consulta>         Busca en toda la memoria con lenguaje natural (LLM + fallback heuristico)
+
 {Fore.CYAN}── SYSTEM & UTILS ─────────────────────────────────────────────{Style.RESET_ALL}
   estado pc                      CPU + RAM usage
   barra progreso                 Animated progress bar demo
@@ -1026,6 +1030,22 @@ def dispatch_command(user_input: str) -> str:
                     respuesta = "\n".join(lines)
             except Exception as ex:
                 respuesta = f"Error: {ex}"
+
+        # ── COGNITIVE CENTER (Roadmap IV, Sección 7) ─────────
+        elif user_input.lower().strip() in ["memoria explorar", "cognitive center", "explorar memoria"]:
+            try:
+                from cognitive_center import cmd_memoria_explorar
+                respuesta = cmd_memoria_explorar()
+            except Exception as ex:
+                respuesta = f"Error en Cognitive Center: {ex}"
+
+        elif user_input.lower().startswith("memoria buscar "):
+            _query_mem = user_input[len("memoria buscar "):].strip()
+            try:
+                from cognitive_center import cmd_memoria_buscar
+                respuesta = cmd_memoria_buscar(_query_mem) if _query_mem else "Uso: memoria buscar <consulta en lenguaje natural>"
+            except Exception as ex:
+                respuesta = f"Error en búsqueda de memoria: {ex}"
 
         # ── RISK MANAGEMENT ──────────────────────────────────
         elif user_input.lower() in ["circuit status", "estado circuit", "circuit breaker"]:

@@ -1813,3 +1813,568 @@ UI).
 Bonus: se corrigieron 2 bugs reales preexistentes en `forex/business/`
 (forecast con pendiente/confianza siempre en 0, y el comando `forecast
 negocio` documentado pero nunca conectado).*
+
+---
+
+## PARTE 23 — COGNITIVE CENTER WORKSPACE (ROADMAP IV, SECCIÓN 7)
+
+**Objetivo:** ventana exclusiva del Workspace para explorar y consultar toda
+la memoria de ASTRA (conversaciones, proyectos, modelos, comandos ejecutados,
+preferencias/umbrales aprendidos) sin salir del navegador — más una barra de
+búsqueda en lenguaje natural que responde sobre esos mismos datos reales.
+
+**Backend nuevo (`cognitive_center.py`, standalone, graceful-fail en cada
+función pública):**
+- `get_conversations(limit)` — lee `memoria.db` tabla `memoria` (creada por
+  `memory.py`), más reciente primero.
+- `get_projects_overview()` — agrega `project_memory.py`: proyectos, tareas
+  (con `done`/`completed_at`), y modelos entrenados (`models` table, con
+  métricas guardadas por `register_model()`).
+- `get_tools_usage(limit)` — agrega la tabla `command_log` (creada en la
+  sesión de v2, Parte 13/14 de esta bitácora): conteo por comando, por
+  categoría, por par, y los comandos más recientes.
+- `get_learned_preferences()` — lee `feedback/adaptive_thresholds.py`
+  (umbrales de confianza/ADX ajustados por par vs. los defaults de
+  producción 0.65/22.0) y `feedback/contextual_memory.py` (tasa de éxito
+  por contexto de mercado guardado, si existe).
+- `get_timeline(limit)` — fusiona conversaciones + comandos + modelos +
+  proyectos + tareas en una sola lista cronológica ordenada por timestamp
+  real (no simulado), con `kind` para diferenciar el tipo de evento en la UI.
+- `build_knowledge_graph()` — nodos (`pair`, `project`, `category`) y
+  aristas (`used_in`) derivados de `command_log` + `models` + `projects`;
+  vista relacional simple pensada para crecer a medida que se acumula uso
+  real del sistema.
+- `search_memory(query)` — **7.2, la pieza central de esta sección.** Intenta
+  extraer intención + palabras clave vía LLM (Groq/Llama, mismo cliente que
+  `prompt_analyzer.py`); si no hay API key o falla, cae a un heurístico de
+  keywords/regex (detecta menciones a pares, "tarea"/"pendiente",
+  "modelo"/"accuracy", "proyecto", "preferencia"/"umbral", etc.) para decidir
+  qué fuentes consultar (`conversations`/`commands`/`models`/`projects`/
+  `tasks`/`preferences`) y con qué filtro. Si no hay coincidencias exactas,
+  degrada a devolver lo más reciente de las fuentes relevantes en vez de una
+  respuesta vacía (`used_fallback_unfiltered: true` en la respuesta, visible
+  en la UI).
+
+**Wireado también por CLI** (mismo patrón que Fases 5-9): comandos
+`memoria explorar` y `memoria buscar <consulta>` en `main.py`
+(`cmd_memoria_explorar`, `cmd_memoria_buscar`), categoría `cognitive_center`
+en `intent_router.py`, y entradas `cognitive_*` / `memoria_*_cmd` en
+`tool_registry.py`.
+
+**Backend Workspace (`workspace/server.py`):** 7 endpoints nuevos, todos
+delegando a `cognitive_center.py` sin lógica propia (`/api/cognitive/overview`,
+`/conversations`, `/projects`, `/tools_usage`, `/preferences`, `/timeline`,
+`/knowledge_graph`, y `POST /search`).
+
+**Frontend (`workspace/static/js/cognitive_center.js` + panel en
+`index.html`):**
+- Barra de búsqueda en lenguaje natural (7.2) con resultados agrupados por
+  fuente (conversaciones, comandos, modelos, proyectos, tareas,
+  preferencias) y meta-info visible del motor usado (LLM vs. heurístico) y
+  si se degradó a resultados no filtrados.
+- Tarjetas de resumen (conversaciones, proyectos, modelos, tareas
+  pendientes, comandos registrados, pares con umbral propio).
+- Línea de tiempo unificada (scrolleable) con ícono por tipo de evento.
+- Knowledge Graph: layout circular simple en SVG nativo (sin dependencias
+  nuevas — reutiliza el patrón "sin librerías extra si no son
+  imprescindibles" del resto del Workspace), con tooltips nativos
+  (`<title>`) mostrando accuracy/precision o estado por nodo.
+- Tabla de herramientas más usadas y tabla de preferencias aprendidas
+  (confianza/ADX por par vs. default), con estado vacío explícito cuando no
+  hay umbrales personalizados aún.
+
+**Verificación realizada:** sintaxis JS con `node --check`, cruce
+automatizado de `getElementById`/`querySelector` contra `id=`/`data-section`
+del HTML (sin faltantes), cruce de rutas `fetch()` contra rutas reales del
+backend (sin desajustes), servidor FastAPI levantado en vivo y probado con
+curl end-to-end contra los 7 endpoints con datos reales insertados a mano
+(conversaciones, comando_log, modelo entrenado, proyecto+tarea, umbral
+adaptativo) — incluyendo la búsqueda en lenguaje natural con y sin
+coincidencia exacta. Datos de prueba limpiados de `memoria.db` al finalizar
+para no dejar residuos en la base real del proyecto.
+
+---
+
+*Parte 23 añadida el 7 de julio de 2026 — Roadmap IV, Sección 7 completa.*
+
+## PARTE 24 — EVOLUTION CENTER WORKSPACE (ROADMAP IV, SECCIÓN 8)
+
+**Objetivo:** ventana del Workspace sobre "cómo evoluciona ASTRA" —
+panel del ciclo evolutivo completo (Fases 7-9, ya operativas por CLI desde
+antes de esta sesión) y revisión/aprobación/rechazo real de propuestas de
+mejora, sin salir del navegador.
+
+**Backend nuevo (`evolution_center.py`, standalone, graceful-fail en cada
+función pública, agregador puro — no reimplementa lógica de negocio, solo
+lee/orquesta los módulos reales de `evolution/`, `constitution/` y
+`evolutionary_cycle.py`):**
+- `get_cycle_overview()` — resumen agregado: propuestas por estado, último
+  snapshot de `performance_monitor`, totales de audit log y rollback points.
+- `get_evolution_timeline(limit)` / `get_performance_history(limit)` — leen
+  `evolution_events` y `performance_snapshots` (tablas de `feedback/
+  evolution_memory.py` y `evolution/performance_monitor.py`).
+- `get_proposals_list(status, limit)` / `get_proposal_detail(id)` — listan y
+  detallan propuestas de `evolution/proposal_store.py`; el detalle incluye
+  una **validación constitucional en vivo** (preview, vía
+  `ConstitutionValidator.validate()`) mostrando reglas verificadas,
+  violaciones y warnings — sin cambiar el estado de la propuesta.
+- `approve_proposal(id, justification)` / `reject_proposal(id, reason)` —
+  aprobación/rechazo manual real (mismo flujo que `cmd_aprobar_propuesta`/
+  `cmd_rechazar_propuesta` del CLI): la aprobación crea un rollback point
+  real vía `rollback_manager.py`.
+- `validate_proposal_constitutional(id)` — expone el flujo completo de
+  `approval_flow.py` (valida contra la constitución y aprueba/rechaza según
+  el resultado); usado internamente por el ciclo evolutivo automático.
+- `get_constitution_rules()` — catálogo de las 7 reglas builtin de
+  `constitution_rules.py` (riesgo máx. por operación, confianza/ADX mínimos,
+  WFV obligatorio para deploy, drawdown diario máx., aprobación obligatoria,
+  máx. 3 rollbacks automáticos).
+- `get_audit_log(target, limit)` / `get_rollback_points(limit)` /
+  `apply_rollback(id)` — lectura del registro inmutable (`audit_log.py`) y
+  gestión real de snapshots (`rollback_manager.py`).
+- `trigger_evolutionary_cycle(auto_approve_minor)` — dispara
+  `evolutionary_cycle.run_evolutionary_cycle()` real: monitor → detecta
+  oportunidades → propone → valida contra la constitución → aprueba/rechaza
+  → registra en feedback → audit log. Mismo ciclo que corre en producción,
+  ahora también invocable desde el botón del panel.
+
+**Sin wireo CLI adicional:** a diferencia de Cognitive Center, la capacidad
+de fondo (propuestas, aprobación, reglas, rollback, ciclo evolutivo) ya
+tenía comandos CLI completos desde las Fases 7-9 (`propuestas ver`,
+`aprobar propuesta`, `rechazar propuesta`, `reglas ver`, `audit log`, etc. en
+`main.py`/`intent_router.py`/`tool_registry.py`). `evolution_center.py` es
+puramente un agregador nuevo para el Workspace, sin duplicar esa capa.
+
+**Backend Workspace (`workspace/server.py`):** 13 endpoints nuevos, todos
+delegando a `evolution_center.py` sin lógica propia (`/api/evolution/overview`,
+`/timeline`, `/performance_history`, `/proposals`, `/proposals/{id}`,
+`POST /proposals/{id}/approve`, `POST /proposals/{id}/reject`,
+`POST /proposals/{id}/validate`, `/rules`, `/audit`, `/rollback_points`,
+`POST /rollback_points/{id}/apply`, `POST /cycle/run`), con un traductor
+`_evo_response()` que mapea el patrón `{"ok": bool, "error": ...}` a status
+codes HTTP (404 si la propuesta/rollback no existe, 400 en otros errores).
+
+**Frontend (`workspace/static/js/evolution_center.js` + panel en
+`index.html`):**
+- Tarjetas de resumen del ciclo evolutivo + botón para correr el ciclo
+  completo en vivo, con mensaje de resultado real (oportunidades, propuestas
+  creadas/aprobadas/rechazadas, umbrales ajustados).
+- Historial de eventos (timeline con ícono por tipo) y tabla de snapshots de
+  rendimiento del sistema.
+- Tabla de propuestas con filtro por estado, botones "Ver"/"Aprobar"/
+  "Rechazar" (solo visibles si `status == pending`), y vista de detalle
+  expandible con la validación constitucional en vivo (reglas verificadas,
+  violaciones en rojo, warnings en gris) y los rollback points asociados.
+- Tabla de reglas constitucionales, tabla de rollback points con botón
+  "Revertir" (con confirmación), y audit log con pills de estado por
+  resultado (aprobado/aplicado en color primario, rechazado/revertido en
+  color destructivo).
+
+**Verificación realizada:** sintaxis JS con `node --check`, cruce
+automatizado de `getElementById`/`querySelector` contra `id=` del HTML y de
+rutas `fetch()` contra las rutas reales del backend (sin desajustes reales —
+los dos "faltantes" detectados por el script eran falsos positivos: un id
+creado dinámicamente en runtime dentro de un template, y una variable JS
+capturada literalmente por el regex). Servidor FastAPI levantado en vivo dos
+veces y probado con curl end-to-end contra los 13 endpoints, incluyendo el
+flujo completo de aprobar/rechazar/validar/revertir/correr-ciclo sobre
+propuestas de prueba reales — con limpieza total de residuos en `memoria.db`
+(proposals, rollback_points, performance_snapshots, audit_log,
+evolution_events, adaptive_thresholds) al finalizar cada ronda, dejando la
+base exactamente en el estado real previo a las pruebas.
+
+---
+
+*Parte 24 añadida el 7 de julio de 2026 — Roadmap IV, Sección 8 completa.*
+
+## PARTE 25 — ACTIVITY CENTER WORKSPACE (ROADMAP IV, SECCIÓN 9)
+
+**Objetivo:** "qué está pasando ahora mismo en ASTRA" — feed unificado y en
+vivo (poll cada 5s) que fusiona 4 fuentes reales en una sola línea de
+tiempo, sin salir del navegador.
+
+**Backend nuevo (`activity_center.py`, standalone, graceful-fail):**
+- **Alertas del Workspace movidas aquí desde `workspace/server.py`**: el
+  store en memoria (`push_alert`/`get_alerts`, antes `_push_alert`/`_alerts`
+  vivían como estado global del server) ahora vive en este módulo para que
+  sea testeable sin levantar FastAPI — mismo patrón que `cognitive_center.py`
+  / `evolution_center.py`. `server.py` mantiene `_push_alert` como alias fino
+  para no tocar los ~10 call-sites existentes (Forex Lab, Business Lab,
+  Prediction Lab ya disparaban alertas antes de esta sección).
+- `get_recent_commands(limit)` — `memory.get_command_log()`.
+- `get_recent_signals(limit)` — `signal_tracker.get_signals()`.
+- `get_recent_evolution_events(limit)` — `feedback/evolution_memory.
+  get_evolution_history()`.
+- `get_activity_feed(limit, sources)` — fusiona las 4 fuentes, normaliza
+  timestamps mixtos (ctime de `command_log` vs. isoformato de eventos de
+  evolución vs. `YYYY-MM-DD HH:MM:SS` de alertas/señales) con el mismo
+  parser multi-formato de Cognitive Center, ordena cronológico descendente,
+  filtra por fuente opcionalmente.
+- `get_activity_stats()` — conteos totales por fuente (sin el límite
+  artificial de la vista fusionada) + alertas por severidad + señales por
+  acción, para las tarjetas resumen del panel.
+
+**Backend Workspace (`workspace/server.py`):** 2 endpoints nuevos
+(`/api/activity/feed?sources=alert,signal&limit=N`, `/api/activity/stats`),
+más el endpoint legacy `/api/forex/alerts` (Sección 4) que ahora delega al
+mismo store de `activity_center.py` en vez de tener su propio estado —
+verificado que sigue funcionando igual (compatibilidad hacia atrás).
+
+**Frontend (`workspace/static/js/activity_center.js` + panel en
+`index.html`):**
+- Tarjetas de resumen (alertas, comandos, señales, eventos de evolución).
+- Feed en vivo con ícono por fuente, pill de severidad por color
+  (`.act-kind-pill`, nueva clase CSS — ver bugs corregidos abajo), filtro
+  por fuente, y auto-actualización cada 5s (toggle para pausar).
+
+**2 bugs reales de CSS pre-existentes encontrados y corregidos durante esta
+sección (no introducidos ahora, pero detectados al reutilizar el patrón de
+pills de Evolution Engine):**
+1. **`--destructive` / `--destructive-foreground` nunca estaban definidas**
+   en `:root` pese a usarse en `.tbl-action-btn.destructive` y
+   `.evo-status-pill.rejected/.rolled_back` (Parte 24, esta misma sesión) —
+   los pills de "rechazado"/"revertido" en Evolution Center renderizaban con
+   `hsl()` inválido (color indefinido del navegador) en vez de rojo
+   destructivo. Corregido: variables agregadas en modo claro y oscuro.
+2. **`--success` / `--danger` solo estaban definidas en el bloque `:root`
+   claro, no en `@media (prefers-color-scheme: dark)`** — afectaba
+   `.status-dot.online/.offline` (Sección 2) y `.alert-item.kind-success/
+   .kind-error` (Forex Lab, Sección 4) en modo oscuro desde que existen.
+   Corregido: agregadas también al bloque dark con tonos ajustados.
+
+**Nota de diseño no bloqueante encontrada:** `forex_lab.js` (Sección 4)
+renderiza alertas con clases `alert-row alert-{kind}`, pero el CSS real
+define `.alert-item.kind-{kind}` — mismatch de nombres que hace que el
+borde de color por severidad no se aplique en la lista de alertas de Forex
+Lab. No se corrigió en esta sesión (fuera del alcance de Sección 9, y no
+afecta datos/funcionalidad — solo estética de una lista ya funcional);
+queda anotado para una futura pasada de pulido visual.
+
+**Verificación realizada:** sintaxis JS con `node --check`, cruce
+automatizado de `getElementById`/`querySelector` contra `id=`/`data-section`
+del HTML (sin faltantes reales), cruce de rutas `fetch()` contra el backend
+(sin desajustes reales — el único "faltante" detectado por el script era
+una variable JS, no un literal), clases CSS usadas verificadas contra
+`style.css` antes de asumir que existían. Servidor FastAPI levantado en
+vivo dos veces: primera ronda probando `push_alert`/`get_recent_commands`/
+`get_recent_signals`/`get_recent_evolution_events` con datos reales
+insertados a mano (comando, señal) y limpiados después (por id exacto, no
+por campo — un intento inicial de limpiar por `csv_path` falló
+silenciosamente porque `signal_tracker.save_signal()` ignora ese campo del
+dict de entrada y usa su propio parámetro separado; detectado y corregido
+antes de confirmar la base limpia). Segunda ronda: página completa servida
+con los 3 scripts de Cognitive/Evolution/Activity Center presentes, panel
+`#panel-activity` presente, CSS nuevo servido, y los 2 endpoints nuevos
+respondiendo con datos reales del proyecto (6 eventos de evolución
+existentes desde la Parte 24).
+
+---
+
+*Parte 25 añadida el 7 de julio de 2026 — Roadmap IV, Sección 9 completa.*
+
+## PARTE 26 — NOTIFICATION CENTER (ROADMAP IV, SECCIÓN 10)
+
+**Objetivo (según spec real, `astra-roadmap-iv.html`):** notificaciones
+PERSISTIDAS y consultables — predicciones listas, entrenamientos
+completados, problemas detectados, actualizaciones. Diferencia clave con
+Activity Center (Sección 9): Activity Center es un feed en vivo/efímero
+(alertas viven en memoria, se pierden al reiniciar el server); Notification
+Center es una bandeja formal que sobrevive a un reinicio — tabla SQLite
+real (`notifications` en `memoria.db`).
+
+**Backend nuevo (`notification_center.py`, standalone, graceful-fail):**
+- Tabla `notifications` (id, ntype, title, message, data JSON, is_read,
+  created_at), creada de forma idempotente por `init_notifications_db()`.
+- 5 tipos soportados: `training_completed`, `prediction_ready`,
+  `problem_detected`, `business_analysis_ready`, `system_update` (tipo
+  inválido cae a `system_update` en vez de perderse — graceful).
+- `push_notification(ntype, title, message, data)`,
+  `get_notifications(limit, unread_only, ntype)`, `mark_read(id)`,
+  `mark_all_read()`, `get_notification_stats()` (total, no leídas, no
+  leídas por tipo — para el badge de la campana).
+
+**Backend Workspace (`workspace/server.py`):** 4 endpoints nuevos
+(`GET /api/notifications`, `GET /api/notifications/stats`,
+`POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`).
+`push_notification()` conectado a 4 puntos reales de finalización de tareas
+(no a cada alerta menor — solo a los eventos que la spec pide poder
+"consultar después"): entrenamiento Forex completado/error, Prediction Lab
+completado/detenido/fallido, Business Lab análisis completado. Cada
+notificación queda junto a su `_push_alert()` correspondiente (Sección 9),
+sin reemplazarlo — son dos sistemas complementarios, no uno reemplaza al
+otro.
+
+**Frontend:** campana 🔔 en la topbar (visible desde cualquier sección,
+no solo dentro de un panel — a diferencia de Activity/Evolution/Cognitive
+Center que son paneles de navegación), con badge de no-leídas (poll cada
+8s) y dropdown con la lista completa, click en un ítem lo marca como leído,
+botón "marcar todas leídas". CSS nuevo: `.notif-wrap/.notif-bell/
+.notif-badge/.notif-dropdown/.notif-item` — sin colores hardcodeados,
+reutiliza los tokens `--primary/--destructive/--muted` ya corregidos en la
+Parte 25.
+
+**Verificación realizada:** módulo standalone probado con 5 casos (push de
+3 tipos incl. uno inválido→system_update, listar, stats con no-leídas,
+marcar 1 leída, unread_only, filtro por tipo, marcar todas leídas) — todo
+limpiado por id exacto después. Server levantado en vivo: bell+dropdown
+presentes en el HTML servido, script cargado, endpoint stats en 0 al
+arrancar, disparo real de `/api/business/analyze` generó una notificación
+real end-to-end (`business_analysis_ready`, health=97/100), marcar leída de
+un id inexistente devolvió `false` correctamente (comportamiento esperado,
+no un bug), marcar todas leídas sí afectó la real. Un bug encontrado y
+corregido en `notification_center.py` durante el propio desarrollo (no en
+producción): un helper `_row_to_dict` quedó sin usar y con una condición
+sin sentido (`row[3] if False else row[2]`) — se detectó por revisión
+antes de wirear y se eliminó, `get_notifications()` nunca lo llamaba.
+
+---
+
+*Parte 26 añadida el 7 de julio de 2026 — Roadmap IV, Sección 10 completa.*
+
+## PARTE 27 — LIVE THINKING (ROADMAP IV, SECCIÓN 11)
+
+**Objetivo (spec real, `astra-roadmap-iv.html`):** razonamiento operativo
+VISIBLE — que el usuario nunca perciba que ASTRA "solo está pensando" sin
+mostrar qué hace. A diferencia de las Secciones 8-10 (paneles de
+navegación dedicados), esta es una primitiva **TRANSVERSAL**: no vive en
+un tab propio, sino como franja flotante bajo la topbar, visible desde
+cualquier panel mientras corre una tarea larga.
+
+**Backend nuevo (`live_thinking.py`, standalone, graceful-fail):**
+- Modelo singleton en memoria por `task_key` (mismo patrón que
+  `_lab_state`/`_train_state` de `workspace/server.py` — un job activo a
+  la vez por tarea). No persiste a disco: es "qué está pasando ahora", no
+  historial (para eso ya existen Activity Center y Notification Center).
+- API: `start_thinking(task_key, step_labels, task_label)`,
+  `set_step(task_key, index, status, detail)` (status:
+  pending/running/done/error/skipped), `finish_thinking(task_key, ok,
+  error)` (cierra cualquier paso que haya quedado "running" sin marcar
+  explícito — evita que la UI muestre un paso "pensando" para siempre),
+  `get_thinking(task_key)`, `get_all_thinking()`. Todo con fallos
+  silenciosos ante task_key/índice inexistente (nunca rompe el job real
+  que está corriendo).
+
+**Instrumentación de `prediction_lab/report_generator.py::run_full_lab()`:**
+nuevo parámetro opcional `progress_cb(step_index, status, detail)`, llamado
+en los 6 puntos reales de transición de etapa (0=Prompt, 1=Dataset,
+2=Viabilidad, 3=Plan, 4=Pipeline, 5=Validación). Si la viabilidad resulta
+insuficiente, los pasos 3-5 se marcan `skipped` explícitamente (no quedan
+en `pending` para siempre). El callback está envuelto en su propio
+try/except — si el callback mismo revienta, el lab real jamás se ve
+afectado (graceful fail, mismo principio de todo ASTRA). Retrocompatible:
+si no se pasa `progress_cb`, el comportamiento es idéntico al de antes de
+esta sección.
+
+**Wireo en `workspace/server.py`:**
+- `_run_lab_job()` (Prediction Lab): abre sesión `live_thinking` con los 6
+  labels al iniciar, pasa el callback real a `run_full_lab()`, cierra la
+  sesión en success/except.
+- `_run_training_job()` / `_TrainingStreamTee.write()` (Forex full
+  pipeline): retrofit del tracking de etapas YA existente (parseo real de
+  stdout `[1/4]..[4/4]`) para publicar también en `live_thinking` bajo
+  `task_key="forex_train"` — reutiliza los 4 labels de `_STAGE_LABELS` sin
+  inventar nada nuevo, solo alimenta el mismo primitivo transversal desde
+  una fuente de datos que ya existía.
+- 2 endpoints nuevos: `GET /api/thinking` (todas las sesiones conocidas,
+  activas o no) y `GET /api/thinking/{task_key}` (una sesión puntual).
+
+**Frontend:** franja `.thinking-strip` fija bajo la topbar (`index.html`),
+oculta por defecto. `live_thinking.js` hace polling de `/api/thinking` cada
+2s: si hay una sesión activa la muestra con pills por paso (○ pending, ◐
+running con animación de pulso, ✓ done, ✕ error, — skipped tachado); si
+ninguna está activa pero una terminó hace <15s, la deja visible ese tiempo
+para que el usuario vea el resultado final y luego oculta la franja sola.
+CSS nuevo (`.thinking-strip`, `.think-step*`) sin colores hardcodeados,
+reutiliza tokens `--primary/--success/--destructive/--muted` ya existentes.
+
+**Verificación realizada:** `run_full_lab()` probado standalone con
+callback real en 2 casos (dataset no viable → pasos 3-5 correctamente
+`skipped`; dataset viable con target explícito → los 6 pasos corren
+`running`→`done` en vivo, incluyendo detalle real como
+`score=0.027 (NO PASA)`). Server levantado en vivo: franja + script
+presentes en el HTML servido, `/api/thinking` vacío al arrancar, disparo
+real de `POST /api/lab/run` vía HTTP generó una sesión `prediction_lab`
+completa end-to-end (6/6 pasos `done`, detalle real en cada uno) —
+corrió demasiado rápido (18 filas) para capturarlo a medio camino, pero
+confirma la integración real servidor↔job↔live_thinking sin mocks.
+Compilación final: 105 archivos Python + todo el JS sin errores. Residuos
+de testing (notificación de prueba, reporte de lab de prueba) limpiados
+antes de cerrar la sesión.
+
+**Pendiente Roadmap IV:** Sección 12 (Identidad Visual — tema oscuro/claro,
+iconografía por Lab, animaciones de pulido final). Es la última sección.
+
+---
+
+*Parte 27 añadida el 8 de julio de 2026 — Roadmap IV, Sección 11 completa.*
+
+## PARTE 28 — IDENTIDAD VISUAL (ROADMAP IV, SECCIÓN 12 — FINAL)
+
+**Objetivo:** última sección del Roadmap IV — pasada de pulido y consistencia
+visual sobre las 11 secciones ya construidas, sin agregar paneles nuevos.
+No hubo un archivo de spec dedicado para esta sección (a diferencia de las
+anteriores); el alcance se definió con 2 fuentes reales: (1) una nota de
+diseño deferida explícitamente en la Parte 25 (Sección 9), y (2) una
+auditoría propia de todo `style.css` + los 4 archivos JS de gráficos
+buscando color hardcodeado / tokens rotos.
+
+**3 bugs reales encontrados y corregidos (no cosméticos):**
+
+1. **Mismatch de clases CSS en alertas de Forex Lab (deferido desde la
+   Parte 25)**: `forex_lab.js::forexLoadAlerts()` generaba
+   `class="alert-row alert-{kind}"`, pero el CSS real define
+   `.alert-item.kind-{kind}`. Resultado: el borde de color por severidad
+   (verde/rojo/ámbar/gris) nunca se aplicaba en la lista de alertas de
+   Forex Lab, pese a que el dato y el CSS eran correctos por separado.
+   Corregido: JS ahora genera `class="alert-item kind-{kind}"`, alineado
+   1:1 con las 4 clases reales (`success/error/warning/info`) que emite
+   `_push_alert()` en `server.py`.
+
+2. **`--secondary` / `--secondary-foreground` usados pero NUNCA
+   definidos**: `.tbl-action-btn` (botones de acción del Evolution
+   Center — aprobar/rechazar/rollback de propuestas, Sección 8) referencia
+   `hsl(var(--secondary))` / `hsl(var(--secondary-foreground))`, pero
+   ninguno de los 2 bloques de tokens (`:root` claro /
+   `@media (prefers-color-scheme: dark)`) los declaraba. Sin fallback,
+   esto cae a transparente/heredado del navegador — los botones de acción
+   del Evolution Center llevaban rota su apariencia por defecto (no la
+   variante `.primary`/`.destructive`, que sí tienen sus tokens) desde que
+   existen. Corregido: agregados ambos tokens en los 2 bloques
+   (`0 0% 96%` / `0 0% 9%` en claro, `0 0% 18%` / `0 0% 99%` en oscuro,
+   consistentes con el resto de la paleta neutra). Verificado con script
+   propio: cruce de todas las `var(--x)` usadas en `style.css` contra
+   todas las declaradas — 0 faltantes tras el fix (16/16 tokens usados
+   están definidos en ambos temas).
+
+3. **5 colores hex hardcodeados en Business Lab** (`.kpi-tile.kpi-good/
+   kpi-bad`, `.biz-anomalies .anomaly-row`,
+   `.biz-signal-action.action-growing/declining`): usaban `#2e9e5b` /
+   `#d1483f` fijos en vez de los tokens `--success`/`--danger` ya
+   existentes. Funcionaban visualmente en ambos temas por coincidencia
+   (son iguales en claro/oscuro salvo el fix ya aplicado a `--danger` en
+   la Parte 25), pero quedaban desacoplados del sistema de diseño —
+   cualquier ajuste futuro de paleta los habría dejado desincronizados en
+   silencio. Corregidos a `hsl(var(--success))` / `hsl(var(--danger))`.
+
+**Consistencia de marca entre los 3 Labs (no era un bug, pulido):**
+Prediction Lab y Business Lab ya leían `--primary` en vivo vía
+`getComputedStyle(document.body)` para sus gráficos Chart.js. Forex Lab
+(lightweight-charts) tenía la línea SMA y la línea de precio horizontal
+con un acento fijo `#d98e5c` — visualmente similar a `--primary` pero no
+el mismo token. Unificado: ambas ahora leen `--primary` en vivo, igual
+patrón que los otros 2 Labs.
+
+**Iconografía por Lab:** los 8 ítems del menú lateral (`.nav-item`)
+tenían un punto (`.nav-dot`) genérico e idéntico para las 8 secciones —
+sin identidad visual propia por Lab. Reemplazados por 8 íconos SVG
+inline distintivos (`stroke="currentColor"`, sin colores propios —
+heredan el color del texto del nav-item activo/hover/inactivo, cero
+tokens nuevos): mensaje (Chat), barras (Forex Lab), matraz (Prediction
+Lab), maletín (Business Lab), chip/CPU (Cognitive Core), refresh cíclico
+(Evolution Engine), pulso de actividad (Activity Center), engranaje
+(Configuración). CSS `.nav-icon` con transición de opacidad/escala sutil
+en hover/activo — mismo lenguaje visual restringido del resto del
+proyecto (sin arcoíris de colores por ítem).
+
+**Animación de pulido final:** transición `panel-fade-in` (opacity +
+translateY sutil, 0.18s) al cambiar entre las 8 secciones del workspace —
+antes el cambio de panel era instantáneo (`display:none`↔`flex` sin
+transición). Respeta `prefers-reduced-motion: reduce` (sin animación para
+usuarios que la desactivan a nivel de sistema).
+
+**Verificación realizada:** compilación completa (105 archivos Python +
+todo el JS con `node --check`) sin errores. Script propio de auditoría de
+tokens CSS (`var(--x)` usados vs. declarados) confirmando 0 faltantes.
+Servidor FastAPI levantado en vivo y verificado con `curl` contra los
+archivos realmente servidos (no solo el disco): los 8 `class="nav-icon"`
+presentes en el HTML servido, `--secondary` y `panel-fade-in` presentes en
+el CSS servido, `#d98e5c` ausente y `alert-item kind` presente en el JS
+servido — confirma que el fix llegó a lo que el navegador realmente
+recibe, no solo al archivo fuente. Servidor apagado limpio al cerrar
+(un primer intento de `pkill` no mató el proceso real por diferencia de
+patrón de cmdline; confirmado con `/proc/*/cmdline` y matado por PID
+directo — sin residuos).
+
+**Roadmap IV — Workspace & UX: 12/12 secciones completas.** El workspace
+visual queda con las 12 secciones funcionando con datos reales (sin
+mocks): Workspace Principal, Barra de Estado, Chat Center, Forex Lab,
+Prediction Lab, Business Lab, Cognitive Core, Evolution Center, Activity
+Center, Notification Center, Live Thinking e Identidad Visual.
+
+---
+
+*Parte 28 añadida el 9 de julio de 2026 — Roadmap IV, Sección 12 completa.
+ROADMAP IV CERRADO (12/12 secciones).*
+
+## PARTE 29 — REVISIÓN OPERATIVA FINAL Y 2 BUGS REALES CORREGIDOS (POST-CIERRE ROADMAP IV)
+
+**Contexto:** con las 12 secciones del Roadmap IV ya cerradas (Parte 28), se
+hizo una revisión operativa final de punta a punta (servidor real levantado,
+barrido de endpoints, entrenamiento Forex real, análisis Business Lab real,
+Prediction Lab real) antes de empaquetar el proyecto. Se encontraron y
+corrigieron 2 bugs reales adicionales en `workspace/server.py`.
+
+**1. Gap de observabilidad — Cognitive Center ciego a las acciones del
+Workspace.** Entrenar desde el Forex Lab, correr el Prediction Lab o
+analizar en el Business Lab vía la interfaz web generaba alertas y
+notificaciones correctamente, pero nunca quedaba registrado en
+`command_log` (la tabla que alimenta `/api/cognitive/tools_usage` y el
+timeline). Corregido agregando `memory.log_command(...)` en los 3 lugares:
+fin de `_run_training_job()` (Forex, categoría `forex`, con el par
+detectado), rama de éxito completo de `_run_lab_job()` (Prediction Lab,
+categoría `prediction_lab`), y `business_analyze()` (Business Lab,
+categoría `business`). Verificado con las 3 acciones reales vía curl:
+`tools_usage` pasó de `total_logged: 0` a reflejar cada acción con su
+categoría, comando y resumen reales.
+
+**2. Bug real más serio — el panel de Forex Lab mostraba SIEMPRE "el
+modelo no pasó la validación WFV" tras entrenar, incluso cuando el
+entrenamiento fue exitoso.** Causa raíz: `_forex_full()` en `main.py`
+imprime todo el resultado por stdout y SIEMPRE hace `return ""` al final
+(éxito, fallo o bloqueo por WFV reprobado — los 3 casos devuelven el mismo
+valor falsy). `_run_training_job()` en `server.py` decidía el mensaje final
+con `if respuesta: ... else: "Sin señal — el modelo no pasó la validación
+WFV..."` — como `respuesta` es SIEMPRE `""`, el mensaje de fallo se mostraba
+el 100% de las veces, sin importar el resultado real. Confirmado con datos
+reales de COTTON: WFV aprobado al 88.76%, señal y backtest generados
+correctamente, y aun así el Workspace reportaba "no pasó la validación".
+
+Fix aplicado: se agregó detección del marcador real `[BLOQUEADO]` que ya
+imprime `main.py` cuando el WFV reprueba (`_train_state["wfv_blocked"]`,
+parseado en vivo del stream de stdout, igual patrón que el resto de
+`_TrainingStreamTee`), y se reemplazó la decisión por lógica basada en el
+estado real ya capturado: si `wfv_blocked` → mensaje de bloqueo explícito;
+si se alcanzó la etapa 4/4 → "Pipeline completado"; en cualquier otro caso
+→ mensaje de que no llegó a completarse. Verificado con 2 corridas reales
+de `full forex COTTON`: antes del fix mostraba el mensaje erróneo pese a
+WFV aprobado; después del fix mostró correctamente "Pipeline completado —
+ver métricas y log." con las mismas métricas reales (accuracy 66.27%,
+precision 83.59%, WFV avg 88.76%).
+
+**Verificación operativa final realizada:** sintaxis válida en TODOS los
+`.py` reales del proyecto (`ast.parse`) y TODOS los `.js` del Workspace
+(`node --check`); `check_startup.py` sin issues críticos (solo paquetes
+opcionales ausentes, esperado); servidor real levantado y barrido de ~13
+endpoints de las 12 secciones — todos 200 OK; `full forex` end-to-end con
+datos reales de COTTON sin regresión.
+
+**Limpieza final antes de empaquetar:** se eliminaron artefactos generados
+durante las pruebas de esta sesión (no deben ir al entregable, se
+regeneran solos al usar la app): `memoria.db`/`astra_memory.db` de prueba,
+6 modelos `.pkl` de COTTON generados en las corridas de test, reportes de
+`lab_reports/`, entradas de prueba en `data/forex_analytics/COTTON`, un
+CSV de upload duplicado, todos los `__pycache__`/`.pyc`, y la carpeta
+`_quarantine_root_forex_junk/` (basura confirmada en la Parte 6 —
+`cmd.exe`, duplicados de descarga, archivos corruptos — nunca debió
+empaquetarse, quedó aislada ahí desde entonces para excluirla del zip).
+
+`requirements.txt` actualizado: el comentario de referencia por fase ahora
+cubre explícitamente las 12 secciones del Roadmap IV (antes solo mencionaba
+hasta la Sección 6) y la fecha/alcance de la verificación de instalación
+limpia se actualizó al 9 de julio de 2026.
+
+---
+
+*Parte 29 añadida el 9 de julio de 2026 — revisión operativa final post-cierre
+del Roadmap IV, 2 bugs reales corregidos, proyecto limpio y listo para
+empaquetar.*

@@ -225,6 +225,18 @@ from prediction_lab.model_planner import plan_model, cmd_lab_planea
 from prediction_lab.pipeline_generator import generate_pipeline, cmd_lab_genera
 from prediction_lab.validation_engine import validate_pipeline, cmd_lab_valida
 
+from cognitive_center import (
+    get_conversations,
+    get_projects_overview,
+    get_tools_usage,
+    get_learned_preferences,
+    get_timeline,
+    build_knowledge_graph,
+    search_memory,
+    cmd_memoria_explorar,
+    cmd_memoria_buscar,
+)
+
 TOOLS = {
     # ---------- SELF ANALYSIS --------- #
     "self_analysis": generate_self_analysis,
@@ -376,6 +388,17 @@ TOOLS = {
     "lab_genera_cmd":          cmd_lab_genera,
     "lab_validate_pipeline":   validate_pipeline,
     "lab_valida_cmd":          cmd_lab_valida,
+
+    # ── Cognitive Center (Roadmap IV, Seccion 7) ────────
+    "cognitive_conversations":   get_conversations,
+    "cognitive_projects":        get_projects_overview,
+    "cognitive_tools_usage":     get_tools_usage,
+    "cognitive_preferences":     get_learned_preferences,
+    "cognitive_timeline":        get_timeline,
+    "cognitive_knowledge_graph": build_knowledge_graph,
+    "cognitive_search":          search_memory,
+    "memoria_explorar_cmd":      cmd_memoria_explorar,
+    "memoria_buscar_cmd":        cmd_memoria_buscar,
 
 }
 

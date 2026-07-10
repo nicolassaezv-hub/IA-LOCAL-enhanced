@@ -211,6 +211,19 @@ INTENT_PATTERNS = {
         "lab proyectos",
     ],
 
+    # ── Roadmap IV, Seccion 7: Cognitive Center ────────────
+    "cognitive_center": [
+        "memoria explorar",
+        "memoria buscar",
+        "cognitive center",
+        "explorar memoria",
+        "busca en mi memoria",
+        "que sabes de mi",
+        "knowledge graph",
+        "linea de tiempo",
+        "timeline memoria",
+    ],
+
 
     
     "audio_analysis": [

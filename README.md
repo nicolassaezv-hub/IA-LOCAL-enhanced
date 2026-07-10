@@ -32,13 +32,13 @@ GPU:
 
 # API
 
-Actualmente el funcionamiento de esta IA es gracias a la API de Groq
+Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 
 - name: copi
 
 - ID: key_3uC3DbwL1KZFUHJa
 
-- motor: Llama-70b
+- model="gpt-3.5-turbo"
 
 # Estructura
 
@@ -51,16 +51,12 @@ Se incluyen 5 codigos adicionales para verificar la integridad de los modulos pr
 
 - check_skeleton
 
-- check_forex 
-
-revisa rama Forex
-
+- check
 Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
 # Comandos y Programa Puente (main.py + iniciar_astra.bat)
-
 ### Comandos
 
 El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos 
@@ -669,13 +665,9 @@ def descargar_audio_youtube(url):
 - ### io_files.py
 
  El programa io_files brinda una conexion directa a la creacion/analisis de tipo:
-
  - DOCX
-
  - PDF
-
  - PYTHON (.py)
-
  - EXCEL
 
 Tambien se compone de una funcion extra que es la creacion y/o lectura de base de datos CSV con la implementacion del modulo Pandas
@@ -811,14 +803,11 @@ def escribe_csv(ruta, datos):
 
 ### Comentarios sobre las limitaciones del programa (readme)
 
-La visualizacion de un archivo analizado por el programa se limita a la cantidad de caracteres que permite el API de Groq. Por tanto se hizo un cambio con tal que el "display" este limitado por  tokens y solicitudes (requests) diarios.
-
-Estos limites se muestran en la ejecucion del programa
+La visualizacion de un archivo analizado por el programa se limita a la cantidad de caracteres que permite el API de ChatGPT. Por tanto se hizo un cambio con tal que el "display" este limitado por 70000 tokens (~280.000 caracteres)
 
 # Programa de Calculo Simbolico, Memoria Vectorial y Base De Datos con IA (modules_extra.py)
 
 - ### modules_extra.py
-
 El siguiente programa compprende en mayor parte la memoria en base de datos de Redis,Lllama y SQL para el guardado o indexacion de documentos
 
 <details>
