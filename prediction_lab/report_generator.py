@@ -35,7 +35,7 @@ import re
 import numpy as np
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .prompt_analyzer import analyze_prompt, ProblemSpec
 from .dataset_analyzer import analyze_dataset, DatasetReport
@@ -265,43 +265,74 @@ def _slug_from_csv(csv_path: str) -> str:
     return slug or "proyecto"
 
 
-def run_full_lab(csv_path: str, idea: str, target_variable: Optional[str] = None) -> LabReport:
+def run_full_lab(
+    csv_path: str,
+    idea: str,
+    target_variable: Optional[str] = None,
+    progress_cb: Optional[Callable[[int, str, str], None]] = None,
+) -> LabReport:
     """
     Corre la cadena completa 5.1 -> 5.6 una sola vez y compila el resultado.
     Se detiene apenas una etapa reporta ok=False o viabilidad insuficiente,
     devolviendo un LabReport parcial que explica en qué etapa y por qué.
+
+    progress_cb(step_index, status, detail) es OPCIONAL — lo usa Live
+    Thinking (Roadmap IV, Sección 11) para publicar el avance en vivo.
+    Si no se provee, el comportamiento es idéntico al de antes de esta
+    sección. Si el callback mismo revienta, NUNCA debe tumbar el lab real
+    (graceful fail) — se ignora en silencio.
+    Índices de paso: 0=prompt, 1=dataset, 2=viabilidad, 3=plan, 4=pipeline,
+    5=validación.
     """
+    def _emit(step_idx: int, status: str, detail: str = "") -> None:
+        if progress_cb is None:
+            return
+        try:
+            progress_cb(step_idx, status, detail)
+        except Exception:
+            pass
+
     name = _slug_from_csv(csv_path)
     report = LabReport(csv_path=csv_path, idea=idea, name=name)
 
     # 5.1 Prompt Analyzer
+    _emit(0, "running")
     try:
         problem_spec = analyze_prompt(idea)
     except Exception as e:
         report.ok, report.error, report.stage_reached = False, f"Prompt Analyzer falló: {e}", "prompt"
+        _emit(0, "error", str(e))
         return report
     report.problem_spec = problem_spec
+    _emit(0, "done", f"tipo={problem_spec.problem_type}, dominio={problem_spec.domain}")
 
     # 5.2 Dataset Analyzer
+    _emit(1, "running")
     try:
         dataset_report = analyze_dataset(csv_path, target_variable=target_variable, problem_spec=problem_spec)
     except Exception as e:
         report.ok, report.error, report.stage_reached = False, f"Dataset Analyzer falló: {e}", "dataset"
+        _emit(1, "error", str(e))
         return report
     report.dataset_report = dataset_report
     if not dataset_report.ok:
         report.ok, report.error, report.stage_reached = False, dataset_report.error, "dataset"
+        _emit(1, "error", dataset_report.error or "")
         return report
+    _emit(1, "done", f"{dataset_report.n_rows} filas, target={dataset_report.target_variable}")
 
     # 5.3 Feasibility Engine
+    _emit(2, "running")
     try:
         feasibility = assess_feasibility_from(problem_spec, dataset_report)
     except Exception as e:
         report.ok, report.error, report.stage_reached = False, f"Feasibility Engine falló: {e}", "feasibility"
+        _emit(2, "error", str(e))
         return report
     report.feasibility = feasibility
     if not feasibility.ok:
         report.ok, report.error, report.stage_reached = False, feasibility.error, "feasibility"
+        _emit(2, "error", feasibility.error or "")
         return report
     report.stage_reached = "feasibility"
 
@@ -311,43 +342,59 @@ def run_full_lab(csv_path: str, idea: str, target_variable: Optional[str] = None
             f"Índice de viabilidad {feasibility.viability_index:.1f}/100 (< 40) — "
             "no se generó plan de modelo ni se entrenó nada."
         )
+        _emit(2, "done", f"viabilidad={feasibility.viability_index:.1f}/100 (NO VIABLE)")
+        for skip_idx in (3, 4, 5):
+            _emit(skip_idx, "skipped", "no viable")
         return report
+    _emit(2, "done", f"viabilidad={feasibility.viability_index:.1f}/100 (viable)")
 
     # 5.4 Model Planner
+    _emit(3, "running")
     try:
         model_plan = plan_models_from(problem_spec, dataset_report, feasibility)
     except Exception as e:
         report.ok, report.error, report.stage_reached = False, f"Model Planner falló: {e}", "plan"
+        _emit(3, "error", str(e))
         return report
     report.model_plan = model_plan
     report.stage_reached = "plan"
     if not model_plan.ok:
         report.ok, report.error = False, model_plan.error
+        _emit(3, "error", model_plan.error or "")
         return report
+    _emit(3, "done", f"{len(model_plan.algorithms)} algoritmo(s) planificados")
 
     # 5.5 Pipeline Generator
+    _emit(4, "running")
     try:
         generated = generate_pipeline_from_csv(model_plan, csv_path)
     except Exception as e:
         report.ok, report.error, report.stage_reached = False, f"Pipeline Generator falló: {e}", "pipeline"
+        _emit(4, "error", str(e))
         return report
     report.generated_pipeline = generated
     report.stage_reached = "pipeline"
     if not generated.ok:
         report.ok, report.error = False, generated.error
+        _emit(4, "error", generated.error or "")
         return report
+    _emit(4, "done", "pipeline sklearn construido")
 
     # 5.6 Validation Engine
+    _emit(5, "running")
     try:
         validation = validate_from_csv(generated, model_plan, csv_path)
     except Exception as e:
         report.ok, report.error, report.stage_reached = False, f"Validation Engine falló: {e}", "validation"
+        _emit(5, "error", str(e))
         return report
     report.validation = validation
     report.stage_reached = "validation"
     if not validation.ok:
         report.ok, report.error = False, validation.error
+        _emit(5, "error", validation.error or "")
         return report
+    _emit(5, "done", f"score={validation.mean_score:.3f} ({'PASA' if validation.passes else 'NO PASA'})")
 
     if validation.passes:
         report.notes.append("El modelo superó la métrica mínima esperada — candidato a producción con más validación.")

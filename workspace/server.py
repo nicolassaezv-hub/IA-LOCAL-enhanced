@@ -39,6 +39,44 @@ Sección 4 — Forex Lab Workspace:
                                   del pipeline — sin datos simulados).
   GET  /api/forex/alerts       -> alertas reales generadas por el Workspace.
 
+Sección 7 — Cognitive Center:
+  GET  /api/cognitive/*        -> memoria explorable (conversaciones,
+                                  proyectos, modelos, timeline, knowledge
+                                  graph) + POST /search en lenguaje natural.
+
+Sección 8 — Evolution Center:
+  GET  /api/evolution/overview            -> stats agregadas del ciclo
+                                             evolutivo (propuestas por
+                                             status, ultimo snapshot, audit,
+                                             rollback points).
+  GET  /api/evolution/timeline            -> historial evolution_events.
+  GET  /api/evolution/performance_history -> historial de snapshots.
+  GET  /api/evolution/proposals           -> lista (filtro opcional status).
+  GET  /api/evolution/proposals/{{id}}      -> detalle + validacion
+                                             constitucional en vivo
+                                             (preview, no cambia estado).
+  POST /api/evolution/proposals/{{id}}/approve   -> aprobacion manual real
+                                             (crea rollback point).
+  POST /api/evolution/proposals/{{id}}/reject    -> rechazo real.
+  POST /api/evolution/proposals/{{id}}/validate   -> flujo de aprobacion
+                                             completo (valida contra la
+                                             constitucion y aprueba/rechaza).
+  GET  /api/evolution/rules               -> catalogo de reglas
+                                             constitucionales (builtin+custom).
+  GET  /api/evolution/audit               -> audit log inmutable.
+  GET  /api/evolution/rollback_points     -> rollback points disponibles.
+  POST /api/evolution/rollback_points/{{id}}/apply -> aplica un rollback real.
+  POST /api/evolution/cycle/run           -> corre el ciclo evolutivo
+                                             completo real (monitor->
+                                             detecta->propone->valida->
+                                             aprueba->feedback->audit).
+
+Sección 9 — Activity Center:
+  GET  /api/activity/feed  -> feed unificado en vivo (alertas + comandos +
+                              senales forex + eventos de evolucion),
+                              filtrable por fuente (?sources=alert,signal).
+  GET  /api/activity/stats -> conteos totales por fuente para tiles.
+
 Cómo correrlo:
   pip install -r requirements.txt   # incluye fastapi, uvicorn, python-multipart
   python workspace/server.py
@@ -74,6 +112,10 @@ from intent_router import analyze_request
 from tool_registry import TOOLS
 from main import dispatch_command, _category_from_cmd, _extract_pair, _summarize_result
 from forex.market_universe import get_market_type
+import cognitive_center as _cognitive
+import activity_center as _activity
+import notification_center as _notif
+import live_thinking as _thinking
 
 try:
     import psutil
@@ -323,28 +365,15 @@ async def upload_file(file: UploadFile = File(...)) -> JSONResponse:
 # ══════════════════════════════════════════════════════════════════
 
 # ── 4 (Alertas) — feed real de eventos generados por el propio Workspace ──
-_alerts_lock = threading.Lock()
-_alerts: list[dict] = []
-_alert_id_counter = 0
-
-
-def _push_alert(kind: str, message: str) -> None:
-    """kind: info | success | warning | error"""
-    global _alert_id_counter
-    with _alerts_lock:
-        _alert_id_counter += 1
-        _alerts.insert(0, {
-            "id": _alert_id_counter, "kind": kind, "message": message,
-            "ts": datetime.datetime.now().strftime("%H:%M:%S"),
-        })
-        if len(_alerts) > 100:
-            _alerts.pop()
+# Movido a activity_center.py (Sección 9) para que el store de alertas sea
+# standalone e importable sin levantar el server. _push_alert queda como
+# alias fino para no tocar los ~10 call-sites existentes en este archivo.
+_push_alert = _activity.push_alert
 
 
 @app.get("/api/forex/alerts")
 def get_alerts(limit: int = 20) -> JSONResponse:
-    with _alerts_lock:
-        return JSONResponse({"alerts": _alerts[:limit]})
+    return JSONResponse({"alerts": _activity.get_alerts(limit=limit)})
 
 
 # ── 4 (Pares disponibles) ──────────────────────────────────────────
@@ -540,7 +569,7 @@ _train_state = {
     "accuracy": None, "precision": None, "wfv_avg_precision": None, "confidence": None,
     "model_used": "XGBoost + LightGBM + RandomForest (Ensemble calibrado)",
     "started_at": None, "finished_at": None,
-    "result_summary": None, "error": None, "log_tail": [],
+    "result_summary": None, "error": None, "log_tail": [], "wfv_blocked": False,
 }
 
 
@@ -571,9 +600,17 @@ class _TrainingStreamTee(io.TextIOBase):
                 m = re.search(r"\[(\d)/4\]", line)
                 if m:
                     stage_num = int(m.group(1))
+                    prev_stage_num = _train_state["stage_num"]
                     _train_state["stage_num"] = stage_num
                     _train_state["stage"] = _STAGE_LABELS.get(stage_num, line)
                     _train_state["progress_pct"] = round(stage_num / 4 * 100)
+                    # Live Thinking (Roadmap IV, Sección 11) — mismo primitivo
+                    # transversal que usa Prediction Lab, alimentado aquí desde
+                    # el stdout real ya parseado (no se inventa nada nuevo).
+                    if prev_stage_num and 1 <= prev_stage_num <= 4:
+                        _thinking.set_step("forex_train", prev_stage_num - 1, "done")
+                    if 1 <= stage_num <= 4:
+                        _thinking.set_step("forex_train", stage_num - 1, "running")
 
                 m2 = re.search(r"Accuracy\s*:\s*([\d.]+)%\s*\|\s*Precision:\s*([\d.]+)%", line)
                 if m2:
@@ -591,6 +628,9 @@ class _TrainingStreamTee(io.TextIOBase):
                 m5 = re.search(r"Par\s*:\s*(\S+)", line)
                 if m5:
                     _train_state["pair"] = m5.group(1)
+
+                if "[BLOQUEADO]" in line:
+                    _train_state["wfv_blocked"] = True
         return len(s)
 
     def flush(self):
@@ -604,9 +644,10 @@ def _run_training_job(csv_path: str) -> None:
             "stage": "Iniciando", "stage_num": 0, "progress_pct": 0,
             "accuracy": None, "precision": None, "wfv_avg_precision": None, "confidence": None,
             "started_at": time.time(), "finished_at": None,
-            "result_summary": None, "error": None, "log_tail": [],
+            "result_summary": None, "error": None, "log_tail": [], "wfv_blocked": False,
         })
     _push_alert("info", f"Entrenamiento iniciado: {csv_path}")
+    _thinking.start_thinking("forex_train", list(_STAGE_LABELS.values()), "Forex Full Pipeline")
 
     real_stdout = sys.stdout
     tee = _TrainingStreamTee(real_stdout)
@@ -614,18 +655,45 @@ def _run_training_job(csv_path: str) -> None:
         with contextlib.redirect_stdout(tee):
             respuesta = dispatch_command(f"full forex {csv_path}")
         with _train_lock:
-            if respuesta:
+            if _train_state.get("wfv_blocked"):
+                _train_state["result_summary"] = (
+                    "Bloqueado — el modelo reprobó Walk-Forward Validation y no fue "
+                    "guardado (no se generó señal ni backtest). Ver log."
+                )
+            elif _train_state["stage_num"] >= 4:
+                _train_state["result_summary"] = _summarize_result(respuesta) or "Pipeline completado — ver métricas y log."
+            elif respuesta:
                 _train_state["result_summary"] = _summarize_result(respuesta)
             else:
-                _train_state["result_summary"] = "Sin señal — el modelo no pasó la validación WFV (ver log)."
+                _train_state["result_summary"] = "El entrenamiento no llegó a completarse — ver log."
             _train_state["progress_pct"] = 100
             _train_state["stage"] = "Completado"
         pair_label = _train_state.get("pair") or csv_path
         _push_alert("success", f"Entrenamiento completado: {pair_label}")
+        _notif.push_notification(
+            "training_completed", f"Entrenamiento completado: {pair_label}",
+            _train_state.get("result_summary") or "", {"csv_path": csv_path, "pair": _train_state.get("pair")},
+        )
+        # Cognitive Center (Sección 7) lee el historial vía command_log — sin
+        # esto, entrenar desde el Forex Lab quedaba invisible para
+        # tools_usage/timeline aunque sí generara alerta y notificación.
+        try:
+            memory.log_command(
+                f"full forex {csv_path}",
+                _train_state.get("result_summary") or "Entrenamiento completado",
+                pair=_train_state.get("pair"), category="forex",
+            )
+        except Exception:
+            pass
+        _thinking.finish_thinking("forex_train", ok=True)
     except Exception as e:
         with _train_lock:
             _train_state["error"] = str(e)
         _push_alert("error", f"Error durante entrenamiento: {e}")
+        _notif.push_notification(
+            "problem_detected", f"Error de entrenamiento: {csv_path}", str(e), {"csv_path": csv_path},
+        )
+        _thinking.finish_thinking("forex_train", ok=False, error=str(e))
     finally:
         with _train_lock:
             _train_state["running"] = False
@@ -675,6 +743,12 @@ _lab_state = {
 }
 
 
+_LAB_THINKING_STEPS = [
+    "Analizando Prompt", "Analizando Dataset y variables", "Evaluando viabilidad",
+    "Planificando modelos", "Generando pipeline", "Validando y comparando resultados",
+]
+
+
 def _run_lab_job(csv_path: str, idea: str, target_variable: str | None) -> None:
     with _lab_lock:
         _lab_state.update({
@@ -683,8 +757,13 @@ def _run_lab_job(csv_path: str, idea: str, target_variable: str | None) -> None:
             "ok": None, "error": None, "stage_reached": None, "saved_path": None,
         })
     _push_alert("info", f"Prediction Lab iniciado: {csv_path}")
+    _thinking.start_thinking("prediction_lab", _LAB_THINKING_STEPS, "Prediction Lab")
+
+    def _on_progress(step_idx: int, status: str, detail: str) -> None:
+        _thinking.set_step("prediction_lab", step_idx, status, detail)
+
     try:
-        report = run_full_lab(csv_path, idea, target_variable=target_variable or None)
+        report = run_full_lab(csv_path, idea, target_variable=target_variable or None, progress_cb=_on_progress)
         saved_path = None
         try:
             saved_path = report.save()
@@ -699,15 +778,46 @@ def _run_lab_job(csv_path: str, idea: str, target_variable: str | None) -> None:
             _push_alert("success", f"Prediction Lab completado: {report.name} "
                                     f"(score={report.validation.mean_score:.3f}, "
                                     f"{'PASA' if report.validation.passes else 'NO PASA'})")
+            _notif.push_notification(
+                "prediction_ready", f"Reporte listo: {report.name}",
+                f"score={report.validation.mean_score:.3f}, {'PASA' if report.validation.passes else 'NO PASA'}",
+                {"csv_path": csv_path, "saved_path": saved_path},
+            )
+            # Cognitive Center (Sección 7) — mismo motivo que en el fix de
+            # Forex train: sin esto, correr el Lab desde el Workspace no
+            # aparecía en tools_usage/timeline.
+            try:
+                memory.log_command(
+                    f"lab analiza {csv_path}",
+                    f"{report.name}: score={report.validation.mean_score:.3f}, "
+                    f"{'PASA' if report.validation.passes else 'NO PASA'}",
+                    category="prediction_lab",
+                )
+            except Exception:
+                pass
         elif report.ok:
             _push_alert("warning", f"Prediction Lab detenido en etapa '{report.stage_reached}': {report.error or 'viabilidad insuficiente'}")
+            _notif.push_notification(
+                "problem_detected", f"Prediction Lab detenido en '{report.stage_reached}'",
+                report.error or "viabilidad insuficiente", {"csv_path": csv_path},
+            )
         else:
             _push_alert("error", f"Prediction Lab falló en etapa '{report.stage_reached}': {report.error}")
+            _notif.push_notification(
+                "problem_detected", f"Prediction Lab falló en '{report.stage_reached}'",
+                report.error or "", {"csv_path": csv_path},
+            )
     except Exception as e:
         with _lab_lock:
             _lab_state["ok"] = False
             _lab_state["error"] = str(e)
         _push_alert("error", f"Error inesperado en Prediction Lab: {e}")
+        _notif.push_notification(
+            "problem_detected", "Error inesperado en Prediction Lab", str(e), {"csv_path": csv_path},
+        )
+        _thinking.finish_thinking("prediction_lab", ok=False, error=str(e))
+    else:
+        _thinking.finish_thinking("prediction_lab", ok=report.ok, error=report.error)
     finally:
         with _lab_lock:
             _lab_state["running"] = False
@@ -899,6 +1009,22 @@ def business_analyze(req: dict) -> JSONResponse:
 
     _push_alert("success", f"Business Lab: análisis completado para {os.path.basename(csv_path)} "
                             f"(health={kpis.get('health_score')}/100, {kpis.get('trend_direction')})")
+    _notif.push_notification(
+        "business_analysis_ready", f"Análisis listo: {os.path.basename(csv_path)}",
+        f"health={kpis.get('health_score')}/100, {kpis.get('trend_direction')}",
+        {"csv_path": csv_path},
+    )
+    # Cognitive Center (Sección 7) — mismo fix que en Forex train / Prediction
+    # Lab: sin esto, correr el análisis desde el Workspace no quedaba en
+    # tools_usage/timeline aunque sí generara alerta y notificación.
+    try:
+        memory.log_command(
+            f"forecast negocio {csv_path} {months}",
+            f"health={kpis.get('health_score')}/100, {kpis.get('trend_direction')}",
+            category="business",
+        )
+    except Exception:
+        pass
 
     return JSONResponse({
         "csv_path": csv_path,
@@ -908,6 +1034,263 @@ def business_analyze(req: dict) -> JSONResponse:
         "predict": predict_result,
         "forecast": forecast,
     })
+
+
+# ══════════════════════════════════════════════════════════════
+# COGNITIVE CENTER — Roadmap IV, Seccion 7
+# Ventana exclusiva para la memoria: conversaciones, proyectos,
+# modelos, herramientas, preferencias, timeline y knowledge graph
+# sobre memory.py / project_memory.py / feedback/*, mas busqueda en
+# lenguaje natural (LLM con fallback heuristico). Todo real, sin
+# datos simulados — ver cognitive_center.py.
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/api/cognitive/overview")
+def cognitive_overview() -> JSONResponse:
+    """Resumen agregado para el panel principal del Cognitive Center."""
+    try:
+        overview = _cognitive.get_projects_overview()
+        tools = _cognitive.get_tools_usage()
+        prefs = _cognitive.get_learned_preferences()
+        return JSONResponse({
+            "conversations_total": memory.contar_entradas(),
+            "projects_total": len(overview["projects"]),
+            "models_total": len(overview["models"]),
+            "tasks_pending": sum(1 for t in overview["tasks"] if not t.get("done")),
+            "tasks_total": len(overview["tasks"]),
+            "commands_logged": tools["total_logged"],
+            "by_category": tools["by_category"],
+            "top_commands": tools["top_commands"],
+            "pairs_with_custom_thresholds": len(prefs["adaptive_thresholds"]),
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/cognitive/conversations")
+def cognitive_conversations(limit: int = 50) -> JSONResponse:
+    try:
+        return JSONResponse({"conversations": _cognitive.get_conversations(limit=limit)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/cognitive/projects")
+def cognitive_projects() -> JSONResponse:
+    try:
+        return JSONResponse(_cognitive.get_projects_overview())
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/cognitive/tools_usage")
+def cognitive_tools_usage(limit: int = 200) -> JSONResponse:
+    try:
+        return JSONResponse(_cognitive.get_tools_usage(limit=limit))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/cognitive/preferences")
+def cognitive_preferences() -> JSONResponse:
+    try:
+        return JSONResponse(_cognitive.get_learned_preferences())
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/cognitive/timeline")
+def cognitive_timeline(limit: int = 100) -> JSONResponse:
+    try:
+        return JSONResponse({"events": _cognitive.get_timeline(limit=limit)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/cognitive/knowledge_graph")
+def cognitive_knowledge_graph() -> JSONResponse:
+    try:
+        return JSONResponse(_cognitive.build_knowledge_graph())
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/cognitive/search")
+def cognitive_search(req: dict) -> JSONResponse:
+    query = (req or {}).get("query", "").strip()
+    if not query:
+        return JSONResponse({"error": "query vacia"}, status_code=400)
+    try:
+        return JSONResponse(_cognitive.search_memory(query))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ══════════════════════════════════════════════════════════════
+# EVOLUTION CENTER — Roadmap IV, Seccion 8
+# Ventana sobre evolution/ + constitution/ + evolutionary_cycle.py
+# (Fases 7-9, ya operativas): panel del ciclo evolutivo, revision
+# y aprobacion/rechazo de propuestas, reglas constitucionales,
+# audit log y rollback points. Todo real — ver evolution_center.py.
+# ══════════════════════════════════════════════════════════════
+
+import evolution_center as _evolution
+
+
+def _evo_response(result: dict, not_found_msg: str = "no encontrada") -> JSONResponse:
+    """Traduce el patron {"ok": bool, "error": ...} de evolution_center.py
+    a status codes HTTP (404 si el error menciona 'no encontrada', 500 en
+    cualquier otro error, 200 si ok)."""
+    if result.get("ok") is False:
+        err = str(result.get("error", ""))
+        status = 404 if not_found_msg in err else 400
+        return JSONResponse(result, status_code=status)
+    return JSONResponse(result)
+
+
+@app.get("/api/evolution/overview")
+def evolution_overview() -> JSONResponse:
+    return _evo_response(_evolution.get_cycle_overview())
+
+
+@app.get("/api/evolution/timeline")
+def evolution_timeline(limit: int = 40) -> JSONResponse:
+    return _evo_response(_evolution.get_evolution_timeline(limit=limit))
+
+
+@app.get("/api/evolution/performance_history")
+def evolution_performance_history(limit: int = 20) -> JSONResponse:
+    return _evo_response(_evolution.get_performance_history(limit=limit))
+
+
+@app.get("/api/evolution/proposals")
+def evolution_proposals(status: str = "", limit: int = 50) -> JSONResponse:
+    return _evo_response(_evolution.get_proposals_list(status=status or None, limit=limit))
+
+
+@app.get("/api/evolution/proposals/{proposal_id}")
+def evolution_proposal_detail(proposal_id: int) -> JSONResponse:
+    return _evo_response(_evolution.get_proposal_detail(proposal_id))
+
+
+@app.post("/api/evolution/proposals/{proposal_id}/approve")
+def evolution_proposal_approve(proposal_id: int, req: dict = None) -> JSONResponse:
+    justification = (req or {}).get("justification", "")
+    return _evo_response(_evolution.approve_proposal(proposal_id, justification))
+
+
+@app.post("/api/evolution/proposals/{proposal_id}/reject")
+def evolution_proposal_reject(proposal_id: int, req: dict = None) -> JSONResponse:
+    reason = (req or {}).get("reason", "")
+    return _evo_response(_evolution.reject_proposal(proposal_id, reason))
+
+
+@app.post("/api/evolution/proposals/{proposal_id}/validate")
+def evolution_proposal_validate(proposal_id: int) -> JSONResponse:
+    return _evo_response(_evolution.validate_proposal_constitutional(proposal_id))
+
+
+@app.get("/api/evolution/rules")
+def evolution_rules() -> JSONResponse:
+    return _evo_response(_evolution.get_constitution_rules())
+
+
+@app.get("/api/evolution/audit")
+def evolution_audit(target: str = "", limit: int = 50) -> JSONResponse:
+    return _evo_response(_evolution.get_audit_log(target=target or None, limit=limit))
+
+
+@app.get("/api/evolution/rollback_points")
+def evolution_rollback_points(limit: int = 30) -> JSONResponse:
+    return _evo_response(_evolution.get_rollback_points(limit=limit))
+
+
+@app.post("/api/evolution/rollback_points/{point_id}/apply")
+def evolution_rollback_apply(point_id: int) -> JSONResponse:
+    return _evo_response(_evolution.apply_rollback(point_id))
+
+
+@app.post("/api/evolution/cycle/run")
+def evolution_cycle_run(req: dict = None) -> JSONResponse:
+    auto_approve_minor = bool((req or {}).get("auto_approve_minor", False))
+    return _evo_response(_evolution.trigger_evolutionary_cycle(auto_approve_minor=auto_approve_minor))
+
+
+# ══════════════════════════════════════════════════════════════
+# ACTIVITY CENTER — Roadmap IV, Seccion 9
+# Feed unificado en vivo: alertas del Workspace + comandos ejecutados +
+# senales forex + eventos de evolucion, fusionados y ordenados por
+# timestamp real. Ver activity_center.py.
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/api/activity/feed")
+def activity_feed(limit: int = 50, sources: str = "") -> JSONResponse:
+    src_list = [s.strip() for s in sources.split(",") if s.strip()] or None
+    try:
+        return JSONResponse(_activity.get_activity_feed(limit=limit, sources=src_list))
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/api/activity/stats")
+def activity_stats() -> JSONResponse:
+    try:
+        return JSONResponse(_activity.get_activity_stats())
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+# ══════════════════════════════════════════════════════════════
+# LIVE THINKING — Roadmap IV, Seccion 11
+# Razonamiento operativo visible, TRANSVERSAL a los Labs (Prediction Lab
+# y Forex full pipeline publican aqui su avance paso a paso). Ver
+# live_thinking.py.
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/api/thinking")
+def thinking_all() -> JSONResponse:
+    """Devuelve el estado de TODAS las sesiones de pensamiento conocidas
+    (prediction_lab, forex_train), activas o no. El frontend decide cual
+    mostrar (activa) o si mostrar ninguna."""
+    return JSONResponse({"ok": True, "sessions": _thinking.get_all_thinking()})
+
+
+@app.get("/api/thinking/{task_key}")
+def thinking_one(task_key: str) -> JSONResponse:
+    session = _thinking.get_thinking(task_key)
+    if session is None:
+        return JSONResponse({"ok": False, "error": f"sin sesión para '{task_key}'"})
+    return JSONResponse({"ok": True, "session": session})
+
+
+# ══════════════════════════════════════════════════════════════
+# NOTIFICATION CENTER — Roadmap IV, Seccion 10
+# Notificaciones PERSISTIDAS y consultables (sobreviven a un reinicio),
+# a diferencia del feed en vivo/efimero del Activity Center. Ver
+# notification_center.py.
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/api/notifications")
+def notifications_list(limit: int = 30, unread_only: bool = False, ntype: str = "") -> JSONResponse:
+    items = _notif.get_notifications(limit=limit, unread_only=unread_only, ntype=ntype or None)
+    return JSONResponse({"ok": True, "items": items, "total": len(items)})
+
+
+@app.get("/api/notifications/stats")
+def notifications_stats() -> JSONResponse:
+    return JSONResponse(_notif.get_notification_stats())
+
+
+@app.post("/api/notifications/{notification_id}/read")
+def notifications_mark_read(notification_id: int) -> JSONResponse:
+    changed = _notif.mark_read(notification_id)
+    return JSONResponse({"ok": changed})
+
+
+@app.post("/api/notifications/read-all")
+def notifications_mark_all_read() -> JSONResponse:
+    count = _notif.mark_all_read()
+    return JSONResponse({"ok": True, "marked": count})
 
 
 # Monta la SPA al final para que /api/* tenga prioridad sobre el catch-all estático.

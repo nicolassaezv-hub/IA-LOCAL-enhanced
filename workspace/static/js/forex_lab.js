@@ -89,6 +89,7 @@ function _forexEnsureChart() {
   const styles = getComputedStyle(document.body);
   const fg = `hsl(${styles.getPropertyValue("--foreground")})`;
   const border = `hsl(${styles.getPropertyValue("--border")})`;
+  const primary = `hsl(${styles.getPropertyValue("--primary")})`;
 
   _forexChart = LightweightCharts.createChart(el, {
     width: el.clientWidth,
@@ -99,7 +100,10 @@ function _forexEnsureChart() {
     rightPriceScale: { borderColor: border },
   });
   _forexCandleSeries = _forexChart.addCandlestickSeries();
-  _forexSmaSeries = _forexChart.addLineSeries({ color: "#d98e5c", lineWidth: 2 });
+  // Identidad visual (Roadmap IV, Sección 12): la línea SMA usa el mismo
+  // token --primary que el resto de gráficos de Prediction/Business Lab
+  // en vez de un acento fijo — consistencia de marca entre los 3 Labs.
+  _forexSmaSeries = _forexChart.addLineSeries({ color: primary, lineWidth: 2 });
 
   window.addEventListener("resize", () => {
     if (_forexChart) _forexChart.applyOptions({ width: el.clientWidth });
@@ -159,8 +163,10 @@ function forexAddPriceLine() {
   const val = prompt("Precio para la línea horizontal:");
   const num = parseFloat(val);
   if (isNaN(num)) return;
+  // Mismo token --primary que la SMA (identidad visual, Sección 12).
+  const primary = `hsl(${getComputedStyle(document.body).getPropertyValue("--primary")})`;
   const line = _forexCandleSeries.createPriceLine({
-    price: num, color: "#d98e5c", lineWidth: 1, lineStyle: 2,
+    price: num, color: primary, lineWidth: 1, lineStyle: 2,
     axisLabelVisible: true, title: `nivel ${num}`,
   });
   _forexPriceLines.push(line);
@@ -298,7 +304,7 @@ async function forexLoadAlerts() {
     out.innerHTML = "";
     (data.alerts || []).forEach((a) => {
       const row = document.createElement("div");
-      row.className = `alert-row alert-${a.kind}`;
+      row.className = `alert-item kind-${a.kind}`;
       row.innerHTML = `<span class="alert-ts">${a.ts}</span><span>${a.message}</span>`;
       out.appendChild(row);
     });
