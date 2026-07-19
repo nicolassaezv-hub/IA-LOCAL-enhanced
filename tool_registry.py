@@ -237,6 +237,34 @@ from cognitive_center import (
     cmd_memoria_buscar,
 )
 
+# ==========================================
+# ROADMAP V — Forex Lab Avanzado
+# ==========================================
+
+try:
+    from forex.prediction.roadmap_v_integration import (
+        run_quality_gate, run_backtest_protocol, run_walk_forward,
+        run_model_comparison, run_feature_importance, apply_feature_filter,
+        run_regime_detection, run_mtf_coherence, run_reliability_score,
+        run_model_selection, run_decision_engine, run_risk_engine,
+        run_full_roadmap_v_evaluation,
+        run_dataset_update, run_scheduler_status, run_retrain_check,
+        run_sentinel_status, run_outcome_stats, run_notification,
+        run_portfolio_ranking,
+        cmd_quality, cmd_backtest, cmd_feature_importance,
+        cmd_regime, cmd_mtf, cmd_reliability, cmd_decision, cmd_risk,
+        cmd_dataset_update, cmd_scheduler_status,
+        cmd_retrain_check, cmd_retrain_history,
+        cmd_sentinel_status, cmd_sentinel_signals,
+        cmd_outcome_stats, cmd_outcome_history,
+        cmd_notify_test, cmd_notify_log,
+        cmd_portfolio_ranking, cmd_portfolio_export,
+    )
+    _HAS_ROADMAP_V = True
+except ImportError as _e:
+    _HAS_ROADMAP_V = False
+    print(f"[ASTRA] Roadmap V no disponible: {_e}")
+
 TOOLS = {
     # ---------- SELF ANALYSIS --------- #
     "self_analysis": generate_self_analysis,
@@ -400,6 +428,38 @@ TOOLS = {
     "memoria_explorar_cmd":      cmd_memoria_explorar,
     "memoria_buscar_cmd":        cmd_memoria_buscar,
 
+    # ── Roadmap V — Forex Lab Avanzado ─────────────────────
+    **({  # Solo si se importaron correctamente
+        "quality": cmd_quality,
+        "backtest": cmd_backtest,
+        "feature_importance": cmd_feature_importance,
+        "regime": cmd_regime,
+        "mtf": cmd_mtf,
+        "reliability": cmd_reliability,
+        "decision": cmd_decision,
+        "risk": cmd_risk,
+        "dataset_update": cmd_dataset_update,
+        "scheduler_status": cmd_scheduler_status,
+        "retrain_check": cmd_retrain_check,
+        "retrain_history": cmd_retrain_history,
+        "sentinel_status": cmd_sentinel_status,
+        "sentinel_signals": cmd_sentinel_signals,
+        "outcome_stats": cmd_outcome_stats,
+        "outcome_history": cmd_outcome_history,
+        "notify_test": cmd_notify_test,
+        "notify_log": cmd_notify_log,
+        "portfolio_ranking": cmd_portfolio_ranking,
+        "portfolio_export": cmd_portfolio_export,
+        "roadmap_v_full": run_full_roadmap_v_evaluation,
+        "quality_gate": run_quality_gate,
+        "regime_detect": run_regime_detection,
+        "mtf_coherence": run_mtf_coherence,
+        "reliability_score": run_reliability_score,
+        "model_select": run_model_selection,
+        "decision_engine": run_decision_engine,
+        "risk_engine": run_risk_engine,
+        "portfolio_rank": run_portfolio_ranking,
+    } if _HAS_ROADMAP_V else {}),
 }
 
 # ==========================================

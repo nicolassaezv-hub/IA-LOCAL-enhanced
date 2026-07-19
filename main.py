@@ -56,6 +56,21 @@ from constitution import (
 # Fase 9 (Ciclo Evolutivo): orquesta monitor->detector->proposer->constitucion->
 # aprobacion->feedback->audit en un solo comando ('evolucionar ciclo').
 from evolutionary_cycle import cmd_ciclo_evolutivo, cmd_health_report
+# ── Roadmap V — Forex Lab Avanzado ─────────────────────────────────
+try:
+    from forex.prediction.roadmap_v_integration import (
+        cmd_quality, cmd_backtest, cmd_feature_importance,
+        cmd_regime, cmd_mtf, cmd_reliability, cmd_decision, cmd_risk,
+        cmd_dataset_update, cmd_scheduler_status,
+        cmd_retrain_check, cmd_retrain_history,
+        cmd_sentinel_status, cmd_sentinel_signals,
+        cmd_outcome_stats, cmd_outcome_history,
+        cmd_notify_test, cmd_notify_log,
+        cmd_portfolio_ranking, cmd_portfolio_export,
+    )
+    _HAS_ROADMAP_V = True
+except ImportError as _e_rv:
+    _HAS_ROADMAP_V = False
 import re as _re_lab
 from datetime import datetime
 
@@ -825,6 +840,24 @@ def _ayuda():
   imagen                         Scikit-image edge detection demo
 
 
+{Fore.CYAN}── ROADMAP V — FOREX LAB AVANZADO ─────────────────────────{Style.RESET_ALL}
+  quality <csv> [par] [tf]         V.5  Gate de calidad del dataset
+  regime <csv> [par] [tf]          V.4  Detección de régimen de mercado
+  mtf <d1.csv> <h4.csv> <h1.csv>  V.3  Coherencia Multi-Timeframe D1→H4→H1
+  reliability <conf> [signal]      V.8  Reliability Score (7 factores, 0-100)
+  decision <signal> <conf>         V.1  Motor de decisión final (BUY/SELL/HOLD)
+  risk <BUY|SELL> <entry> <atr>    V.2  SL/TP + position sizing Kelly
+  backtest <modelo> <csv> [par]    V.9  Backtesting (20+ métricas, Walk-Forward)
+  feature_importance <m> <csv>     V.6  Importancia de features (SHAP)
+  dataset_update <par> [tf]        V.11 Actualización incremental CSV
+  scheduler_status                 V.12 Estado del scheduler inteligente
+  retrain_check <par>              V.13 Check de reentrenamiento adaptativo
+  sentinel_status                  V.10 Market Sentinel ⭐⭐⭐⭐⭐
+  sentinel_signals [par] [n]       V.10 Historial de señales del sentinel
+  outcome_stats [par]              V.14 Estadísticas de resultados reales
+  notify_test <par> <signal> <r>   V.15 Prueba de notificación multi-canal
+  portfolio_ranking [signal] [min] V.18 Ranking de oportunidades multi-activo
+
 {Fore.CYAN}── RISK MANAGEMENT ────────────────────────────────────────{Style.RESET_ALL}
   circuit status                 Estado del circuit breaker (pérdida diaria/semanal/drawdown)
   circuit reset                  Resetear manualmente el circuit breaker
@@ -1565,6 +1598,76 @@ def dispatch_command(user_input: str) -> str:
             parts = user_input.split()
             pair_arg = parts[2] if len(parts) > 2 else None
             respuesta = cmd_signal_stats(pair_arg)
+
+        # ── ROADMAP V — FOREX LAB AVANZADO ────────────────────────
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("quality "):
+            parts = user_input[8:].strip().split()
+            csv_path = parts[0] if parts else ""
+            pair_arg = parts[1] if len(parts) > 1 else "UNKNOWN"
+            tf_arg   = parts[2] if len(parts) > 2 else "H1"
+            respuesta = cmd_quality(f"{csv_path} {pair_arg} {tf_arg}")
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("regime "):
+            parts = user_input[7:].strip().split()
+            csv_path = parts[0] if parts else ""
+            pair_arg = parts[1] if len(parts) > 1 else "UNKNOWN"
+            tf_arg   = parts[2] if len(parts) > 2 else "H1"
+            respuesta = cmd_regime(f"{csv_path} {pair_arg} {tf_arg}")
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("mtf "):
+            respuesta = cmd_mtf(user_input[4:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("reliability "):
+            respuesta = cmd_reliability(user_input[12:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("decision "):
+            respuesta = cmd_decision(user_input[9:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("risk "):
+            parts = user_input[5:].strip().split()
+            respuesta = cmd_risk(" ".join(parts))
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("backtest "):
+            respuesta = cmd_backtest(user_input[9:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("feature_importance "):
+            respuesta = cmd_feature_importance(user_input[19:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("dataset_update "):
+            respuesta = cmd_dataset_update(user_input[15:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower() in ["scheduler_status", "scheduler status"]:
+            respuesta = cmd_scheduler_status("")
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("retrain_check "):
+            respuesta = cmd_retrain_check(user_input[14:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("retrain_history"):
+            respuesta = cmd_retrain_history(user_input[15:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower() in ["sentinel_status", "sentinel status"]:
+            respuesta = cmd_sentinel_status("")
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("sentinel_signals"):
+            respuesta = cmd_sentinel_signals(user_input[16:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("outcome_stats"):
+            respuesta = cmd_outcome_stats(user_input[13:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("outcome_history"):
+            respuesta = cmd_outcome_history(user_input[15:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("notify_test "):
+            respuesta = cmd_notify_test(user_input[12:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("notify_log"):
+            respuesta = cmd_notify_log(user_input[10:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("portfolio_ranking"):
+            respuesta = cmd_portfolio_ranking(user_input[17:].strip())
+
+        elif _HAS_ROADMAP_V and user_input.lower().startswith("portfolio_export"):
+            respuesta = cmd_portfolio_export(user_input[16:].strip())
 
         # ── EXTRA MODULES ────────────────────────────────
         elif user_input in comandos_extra:
