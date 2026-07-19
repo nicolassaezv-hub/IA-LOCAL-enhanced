@@ -1293,6 +1293,239 @@ def notifications_mark_all_read() -> JSONResponse:
     return JSONResponse({"ok": True, "marked": count})
 
 
+# ══════════════════════════════════════════════════════════════
+# DASHBOARD ACTIVO — Roadmap V, Sección 13 (V.16)
+# Estado en tiempo real del sistema autónomo: Market Sentinel (V.10),
+# Scheduler Inteligente (V.12), Señales Activas (V.1+V.8),
+# Datasets (V.11) y controles de Reentrenamiento (V.13).
+# ══════════════════════════════════════════════════════════════
+
+# Estado en memoria del Sentinel y Scheduler (se actualiza vía endpoints POST)
+_sentinel_state: dict = {
+    "state": "idle",
+    "circuit_breaker_active": False,
+    "assets_monitored": 0,
+    "total_scans": 0,
+    "assets": {},
+}
+_scheduler_paused: bool = False
+
+
+@app.get("/api/sentinel/status")
+def sentinel_status() -> JSONResponse:
+    """Estado actual del Market Sentinel (V.10)."""
+    try:
+        import sqlite3
+        recent: list = []
+        db_path = os.path.join(_ROOT, "memoria.db")
+        if os.path.exists(db_path):
+            with sqlite3.connect(db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                try:
+                    rows = conn.execute(
+                        "SELECT command, result, created_at FROM command_log "
+                        "WHERE command LIKE '%sentinel%' OR command LIKE '%market%' "
+                        "ORDER BY created_at DESC LIMIT 10"
+                    ).fetchall()
+                    recent = [dict(r) for r in rows]
+                except Exception:
+                    pass
+        return JSONResponse({
+            "ok": True,
+            "state": _sentinel_state["state"],
+            "circuit_breaker_active": _sentinel_state["circuit_breaker_active"],
+            "assets_monitored": _sentinel_state["assets_monitored"],
+            "total_scans": _sentinel_state["total_scans"],
+            "assets": _sentinel_state["assets"],
+            "recent_activity": recent,
+        })
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/api/scheduler/tasks")
+def scheduler_tasks() -> JSONResponse:
+    """Tareas del Scheduler Inteligente (V.12)."""
+    try:
+        tasks: dict = {}
+        try:
+            import active_engine as _engine
+            fn = getattr(_engine, "get_scheduler_status", None)
+            if callable(fn):
+                result = fn()
+                if isinstance(result, dict):
+                    tasks = result
+        except Exception:
+            pass
+        return JSONResponse({
+            "ok": True,
+            "running": not _scheduler_paused,
+            "task_count": len(tasks),
+            "tasks": tasks,
+        })
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/api/signals/active")
+def signals_active() -> JSONResponse:
+    """Señales activas con Reliability >= 50 (V.1 + V.8)."""
+    try:
+        import sqlite3
+        signals: list = []
+        db_path = os.path.join(_ROOT, "memoria.db")
+        if os.path.exists(db_path):
+            with sqlite3.connect(db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                try:
+                    rows = conn.execute(
+                        "SELECT pair, timeframe, signal, confidence, reliability, regime, created_at "
+                        "FROM forex_analytics ORDER BY created_at DESC LIMIT 30"
+                    ).fetchall()
+                    for r in rows:
+                        row = dict(r)
+                        rel = float(row.get("reliability") or 0)
+                        if rel >= 50:
+                            signals.append({
+                                "pair": row.get("pair", ""),
+                                "timeframe": row.get("timeframe", "H1"),
+                                "signal": row.get("signal", "HOLD"),
+                                "confidence": round(float(row.get("confidence") or 0), 2),
+                                "reliability": round(rel, 1),
+                                "regime": row.get("regime", ""),
+                                "ts": row.get("created_at", ""),
+                            })
+                except Exception:
+                    pass
+        return JSONResponse({"ok": True, "signals": signals, "count": len(signals)})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e), "signals": []})
+
+
+@app.get("/api/datasets/status")
+def datasets_status() -> JSONResponse:
+    """Estado y antigüedad de los datasets CSV disponibles (V.11)."""
+    try:
+        datasets: list = []
+        for tf in ("H1", "H4", "D1"):
+            tf_dir = os.path.join(_CSV_BASE, tf)
+            if not os.path.isdir(tf_dir):
+                continue
+            for fname in sorted(os.listdir(tf_dir)):
+                if not fname.endswith(".csv"):
+                    continue
+                pair = fname[:-4]
+                fpath = os.path.join(tf_dir, fname)
+                age_h = (time.time() - os.path.getmtime(fpath)) / 3600
+                try:
+                    df = pd.read_csv(fpath, nrows=0)
+                    with open(fpath) as fh:
+                        rows = sum(1 for _ in fh) - 1
+                except Exception:
+                    rows = 0
+                datasets.append({
+                    "pair": pair,
+                    "timeframe": tf,
+                    "rows": rows,
+                    "age_hours": round(age_h, 1),
+                })
+        return JSONResponse({"ok": True, "datasets": datasets, "count": len(datasets)})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e), "datasets": []})
+
+
+class _SentinelPairBody(BaseModel):
+    pair: str
+
+
+@app.post("/api/sentinel/add")
+def sentinel_add(body: _SentinelPairBody) -> JSONResponse:
+    """Añade un par al Market Sentinel (V.10)."""
+    pair = body.pair.upper().strip()
+    if not pair:
+        return JSONResponse({"ok": False, "error": "Par vacío"}, status_code=400)
+    if pair not in _sentinel_state["assets"]:
+        _sentinel_state["assets"][pair] = {
+            "last_signal": "HOLD",
+            "last_reliability": 0.0,
+            "scan_count": 0,
+        }
+        _sentinel_state["assets_monitored"] = len(_sentinel_state["assets"])
+        _sentinel_state["state"] = "running"
+    return JSONResponse({"ok": True, "pair": pair,
+                         "assets_monitored": _sentinel_state["assets_monitored"]})
+
+
+@app.post("/api/sentinel/remove")
+def sentinel_remove(body: _SentinelPairBody) -> JSONResponse:
+    """Quita un par del Market Sentinel (V.10)."""
+    pair = body.pair.upper().strip()
+    _sentinel_state["assets"].pop(pair, None)
+    _sentinel_state["assets_monitored"] = len(_sentinel_state["assets"])
+    if not _sentinel_state["assets"]:
+        _sentinel_state["state"] = "idle"
+    return JSONResponse({"ok": True, "pair": pair,
+                         "assets_monitored": _sentinel_state["assets_monitored"]})
+
+
+@app.post("/api/scheduler/pause")
+def scheduler_pause() -> JSONResponse:
+    """Pausa el Scheduler Inteligente (V.12)."""
+    global _scheduler_paused
+    _scheduler_paused = True
+    return JSONResponse({"ok": True, "running": False})
+
+
+@app.post("/api/scheduler/resume")
+def scheduler_resume() -> JSONResponse:
+    """Reanuda el Scheduler Inteligente (V.12)."""
+    global _scheduler_paused
+    _scheduler_paused = False
+    return JSONResponse({"ok": True, "running": True})
+
+
+class _DatasetUpdateBody(BaseModel):
+    pair: str
+    timeframe: str = "H1"
+
+
+@app.post("/api/datasets/force_update")
+def datasets_force_update(body: _DatasetUpdateBody) -> JSONResponse:
+    """Fuerza actualización incremental de un dataset (V.11)."""
+    pair = body.pair.upper().strip()
+    tf = body.timeframe.upper().strip()
+    try:
+        result = dispatch_command(f"actualizar csv {pair} {tf}")
+        return JSONResponse({"ok": True, "pair": pair, "timeframe": tf,
+                              "result": str(result)[:500]})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+class _RetrainBody(BaseModel):
+    pair: str
+    timeframe: str = "H1"
+
+
+@app.post("/api/retrain/force")
+def retrain_force(body: _RetrainBody) -> JSONResponse:
+    """Fuerza reentrenamiento de un par en background (V.13)."""
+    pair = body.pair.upper().strip()
+    tf = body.timeframe.upper().strip()
+    csv_path = os.path.join(_CSV_BASE, tf, f"{pair}.csv")
+    if not os.path.exists(csv_path):
+        return JSONResponse({"ok": False, "error": f"CSV no encontrado: {csv_path}"},
+                            status_code=404)
+    def _run() -> None:
+        try:
+            dispatch_command(f"full forex {csv_path}")
+        except Exception:
+            pass
+    threading.Thread(target=_run, daemon=True).start()
+    return JSONResponse({"ok": True, "pair": pair, "timeframe": tf,
+                          "status": "entrenamiento iniciado en background"})
+
+
 # Monta la SPA al final para que /api/* tenga prioridad sobre el catch-all estático.
 app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
 

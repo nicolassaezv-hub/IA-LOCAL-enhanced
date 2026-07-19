@@ -907,3 +907,144 @@ body { display: flex; flex-direction: column; }
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+/* ── Sección 13 — Dashboard Activo (Roadmap V, V.16) ────────────── */
+.dashboard-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.dashboard-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.dashboard-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.8rem;
+}
+
+.dashboard-card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 120px;
+}
+
+.dashboard-card .card-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: hsl(var(--muted-foreground));
+  border-bottom: 1px solid hsl(var(--border));
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.1rem;
+}
+
+.dashboard-card .card-body {
+  font-size: 0.8rem;
+  color: hsl(var(--foreground));
+  flex: 1;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.12rem 0;
+  font-size: 0.78rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+}
+
+.status-row:last-child { border-bottom: none; }
+
+.asset-list, .task-list, .dataset-list, .signal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.3rem;
+}
+
+.asset-row, .task-row, .dataset-row, .signal-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.18rem 0.3rem;
+  border-radius: 5px;
+  background: hsl(var(--muted) / 0.4);
+}
+
+.pair-name, .task-name {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  min-width: 70px;
+}
+
+.signal-card {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.5rem 0.6rem;
+}
+
+.signal-meta {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  color: hsl(var(--muted-foreground));
+  flex-wrap: wrap;
+}
+
+.dashboard-section-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+}
+
+.control-group label {
+  color: hsl(var(--muted-foreground));
+  min-width: 160px;
+  flex-shrink: 0;
+}
+
+/* Utility color helpers used by active_dashboard.js */
+.text-success { color: hsl(var(--success)); }
+.text-warning  { color: hsl(38 90% 45%); }
+.text-error    { color: hsl(var(--danger)); }
+.text-muted    { color: hsl(var(--muted-foreground)); }
