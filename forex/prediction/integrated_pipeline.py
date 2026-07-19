@@ -100,6 +100,18 @@ class ForexIntegratedPipeline:
         pair = _infer_pair(df, pair, filepath=filepath)
         df   = build_features(df)
 
+        # ── Roadmap V: Quality Gate (V.5) ───────────────────────────
+        try:
+            from forex.prediction.roadmap_v_integration import run_quality_gate
+            _approved, _qr = run_quality_gate(df, pair=pair or "?", timeframe="H1", verbose=False)
+            if not _approved:
+                return {
+                    "error": f"Quality gate rechazado (score={_qr.global_score:.0f}/100). "
+                             f"Críticos: {_qr.critical_count}. {_qr.recommendation}"
+                }
+        except Exception:
+            pass  # No bloquear si el módulo no está disponible
+
         horizon, rr_ratio = self._pair_params(pair)
 
         builder = DatasetBuilder(df)
@@ -171,6 +183,23 @@ class ForexIntegratedPipeline:
             return {"error": "Sin filas válidas tras feature engineering."}
 
         signal = self.predictor.signal(X_pred, pair=pair)
+
+        # ── Roadmap V: Decision Engine (V.1) ────────────────────────
+        try:
+            from forex.prediction.roadmap_v_integration import run_decision_engine
+            _sig  = signal.get("signal", signal.get("action", "HOLD"))
+            _conf = float(signal.get("confidence", 0.65))
+            _dec  = run_decision_engine(
+                ensemble_signal=_sig,
+                model_confidence=_conf,
+                verbose=False,
+            )
+            signal["roadmap_v_decision"]     = _dec.decision
+            signal["roadmap_v_explanation"]  = _dec.explanation
+            signal["roadmap_v_risk_level"]   = getattr(_dec, "risk_level", "medium")
+        except Exception:
+            pass  # No bloquear si el módulo no está disponible
+
         return {"type": "prediction", "rows_processed": len(df), **signal}
 
     # ─────────────────────────────────────────────────────────
