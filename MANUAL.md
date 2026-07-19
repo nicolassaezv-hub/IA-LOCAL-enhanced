@@ -1,18 +1,47 @@
 # ASTRA — Manual de Usuario
-**Sistema AI Modular · Consultor PYME · Análisis Forex · v2.2 — Fases 1-4**
+**Sistema AI Modular · Consultor PYME · Análisis Forex · v3.0 — Roadmap V**
 
 ---
 
-## ÁNDICE
+## ÍNDICE
 
-1. [Instalación](#parte-1--instalación-y-arranque)
-2. [Generación de CSVs Forex](#parte-2--generación-de-csvs-forex-creandopy)
+**CLI — Fases 1–9**
+1. [Instalación y Arranque](#parte-1--instalación-y-arranque)
+2. [Generación de CSVs Forex (creando.py)](#parte-2--generación-de-csvs-forex-creandopy)
 3. [Análisis y Predicción Forex](#parte-3--análisis-y-predicción-forex)
-4. [Documentos y Web](#parte-4--documentos-web-y-utilidades)
-5. [Consultor PYME](#parte-5--consultor-pyme-avanzado)
-6. [Business Intelligence](#parte-6--business-intelligence-bi-engine)
+4. [Documentos, Web y Utilidades](#parte-4--documentos-web-y-utilidades)
+5. [Consultor PYME Avanzado](#parte-5--consultor-pyme-avanzado)
+6. [Business Intelligence (BI Engine)](#parte-6--business-intelligence-bi-engine)
 7. [Sistema y Auto-Análisis](#parte-7--sistema-y-auto-análisis)
-8. [Estructura de archivos CSV](#parte-8--formato-de-archivos-csv)
+8. [Formato de Archivos CSV](#parte-8--formato-de-archivos-csv)
+9. [Gestión de Riesgo — Circuit Breaker y Position Sizing](#parte-9--gestión-de-riesgo)
+10. [Watcher, Señales y Scheduler](#parte-10--watcher-señales-y-scheduler)
+11. [News Intelligence](#parte-11--news-intelligence)
+12. [Memoria de Proyectos](#parte-12--memoria-de-proyectos)
+
+**Guías Operativas**
+13. [Guía de Trading Real (paso a paso)](#parte-13--guía-de-trading-real)
+14. [Prediction Lab — Fase 5 (Laboratorio de Predicción)](#parte-14--prediction-lab)
+15. [Feedback System — Fase 6](#parte-15--feedback-system)
+16. [Evolution Engine — Fase 7](#parte-16--evolution-engine)
+17. [Constitution Engine — Fase 8](#parte-17--constitution-engine)
+18. [Ciclo Evolutivo Completo — Fase 9](#parte-18--ciclo-evolutivo)
+
+**Workspace — Roadmap IV (Secciones 1–12)**
+19. [Workspace — Instalación y Secciones 1–3 (Chat Center, Forex Lab)](#parte-19--workspace-secciones-1-3)
+20. [Predicción multi-CSV y reportes de texto](#parte-20--predicción-multi-csv)
+21. [Prediction Lab Workspace (Sección 5)](#parte-21--prediction-lab-workspace)
+22. [Business Lab Workspace (Sección 6)](#parte-22--business-lab-workspace)
+23. [Cognitive Center Workspace (Sección 7)](#parte-23--cognitive-center)
+24. [Evolution Center Workspace (Sección 8)](#parte-24--evolution-center-workspace)
+25. [Activity Center Workspace (Sección 9)](#parte-25--activity-center)
+26. [Notification Center (Sección 10)](#parte-26--notification-center)
+27. [Live Thinking (Sección 11)](#parte-27--live-thinking)
+28. [Identidad Visual (Sección 12)](#parte-28--identidad-visual)
+29. [Revisión Operativa Final — Post-cierre Roadmap IV](#parte-29--revisión-operativa-final)
+
+**Roadmap V — Sistema Autónomo**
+30. [Roadmap V — Dashboard Activo y Sistema Autónomo (Sección 13)](#parte-30--roadmap-v-dashboard-activo)
 
 ---
 
@@ -2378,3 +2407,160 @@ limpia se actualizó al 9 de julio de 2026.
 *Parte 29 añadida el 9 de julio de 2026 — revisión operativa final post-cierre
 del Roadmap IV, 2 bugs reales corregidos, proyecto limpio y listo para
 empaquetar.*
+
+---
+
+## PARTE 30 — Roadmap V · Dashboard Activo y Sistema Autónomo
+
+*Añadida el 19 de julio de 2026 — integración del Dashboard Activo (V.16) en el Workspace y documentación completa del Roadmap V.*
+
+---
+
+### Qué es el Roadmap V
+
+El Roadmap V es la capa de **autonomía e inteligencia avanzada** de ASTRA. Mientras que el Roadmap IV construyó el Workspace web (Secciones 1–12), el Roadmap V añade un sistema que opera **sin intervención manual**: vigila mercados 24/7, actualiza datasets, reentrena modelos cuando se degradan y emite señales de alta calidad solo cuando la confiabilidad es suficiente.
+
+Está organizado en **4 clusters**:
+
+| Cluster | Componentes | Propósito |
+|---|---|---|
+| A — Predicción | V.5, V.9 | Quality Gate + Backtesting Protocol |
+| B — Inteligencia | V.3, V.4, V.6, V.7 | Régimen, MTF, Features, Model Selection |
+| C — Decisión | V.1, V.2, V.8 | Decision Engine, Risk Engine, Reliability Score |
+| D — Autonomía | V.10, V.11, V.12, V.13, V.15, V.16, V.18 | Sentinel, Datasets, Scheduler, Retraining, Notificaciones, Dashboard, Portfolio |
+
+---
+
+### Módulos del Roadmap V — Referencia rápida
+
+| Código | Módulo | Archivo | Descripción |
+|---|---|---|---|
+| V.1 | Decision Engine | `forex/prediction/decision_engine.py` | Decisión final BUY/SELL/HOLD/NO OPERAR con justificación |
+| V.2 | Risk Engine | `forex/prediction/risk_engine.py` | SL/TP recomendados, tamaño de posición, riesgo % |
+| V.3 | MTF Intelligence | `forex/prediction/mtf_coherence.py` | Coherencia multi-timeframe H1/H4/D1 |
+| V.4 | Regime Detection | `forex/prediction/regime_detector.py` | Régimen actual: trending/ranging/volatile/breakout |
+| V.5 | Quality Gate | `forex/prediction/quality_analyzer.py` | Valida calidad del CSV antes de entrenar |
+| V.6 | Feature Importance | `forex/prediction/feature_importance.py` | SHAP + permutation importance, features óptimos |
+| V.7 | Model Selection | `forex/prediction/model_selector.py` | Compara XGB/LGB/RF y selecciona el mejor |
+| V.8 | Reliability Score | `forex/prediction/reliability_score.py` | Score compuesto 0–100 de confiabilidad de señal |
+| V.9 | Backtest Protocol | `forex/prediction/backtest_protocol.py` | Protocolo estándar: Sharpe, Calmar, WFV, Monte Carlo |
+| V.10 | Market Sentinel | `forex/market_sentinel.py` | Daemon de vigilancia continua de activos |
+| V.11 | Dataset Updater | `forex/data/dataset_updater.py` | Actualización incremental de CSVs |
+| V.12 | Scheduler Inteligente | `forex/scheduler/task_manager.py` | Orquestador de tareas periódicas |
+| V.13 | Reentrenamiento Adaptativo | `forex/prediction/retrain_manager.py` | Detecta degradación y reentrena cuando es necesario |
+| V.15 | Notificaciones Multi-Canal | `notifications/notifier.py` | Telegram, Discord, Desktop |
+| V.16 | Dashboard Activo | `workspace/static/js/active_dashboard.js` | Sección 13 del Workspace — estado en tiempo real |
+| V.18 | Portfolio Intelligence | `forex/portfolio/portfolio_ranker.py` | Ranking de oportunidades multi-activo por confiabilidad |
+
+Todos los módulos están integrados en `forex/prediction/roadmap_v_integration.py`, que provee funciones de alto nivel y comandos CLI para cada uno.
+
+---
+
+### Comandos CLI del Roadmap V
+
+Los comandos de Roadmap V se invocan desde `python main.py` igual que cualquier otro:
+
+```bash
+# V.5 — Quality Gate: analiza un CSV antes de entrenar
+quality CSVs/H1/EURUSD.csv EURUSD H1
+
+# V.4 — Regime Detection: régimen actual del mercado
+regime CSVs/H1/EURUSD.csv EURUSD H1
+
+# V.3 — MTF Coherence: coherencia multi-timeframe
+mtf CSVs/D1/EURUSD.csv CSVs/H4/EURUSD.csv CSVs/H1/EURUSD.csv EURUSD
+
+# V.8 — Reliability Score: calcula confiabilidad de señal
+reliability 0.72 BUY 68.5 trending_bullish
+
+# V.1 — Decision Engine: decisión final
+decision BUY 0.72 trending_bullish 70
+
+# V.2 — Risk Engine: cálculo de riesgo
+risk BUY 1.2150 0.0035 78 trending_bullish EURUSD
+
+# V.10 — Market Sentinel: estado del sentinel
+sentinel status
+sentinel signals
+
+# V.18 — Portfolio Intelligence: ranking de oportunidades
+portfolio ranking
+portfolio export
+```
+
+También disponibles en el Workspace web vía Chat Center (mismos comandos en texto natural).
+
+---
+
+### Sección 13 — Dashboard Activo (V.16)
+
+El Dashboard Activo es la **Sección 13 del Workspace** (icono de escudo en el sidebar). Muestra en tiempo real el estado de todo el sistema autónomo y se actualiza automáticamente cada **10 segundos**.
+
+#### Cómo acceder
+
+1. Lanzar el Workspace: `python workspace/server.py`
+2. Abrir `http://localhost:8000`
+3. Hacer clic en **Dashboard Activo** (icono de escudo 🛡️) en el sidebar
+
+#### Paneles del Dashboard
+
+| Panel | Qué muestra |
+|---|---|
+| **Market Sentinel** | Estado (idle/running), Circuit Breaker, activos bajo vigilancia, scans totales, señal y reliability por par |
+| **Scheduler** | Estado (activo/pausado), lista de tareas programadas con estado y conteo de ejecuciones |
+| **Signals Activas** | Señales con Reliability ≥ 50 desde `forex_analytics` en `memoria.db` — par, señal, confianza, régimen |
+| **Datasets** | CSVs disponibles por timeframe (H1/H4/D1), filas y antigüedad en horas |
+
+#### Controles disponibles
+
+| Control | Acción |
+|---|---|
+| **Pausar / Reanudar Scheduler** | Pausa o reanuda el Scheduler Inteligente |
+| **Añadir par al Sentinel** | Registra un nuevo par para vigilancia continua |
+| **Forzar actualización** | Actualiza incrementalmente el dataset de un par (llama `actualizar csv`) |
+| **Forzar reentrenamiento** | Lanza `full forex <csv>` en background para el par seleccionado |
+
+#### Endpoints de la API (server.py)
+
+| Método | Endpoint | Descripción |
+|---|---|---|
+| GET | `/api/sentinel/status` | Estado del Market Sentinel |
+| GET | `/api/scheduler/tasks` | Tareas del Scheduler |
+| GET | `/api/signals/active` | Señales activas (Reliability ≥ 50) |
+| GET | `/api/datasets/status` | Antigüedad y filas de CSVs |
+| POST | `/api/sentinel/add` | `{"pair": "EURUSD"}` |
+| POST | `/api/sentinel/remove` | `{"pair": "EURUSD"}` |
+| POST | `/api/scheduler/pause` | Pausa el Scheduler |
+| POST | `/api/scheduler/resume` | Reanuda el Scheduler |
+| POST | `/api/datasets/force_update` | `{"pair": "EURUSD", "timeframe": "H1"}` |
+| POST | `/api/retrain/force` | `{"pair": "EURUSD", "timeframe": "H1"}` |
+
+---
+
+### Integración del Roadmap V en el pipeline existente
+
+El Roadmap V se integra en `IntegratedPipeline` de forma **no bloqueante** (wrapped en try/except). Esto significa:
+
+- Si un módulo V falla o no está instalado, el pipeline base (XGB+LGB+RF + WFV) **continúa funcionando normalmente**.
+- Los resultados de Roadmap V enriquecen la salida pero no son requisito para obtener señal.
+
+El módulo `roadmap_v_integration.py` centraliza todas las llamadas y puede usarse también standalone desde CLI o desde el Workspace vía Chat Center.
+
+---
+
+### Estado de implementación del Roadmap V
+
+| Módulo | Estado | Notas |
+|---|---|---|
+| V.1–V.9 (Clusters A, B, C) | ✅ Implementado | Todos los módulos presentes y en funcionamiento |
+| V.10 Market Sentinel | ✅ Implementado | `market_sentinel.py` presente; se activa vía Workspace o CLI |
+| V.11 Dataset Updater | ✅ Implementado | Integrado con `force_update` endpoint |
+| V.12 Scheduler | ✅ Implementado | `task_manager.py` + endpoint `/api/scheduler/tasks` |
+| V.13 Retrain Manager | ✅ Implementado | Endpoint `/api/retrain/force` lanza full pipeline en background |
+| V.15 Notificaciones | ✅ Implementado | `notifications/notifier.py` con Telegram/Discord/Desktop |
+| V.16 Dashboard Activo | ✅ Implementado | Sección 13 del Workspace, 10 endpoints, polling cada 10s |
+| V.18 Portfolio Intelligence | ✅ Implementado | `portfolio_ranker.py` + comandos `portfolio ranking/export` |
+
+---
+
+*Parte 30 añadida el 19 de julio de 2026 — integración de V.16 Dashboard Activo en Workspace, 10 endpoints nuevos en server.py, CSS del Dashboard Activo, MANUAL.md actualizado con índice completo (Partes 1–30) y documentación de todos los módulos del Roadmap V.*
