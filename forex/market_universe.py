@@ -127,10 +127,38 @@ ALIASES = {
 
 
 # ============================================================
+# CRYPTO ASSETS
+# ============================================================
+
+CRYPTO_ASSETS = {
+    "BTC/USD",
+    "ETH/USD",
+    "BNB/USD",
+    "SOL/USD",
+    "XRP/USD",
+    "ADA/USD",
+    "DOGE/USD",
+    "DOT/USD",
+    "AVAX/USD",
+    "MATIC/USD",
+    "LTC/USD",
+    "LINK/USD",
+    "UNI/USD",
+    "ATOM/USD",
+    "XLM/USD",
+    "BTC/USDT",
+    "ETH/USDT",
+    "BNB/USDT",
+    "SOL/USDT",
+    "XRP/USDT",
+}
+
+
+# ============================================================
 # COMBINED MARKET SET
 # ============================================================
 
-ALL_MARKETS = FOREX_PAIRS.union(COMMODITIES)
+ALL_MARKETS = FOREX_PAIRS.union(COMMODITIES).union(CRYPTO_ASSETS)
 
 
 # ============================================================
