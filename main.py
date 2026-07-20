@@ -71,6 +71,48 @@ try:
     _HAS_ROADMAP_V = True
 except ImportError as _e_rv:
     _HAS_ROADMAP_V = False
+
+# ── Roadmap VI — Autonomización & Data Intelligence ─────────────────
+try:
+    from forex.prediction.hyperparameter_cache import get_cache as _get_hparam_cache
+    from forex.prediction.adaptive_trainer import get_adaptive_trainer as _get_adaptive_trainer
+    from forex.prediction.model_cache import get_model_cache as _get_model_cache
+    from forex.prediction.model_quality_history import get_quality_history as _get_quality_history
+    from forex.prediction.candlestick_patterns import get_detector as _get_candle_detector, detect_patterns
+    from forex.portfolio.opportunity_score import get_ranker as _get_op_ranker, SignalInput
+    from forex.data.data_router import DataRouter, fetch_data
+    from forex.data.csv_migrator import migrate_csv, list_active_csvs, scan_csv_directory
+    from forex.data.rolling_dataset import get_rolling_dataset
+    from forex.data.yahoo_provider import get_yahoo_provider
+    from forex.data.binance_provider import get_binance_provider
+    from forex.scheduler.autonomous_scheduler import get_scheduler as _get_scheduler
+    from forex.scheduler.auto_updater import get_auto_updater as _get_auto_updater
+    from check_system import run_self_test as _run_self_test
+    _HAS_ROADMAP_VI = True
+except ImportError as _e_rv6:
+    _HAS_ROADMAP_VI = False
+
+# ── Doctor, API interna, Dev Log ────────────────────────────────────
+try:
+    from astra_doctor import run_doctor as _run_doctor
+    _HAS_DOCTOR = True
+except ImportError:
+    _HAS_DOCTOR = False
+
+try:
+    from astra_api import start_api_server as _start_api, stop_api_server as _stop_api
+    from astra_api import is_api_running as _api_running, api_status as _api_status_str
+    from astra_api import _PORT as _ASTRA_API_PORT
+    _HAS_API = True
+except ImportError:
+    _HAS_API = False
+
+try:
+    from dev_log import cmd_dev_log as _cmd_dev_log
+    _HAS_DEV_LOG = True
+except ImportError:
+    _HAS_DEV_LOG = False
+
 import re as _re_lab
 from datetime import datetime
 
@@ -857,6 +899,34 @@ def _ayuda():
   outcome_stats [par]              V.14 Estadísticas de resultados reales
   notify_test <par> <signal> <r>   V.15 Prueba de notificación multi-canal
   portfolio_ranking [signal] [min] V.18 Ranking de oportunidades multi-activo
+
+{Fore.CYAN}── DIAGNÓSTICO & API ────────────────────────────────────────{Style.RESET_ALL}
+  astra doctor                     Diagnóstico completo: 10 categorías + informe
+  self-test                        VI.2 Diagnóstico del sistema (semáforo)
+  api start                        Inicia la API REST interna (puerto 8766)
+  api stop                         Detiene la API REST interna
+  api status                       Estado de la API REST interna
+  dev log                          Ver historial de desarrollo
+  dev log add [tipo] title | desc  Añadir entrada al dev log
+  dev log release <ver>            Release notes de una versión
+
+{Fore.CYAN}── ROADMAP VI — AUTONOMIZACIÓN & DATA INTELLIGENCE ─────────{Style.RESET_ALL}
+  descargar datos <par> [tf] [n]   VI.7 Descarga datos Forex/Crypto (Yahoo/Binance/MT5)
+  migrar csv <path> [par] [tf]     VI.6 Migra CSV existente al formato rolling
+  escanear csvs                    VI.6 Escanea y registra todos los CSVs en CSVs/
+  csvs activos                     VI.6 Lista el índice de CSVs activos
+  rolling info <par> [tf]          VI.6 Estado del RollingDataset de un par
+  candlestick <csv>                VI.5 Detecta patrones de vela japonesa
+  hparam cache                     VI.1 Estado del caché de hiperparámetros
+  hparam invalidar <par>           VI.1 Fuerza re-tune en próximo entrenamiento
+  model cache                      VI.1 Estado del Model Cache Manager
+  adaptive budget <par>            VI.1 Historial de budgets adaptativos
+  quality history                  VI.8 Historial de precisión verificada por modelo
+  scheduler start                  VI.5 Inicia el scheduler autónomo en background
+  scheduler stop                   VI.5 Detiene el scheduler
+  scheduler info                   VI.5 Estado y tareas del scheduler
+  auto update                      VI.5 Actualiza todos los CSVs activos ahora
+  opportunity ranking [n]          VI.8 Top N BUY/SELL por Opportunity Score
 
 {Fore.CYAN}── RISK MANAGEMENT ────────────────────────────────────────{Style.RESET_ALL}
   circuit status                 Estado del circuit breaker (pérdida diaria/semanal/drawdown)
@@ -1668,6 +1738,209 @@ def dispatch_command(user_input: str) -> str:
 
         elif _HAS_ROADMAP_V and user_input.lower().startswith("portfolio_export"):
             respuesta = cmd_portfolio_export(user_input[16:].strip())
+
+        # ── ROADMAP VI — Autonomización & Data Intelligence ──────────
+        elif _HAS_ROADMAP_VI and user_input.lower() in ["self-test", "self test", "diagnóstico sistema", "diagnostico sistema"]:
+            _run_self_test(verbose=True)
+            respuesta = ""
+
+        elif _HAS_ROADMAP_VI and user_input.lower().startswith("hparam cache"):
+            respuesta = _get_hparam_cache().status()
+
+        elif _HAS_ROADMAP_VI and user_input.lower().startswith("hparam invalidar "):
+            pair_arg = user_input[17:].strip().split()[0]
+            _get_hparam_cache().invalidate(pair_arg)
+            respuesta = f"Caché de hiperparámetros invalidado para {pair_arg.upper()}."
+
+        elif _HAS_ROADMAP_VI and user_input.lower().startswith("model cache"):
+            mc_obj = _get_model_cache()
+            respuesta = mc_obj.status() if hasattr(mc_obj, 'status') else str(mc_obj)
+
+        elif _HAS_ROADMAP_VI and user_input.lower().startswith("adaptive budget"):
+            rest_ab = user_input[15:].strip()
+            pair_ab = rest_ab.split()[0] if rest_ab else "EURUSD"
+            at_obj = _get_adaptive_trainer()
+            respuesta = at_obj.status(pair_ab) if hasattr(at_obj, 'status') else str(at_obj)
+
+        elif _HAS_ROADMAP_VI and user_input.lower().startswith("quality history"):
+            respuesta = _get_quality_history().status()
+
+        elif _HAS_ROADMAP_VI and user_input.lower().startswith("candlestick "):
+            # candlestick <csv_path> [par] [tf]
+            parts_cs = user_input[12:].strip().split()
+            csv_cs = parts_cs[0] if parts_cs else ""
+            try:
+                import pandas as pd
+                df_cs = pd.read_csv(csv_cs)
+                result_cs = _get_candle_detector().detect(df_cs)
+                respuesta = _get_candle_detector().format_result(result_cs)
+                if result_cs["patterns"]:
+                    respuesta += f"\n  Patrones: {', '.join(result_cs['pattern_names'])}"
+            except Exception as e_cs:
+                respuesta = f"Error leyendo CSV para candlestick: {e_cs}"
+
+        elif _HAS_ROADMAP_VI and user_input.lower().startswith("descargar datos "):
+            # descargar datos <par> [tf] [bars]
+            parts_dd = user_input[16:].strip().split()
+            pair_dd = parts_dd[0].upper() if parts_dd else "EURUSD"
+            tf_dd   = parts_dd[1].upper() if len(parts_dd) > 1 else "H1"
+            bars_dd = int(parts_dd[2]) if len(parts_dd) > 2 else 500
+            try:
+                router_dd = DataRouter(pair_dd, tf_dd)
+                df_dd = router_dd.fetch(bars=bars_dd, save_csv=True)
+                if df_dd is not None:
+                    respuesta = (f"✅ {pair_dd}/{tf_dd}: {len(df_dd)} filas descargadas "
+                                 f"via {router_dd.source_used}.\n"
+                                 f"  Guardado en CSVs/{tf_dd}/{pair_dd}.csv")
+                else:
+                    respuesta = f"❌ No se pudieron obtener datos para {pair_dd}/{tf_dd}."
+            except Exception as e_dd:
+                respuesta = f"Error descargando datos: {e_dd}"
+
+        elif _HAS_ROADMAP_VI and user_input.lower().startswith("migrar csv "):
+            # migrar csv <path> [par] [tf]
+            parts_mc = user_input[11:].strip().split()
+            csv_mc  = parts_mc[0] if parts_mc else ""
+            pair_mc = parts_mc[1].upper() if len(parts_mc) > 1 else None
+            tf_mc   = parts_mc[2].upper() if len(parts_mc) > 2 else None
+            result_mc = migrate_csv(csv_mc, pair=pair_mc, tf=tf_mc)
+            if result_mc["ok"]:
+                respuesta = (f"✅ CSV migrado: {result_mc['pair']}/{result_mc['tf']}\n"
+                             f"  {result_mc['original_rows']} → {result_mc['final_rows']} filas\n"
+                             f"  Guardado: {result_mc['output_path']}")
+            else:
+                respuesta = f"❌ Error migrando CSV: {result_mc['error']}"
+
+        elif _HAS_ROADMAP_VI and user_input.lower() in ["escanear csvs", "scan csvs", "listar csvs"]:
+            found = scan_csv_directory()
+            if found:
+                lines_sc = [f"  CSVs encontrados ({len(found)}):"]
+                for f_sc in found:
+                    lines_sc.append(f"    {f_sc['pair']}/{f_sc['tf']} — {f_sc['rows']} filas — {f_sc['path']}")
+                respuesta = "\n".join(lines_sc)
+            else:
+                respuesta = "Sin CSVs en el directorio CSVs/."
+
+        elif _HAS_ROADMAP_VI and user_input.lower() in ["csvs activos", "active csvs"]:
+            csvs_act = list_active_csvs()
+            if csvs_act:
+                lines_ca = [f"  Índice de CSVs activos ({len(csvs_act)}):"]
+                for c_ca in csvs_act:
+                    lines_ca.append(f"    {c_ca['pair']}/{c_ca['tf']} — {c_ca.get('rows','?')} filas")
+                respuesta = "\n".join(lines_ca)
+            else:
+                respuesta = "Índice vacío. Usa 'escanear csvs' o 'migrar csv'."
+
+        elif _HAS_ROADMAP_VI and user_input.lower().startswith("rolling info "):
+            # rolling info <par> [tf]
+            parts_ri = user_input[13:].strip().split()
+            pair_ri = parts_ri[0].upper() if parts_ri else "EURUSD"
+            tf_ri   = parts_ri[1].upper() if len(parts_ri) > 1 else "H1"
+            rd_ri = get_rolling_dataset(pair_ri, tf_ri)
+            rd_ri.load()
+            respuesta = rd_ri.info() if hasattr(rd_ri, 'info') else str(rd_ri.validate())
+
+        elif _HAS_ROADMAP_VI and user_input.lower() in ["scheduler start", "iniciar scheduler"]:
+            sched_s = _get_scheduler()
+            if not sched_s.is_running:
+                sched_s.start(daemon=True)
+                respuesta = "✅ Scheduler iniciado en background."
+            else:
+                respuesta = "⚠️ Scheduler ya está activo."
+
+        elif _HAS_ROADMAP_VI and user_input.lower() in ["scheduler stop", "detener scheduler"]:
+            sched_st = _get_scheduler()
+            sched_st.stop()
+            respuesta = "🔴 Scheduler detenido."
+
+        elif _HAS_ROADMAP_VI and user_input.lower() in ["scheduler info", "estado scheduler vi"]:
+            respuesta = _get_scheduler().status()
+
+        elif _HAS_ROADMAP_VI and user_input.lower() in ["auto update", "actualizar datos"]:
+            updater_au = _get_auto_updater()
+            results_au = updater_au.update_all()
+            if results_au:
+                ok_au = sum(1 for r in results_au if r["ok"])
+                respuesta = f"✅ Actualización completa: {ok_au}/{len(results_au)} pares OK.\n"
+                respuesta += updater_au.status()
+            else:
+                respuesta = "Sin pares en el índice. Usa 'migrar csv' o 'descargar datos' primero."
+
+        elif _HAS_ROADMAP_VI and user_input.lower().startswith("opportunity ranking"):
+            # opportunity ranking [n]
+            parts_or = user_input[19:].strip().split()
+            top_n_or = int(parts_or[0]) if parts_or and parts_or[0].isdigit() else 10
+            try:
+                from forex.scheduler.auto_updater import get_auto_updater as _get_upd
+                active_pairs = _get_upd()._load_active_pairs()
+                if not active_pairs:
+                    respuesta = (
+                        f"  ℹ️ Sin pares activos en el índice. "
+                        f"Usa 'migrar csv' o 'descargar datos' primero.\n"
+                        f"  El ranking Top-{top_n_or} BUY/SELL se genera automáticamente "
+                        f"una vez que el scheduler tiene señales activas."
+                    )
+                else:
+                    ranker_op = _get_op_ranker(top_n=top_n_or)
+                    # Construir señales dummy desde los pares activos (sin predicción viva)
+                    dummy_signals = []
+                    for ap in active_pairs[:20]:
+                        dummy_signals.append(SignalInput(
+                            pair=ap.get('pair','?'),
+                            direction='BUY',
+                            reliability_score=0.0,
+                            win_rate_pct=0.0,
+                            regime='unknown',
+                        ))
+                    ranking_op = ranker_op.rank(dummy_signals)
+                    buy_n  = len(ranking_op.get('top_buy', []))
+                    sell_n = len(ranking_op.get('top_sell', []))
+                    respuesta = (
+                        f"{ranker_op.format_ranking(ranking_op)}\n"
+                        f"  (Señales live: {buy_n} BUY + {sell_n} SELL elegibles)\n"
+                        f"  Para señales reales inicia el scheduler: 'scheduler start'"
+                    )
+            except Exception as e_or:
+                respuesta = f"  Error generando ranking: {e_or}"
+
+        # ── DOCTOR ───────────────────────────────────────
+        elif user_input.lower() in ["astra doctor", "doctor", "diagnostico", "diagnóstico"]:
+            if _HAS_DOCTOR:
+                _run_doctor(verbose=True)
+                respuesta = ""
+            else:
+                respuesta = "astra_doctor.py no disponible."
+
+        # ── API INTERNA ───────────────────────────────
+        elif user_input.lower() in ["api start", "iniciar api"]:
+            if _HAS_API:
+                if _api_running():
+                    respuesta = f"⚠️  API ya activa en puerto {_ASTRA_API_PORT}."
+                else:
+                    ok = _start_api(daemon=True)
+                    respuesta = f"✅ API iniciada en http://localhost:{_ASTRA_API_PORT}" if ok else "❌ Error iniciando API."
+            else:
+                respuesta = "astra_api.py no disponible."
+
+        elif user_input.lower() in ["api stop", "detener api"]:
+            if _HAS_API:
+                _stop_api()
+                respuesta = "🔴 API detenida."
+            else:
+                respuesta = "astra_api.py no disponible."
+
+        elif user_input.lower() in ["api status", "estado api"]:
+            if _HAS_API:
+                respuesta = _api_status_str()
+            else:
+                respuesta = "astra_api.py no disponible."
+
+        # ── DEV LOG ──────────────────────────────────
+        elif user_input.lower().startswith("dev log"):
+            if _HAS_DEV_LOG:
+                respuesta = _cmd_dev_log(user_input[7:].strip())
+            else:
+                respuesta = "dev_log.py no disponible."
 
         # ── EXTRA MODULES ────────────────────────────────
         elif user_input in comandos_extra:

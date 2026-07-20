@@ -10,7 +10,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 
-from memory import guardar_memoria, cargar_turnos, get_command_context_for_llm
+from memory import guardar_memoria, cargar_turnos
 
 # ==========================================
 # OPTIONAL HEAVY IMPORTS
@@ -193,20 +193,6 @@ def _build_messages(user_message: str, extra_context: str | None = None) -> list
         )
     else:
         user_content = user_message
-
-    # ── Contexto de comandos recientes (ej: full forex, circuit status) ──
-    # Esto permite que el LLM sepa qué herramientas corrió el usuario
-    # sin que el usuario tenga que repetir la información.
-    try:
-        cmd_ctx = get_command_context_for_llm(limit=5)
-        if cmd_ctx:
-            # Añadir como system message adicional para no confundir el rol
-            messages.append({
-                "role": "system",
-                "content": cmd_ctx
-            })
-    except Exception:
-        pass
 
     messages.append({"role": "user", "content": user_content})
     return messages

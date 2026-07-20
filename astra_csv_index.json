@@ -1,0 +1,30 @@
+{
+  "TESTPAIR_H1": {
+    "pair": "TESTPAIR",
+    "tf": "H1",
+    "csv_path": "/home/runner/workspace/artifacts/astra/CSVs/H1/TESTPAIR.csv",
+    "rows": 80,
+    "last_updated": "2026-07-20T20:51:15.326614"
+  },
+  "TPAIR_H1": {
+    "pair": "TPAIR",
+    "tf": "H1",
+    "csv_path": "/home/runner/workspace/artifacts/astra/CSVs/H1/TPAIR.csv",
+    "rows": 100,
+    "last_updated": "2026-07-20T20:52:51.341255"
+  },
+  "TPAIR2_H1": {
+    "pair": "TPAIR2",
+    "tf": "H1",
+    "csv_path": "/home/runner/workspace/artifacts/astra/CSVs/H1/TPAIR2.csv",
+    "rows": 100,
+    "last_updated": "2026-07-20T20:55:52.193605"
+  },
+  "TPAIR3_H1": {
+    "pair": "TPAIR3",
+    "tf": "H1",
+    "csv_path": "/home/runner/workspace/artifacts/astra/CSVs/H1/TPAIR3.csv",
+    "rows": 100,
+    "last_updated": "2026-07-20T20:57:48.993718"
+  }
+}

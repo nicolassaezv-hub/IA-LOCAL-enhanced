@@ -1,0 +1,323 @@
+{
+  "ts": "2026-07-20T21:11:42.905098",
+  "ok": 42,
+  "warn": 10,
+  "fail": 0,
+  "issues": [
+    "Entrena modelos con: full forex <csv>"
+  ],
+  "checks": [
+    {
+      "category": "dependencies",
+      "label": "pandas",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "numpy",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "scikit-learn",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "xgboost",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "lightgbm",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "optuna",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "requests",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "colorama",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "openai (cliente Groq/OpenAI)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "psutil",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "rich",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "orjson",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "filelock",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "yfinance (Yahoo Finance)",
+      "status": "warn",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "redis",
+      "status": "warn",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "faiss-cpu",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "torch (PyTorch)",
+      "status": "warn",
+      "detail": ""
+    },
+    {
+      "category": "dependencies",
+      "label": "scikit-learn ensemble",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "configuration",
+      "label": "GROQ_API_KEY",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "configuration",
+      "label": "csv_index",
+      "status": "ok",
+      "detail": "4 pares"
+    },
+    {
+      "category": "configuration",
+      "label": "csv_dir",
+      "status": "ok",
+      "detail": "7 csvs"
+    },
+    {
+      "category": "models",
+      "label": "pkl_files",
+      "status": "warn",
+      "detail": ""
+    },
+    {
+      "category": "models",
+      "label": "model_cache",
+      "status": "ok",
+      "detail": "1 activos"
+    },
+    {
+      "category": "apis",
+      "label": "groq",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "apis",
+      "label": "binance",
+      "status": "warn",
+      "detail": ""
+    },
+    {
+      "category": "apis",
+      "label": "yahoo",
+      "status": "warn",
+      "detail": "not installed"
+    },
+    {
+      "category": "mt5",
+      "label": "available",
+      "status": "warn",
+      "detail": "Windows only"
+    },
+    {
+      "category": "databases",
+      "label": "memoria.db",
+      "status": "ok",
+      "detail": "16 tables"
+    },
+    {
+      "category": "databases",
+      "label": "astra_hparam_cache.db",
+      "status": "ok",
+      "detail": "4 tables"
+    },
+    {
+      "category": "databases",
+      "label": "astra_model_quality.db",
+      "status": "ok",
+      "detail": "3 tables"
+    },
+    {
+      "category": "scheduler",
+      "label": "autonomous",
+      "status": "warn",
+      "detail": "stopped"
+    },
+    {
+      "category": "scheduler",
+      "label": "auto_updater",
+      "status": "ok",
+      "detail": "4 pairs"
+    },
+    {
+      "category": "datasets",
+      "label": "EURJPY.csv",
+      "status": "ok",
+      "detail": "1427 rows"
+    },
+    {
+      "category": "datasets",
+      "label": "EURJPY.csv",
+      "status": "ok",
+      "detail": "12222 rows"
+    },
+    {
+      "category": "datasets",
+      "label": "TESTPAIR.csv",
+      "status": "ok",
+      "detail": "80 rows"
+    },
+    {
+      "category": "datasets",
+      "label": "TPAIR.csv",
+      "status": "ok",
+      "detail": "101 rows"
+    },
+    {
+      "category": "datasets",
+      "label": "TPAIR2.csv",
+      "status": "ok",
+      "detail": "101 rows"
+    },
+    {
+      "category": "datasets",
+      "label": "TPAIR3.csv",
+      "status": "ok",
+      "detail": "101 rows"
+    },
+    {
+      "category": "datasets",
+      "label": "EURJPY.csv",
+      "status": "ok",
+      "detail": "5497 rows"
+    },
+    {
+      "category": "integration",
+      "label": "DataRouter (fuente de datos)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "integration",
+      "label": "RollingDataset (datasets eficientes)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "integration",
+      "label": "CSVMigrator (migraci\u00f3n)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "integration",
+      "label": "HyperparameterCache (VI.1)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "integration",
+      "label": "AdaptiveTrainer (VI.1)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "integration",
+      "label": "ModelCacheManager (VI.1)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "integration",
+      "label": "CandlestickDetector (VI.5)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "integration",
+      "label": "ModelQualityHistory (VI.8)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "integration",
+      "label": "OpportunityScore (VI.8)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "integration",
+      "label": "AutonomousScheduler (VI.5)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "integration",
+      "label": "AutoUpdater (VI.5)",
+      "status": "ok",
+      "detail": ""
+    },
+    {
+      "category": "api",
+      "label": "state_file",
+      "status": "warn",
+      "detail": "not created yet"
+    },
+    {
+      "category": "api",
+      "label": "api_server",
+      "status": "warn",
+      "detail": ""
+    }
+  ]
+}

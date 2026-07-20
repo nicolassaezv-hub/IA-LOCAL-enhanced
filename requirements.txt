@@ -1,33 +1,23 @@
 # ASTRA — requirements.txt
-# Compatible con Linux, macOS y Windows (sin paquetes exclusivos de Windows).
-# Paquetes opcionales pesados al final, comentados — instalar manualmente.
+# Linux/Replit-compatible. Windows-only packages (pywin32, comtypes, dearpygui,
+# mss, PyAutoGUI, etc.) are intentionally excluded.
+# Heavy optional packages (torch, tensorflow, librosa…) are listed at the bottom
+# as comments — install manually: pip install <package>
 
-# ── AI / API client ─────────────────────────────────────────────────────────
-openai>=1.0                  # Cliente Groq + OpenAI (REQUERIDO)
+# ── AI / API client (REQUIRED — used for Groq and optional OpenAI) ───────────
+openai>=1.0
 
 # ── Core data & file I/O ─────────────────────────────────────────────────────
 numpy>=1.24
 pandas>=2.0
-openpyxl>=3.1                # Lectura/escritura Excel .xlsx
-PyPDF2>=3.0                  # Lectura PDF
-python-docx>=1.0             # Lectura/escritura Word .docx
-pdfplumber>=0.9              # Extracción avanzada de texto en PDF
+openpyxl>=3.1
+PyPDF2>=3.0
+python-docx>=1.0
+pdfplumber>=0.9
 
-# ── Forex data (sin MT5) ──────────────────────────────────────────────────────
-yfinance>=0.2.40             # Descarga OHLCV desde Yahoo Finance (creando.py --modo yfinance)
-pandas-datareader>=0.10      # Fuente alternativa de datos financieros
-
-# ── MetaTrader5 (solo Windows con MT5 terminal) ───────────────────────────────
-# MetaTrader5>=5.0.45        # pip install MetaTrader5 (Windows + terminal abierta)
-
-# ── Workspace (Roadmap IV) ────────────────────────────────────────────────────
-fastapi>=0.110               # Backend del Workspace (workspace/server.py)
-uvicorn>=0.29                # Servidor ASGI para correr el Workspace
-python-multipart>=0.0.9      # Requerido por FastAPI para /api/upload (adjuntar archivos)
-
-# ── Web & scraping ───────────────────────────────────────────────────────────
-requests>=2.30              # Fase 4: News Intelligence scraping
-beautifulsoup4>=4.12        # Fase 4: scraping Yahoo Finance / FXStreet
+# ── Web & scraping ────────────────────────────────────────────────────────────
+requests>=2.30
+beautifulsoup4>=4.12
 lxml>=4.9
 deep-translator>=1.11
 
@@ -40,97 +30,49 @@ rich>=13.0
 tabulate>=0.9
 colorama>=0.4
 
-# ── ML & analytics ────────────────────────────────────────────────────────────
-scikit-learn>=1.4            # Mínimo 1.4 (CalibratedClassifierCV cambió en 1.4)
+# ── ML & analytics ───────────────────────────────────────────────────────────
+scikit-learn>=1.3
 scipy>=1.11
 xgboost>=2.0
 lightgbm>=4.3
 optuna>=3.6
 faiss-cpu>=1.7
-imbalanced-learn>=0.12       # SMOTE para balanceo de clases en el trainer Forex
 
-# ── Database & storage ─────────────────────────────────────────────────────────
+# ── Database & storage ────────────────────────────────────────────────────────
 SQLAlchemy>=2.0
-joblib>=1.3                  # Serialización de modelos ML
 
-# ── Security ───────────────────────────────────────────────────────────────────
+# ── Security ──────────────────────────────────────────────────────────────────
 cryptography>=42.0
 bcrypt>=4.0
 PyJWT>=2.8
 paramiko>=3.0
 passlib>=1.7
 
-# ── Utilities ──────────────────────────────────────────────────────────────────
+# ── Utilities ─────────────────────────────────────────────────────────────────
 psutil>=5.9
 tqdm>=4.65
-schedule>=1.2                # Fase 3: Active Engine scheduler (thread daemon)
+schedule>=1.2
 arrow>=1.3
 orjson>=3.9
 filelock>=3.13
-watchdog>=4.0                # Fase 2: file system events (Windows: ReadDirectoryChangesW)
+watchdog>=4.0
 lazy-loader>=0.5
 sympy>=1.12
 
-# ── Opcionales — instalar manualmente si los necesitas ─────────────────────────
-# scikit-image>=0.21          Procesamiento de imagen
-# torch>=2.0                  PyTorch deep learning
-# tensorflow>=2.14            TensorFlow deep learning
-# librosa>=0.10               Análisis de audio (requiere soundfile, resampy)
-# pydub>=0.25                 Conversión de audio (requiere ffmpeg)
-# sounddevice>=0.4            Reproducción de audio (requiere PortAudio)
-# SpeechRecognition>=3.10     Reconocimiento de voz (requiere micrófono)
-# pyttsx3>=2.90               Text-to-speech (requiere dispositivo de audio)
-# llama-index>=0.10           Framework RAG LlamaIndex
-# redis>=5.0                  Cliente Redis
-# flask>=3.0                  Framework Flask
-# httpx>=0.27                 Cliente HTTP asíncrono
-# aiohttp>=3.9                Servidor/cliente HTTP asíncrono
-# python-socketio>=5.0        Socket.IO
-# python-dotenv>=1.0          Carga .env automáticamente
-
-# ── Fases 1-9 — referencia rápida de qué usa cada una ───────────────────────
-# Todos los paquetes necesarios ya están declarados arriba, nada nuevo que instalar.
-#
-#  Fase 1 — project_memory.py
-#    sqlite3 (stdlib), colorama>=0.4
-#
-#  Fase 2 — signal_tracker.py, forex_watcher.py
-#    sqlite3 (stdlib), watchdog>=4.0, redis>=5.0 (opcional), colorama>=0.4
-#
-#  Fase 3 — active_engine.py
-#    schedule>=1.2, colorama>=0.4
-#
-#  Fase 4 — news_intelligence.py
-#    requests>=2.30, beautifulsoup4>=4.12, lxml>=4.9, colorama>=0.4
-#    (análisis de sentimiento: openai>=1.0 / Groq — ya requerido)
-#
-#  Fase 5 — prediction_lab/ (Prediction Lab)
-#    scikit-learn>=1.4, xgboost>=2.0, scipy>=1.11 — ya requeridos, sin dependencias nuevas
-#
-#  Fase 6 — feedback/ (Feedback System)
-#    sqlite3 (stdlib) — sin dependencias nuevas
-#
-#  Fase 7 — evolution/ (Evolution Engine)
-#    sqlite3 (stdlib) — sin dependencias nuevas
-#
-#  Fase 8 — constitution/ (Constitution Engine)
-#    sqlite3 (stdlib) — sin dependencias nuevas
-#
-#  Fase 9 — evolutionary_cycle.py (Ciclo Evolutivo completo)
-#    Reutiliza feedback/ + evolution/ + constitution/ — sin dependencias nuevas
-#
-#  Roadmap IV — Workspace (Secciones 1-12 COMPLETAS, ver MANUAL.md Partes 19-28)
-#    fastapi>=0.110, uvicorn>=0.29, python-multipart>=0.0.9 — ya requeridos arriba
-#    openpyxl>=3.1, pandas>=2.0, scikit-learn>=1.4, psutil>=5.9 — ya requeridos arriba
-#    (Secciones 4-12 — Forex Lab, Prediction Lab, Business Lab, Cognitive
-#     Center, Evolution Center, Activity Center, Notification Center, Live
-#     Thinking, Identidad Visual: sin dependencias Python nuevas — todo
-#     reutiliza forex/business/, prediction_lab/, forex/prediction/,
-#     feedback/, evolution/, constitution/, memory.py, ya cubiertos arriba)
-#    Chart.js 4.4.4 y lightweight-charts 4.1.3 se cargan vía CDN en el
-#    frontend (workspace/static/index.html) — no requieren pip install.
-#
-#  Verificado con instalación limpia (venv nuevo + "pip install -r requirements.txt"
-#  únicamente) el 9 de julio de 2026: import workspace.server OK, import main
-#  OK, check_startup.py sin issues críticos, servidor real levantado y los
-#  ~20 endpoints de las 12 secciones del Workspace respondieron 200 vía curl.
+# ── Optional — install manually with pip if needed ────────────────────────────
+# scikit-image>=0.21     — Image processing
+# torch>=2.0             — PyTorch deep learning
+# tensorflow>=2.14       — TensorFlow deep learning
+# librosa>=0.10          — Audio analysis (requires soundfile, resampy)
+# pydub>=0.25            — Audio conversion (requires ffmpeg)
+# sounddevice>=0.4       — Audio playback (requires PortAudio)
+# SpeechRecognition>=3.10 — Voice recognition (requires mic)
+# pyttsx3>=2.90          — Text-to-speech (requires audio device)
+# llama-index>=0.10      — LlamaIndex RAG framework
+# redis>=5.0             — Redis client
+# fastapi>=0.110         — FastAPI web framework
+# flask>=3.0             — Flask web framework
+# grpcio>=1.60           — gRPC
+# httpx>=0.27            — Async HTTP client
+# aiohttp>=3.9           — Async HTTP server/client
+# python-socketio>=5.0   — Socket.IO

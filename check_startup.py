@@ -267,6 +267,22 @@ FOREX_MODULES = [
     ("forex.business.kpi_engine",               "KPI computation engine"),
     ("forex.business.business_predictor",       "GROWING/DECLINING/STABLE signal"),
     ("forex.business.business_pipeline",        "Full Business pipeline"),
+    # ── Roadmap VI modules ──────────────────────────────────────────
+    ("forex.prediction.hyperparameter_cache",   "VI.1.A Smart Hyperparameter Cache"),
+    ("forex.prediction.adaptive_trainer",       "VI.1.B Adaptive Training Budget"),
+    ("forex.prediction.model_cache",            "VI.1.C Model Cache Manager"),
+    ("forex.prediction.model_quality_history",  "VI.8.C Model Quality History"),
+    ("forex.prediction.candlestick_patterns",   "VI.5.D Candlestick Pattern Detector"),
+    ("forex.data.rolling_dataset",              "VI.6.A Rolling Dataset Manager"),
+    ("forex.data.indicator_delta",              "VI.6.B Indicator Delta Calculator"),
+    ("forex.data.csv_migrator",                 "VI.6.C CSV Migration Tool"),
+    ("forex.data.data_router",                  "VI.7.D Universal Data Router"),
+    ("forex.data.yahoo_provider",               "VI.7.B Yahoo Finance Provider"),
+    ("forex.data.binance_provider",             "VI.7.C Binance Crypto Provider"),
+    ("forex.data.mt5_provider",                 "VI.7.A MT5 Data Provider (Win only)"),
+    ("forex.portfolio.opportunity_score",       "VI.8.A Opportunity Score Engine"),
+    ("forex.scheduler.autonomous_scheduler",    "VI.5.A Autonomous Scheduler 24/7"),
+    ("forex.scheduler.auto_updater",            "VI.5.B Auto Dataset Updater"),
 ]
 
 
