@@ -79,9 +79,16 @@ def phase1_autorepair():
         fixed_path = os.path.join(here, fixed_name)
         if os.path.exists(bad_path):
             try:
-                os.rename(bad_path, fixed_path)
-                _ok(f"Renamed {bad_name} → {fixed_name}  (lazy_loader conflict fixed)")
-                FIXED.append(f"Renamed {bad_name} → {fixed_name}")
+                if os.path.exists(fixed_path):
+                    # Destination already exists — just remove the conflicting source.
+                    # On Windows os.rename raises WinError 183 if destination exists.
+                    os.remove(bad_path)
+                    _ok(f"Removed {bad_name} ({fixed_name} already in place — conflict cleared)")
+                    FIXED.append(f"Removed conflicting {bad_name}")
+                else:
+                    os.rename(bad_path, fixed_path)
+                    _ok(f"Renamed {bad_name} → {fixed_name}  (lazy_loader conflict fixed)")
+                    FIXED.append(f"Renamed {bad_name} → {fixed_name}")
                 # Remove cached bytecode so Python re-resolves lazy_loader
                 pycache = os.path.join(here, "__pycache__")
                 for f in os.listdir(pycache) if os.path.isdir(pycache) else []:
@@ -91,8 +98,8 @@ def phase1_autorepair():
                         except Exception:
                             pass
             except Exception as e:
-                _err(f"Could not rename {bad_name}: {e}")
-                ISSUES.append(f"Manual fix needed: rename {bad_name} → {fixed_name}")
+                _err(f"Could not fix {bad_name}: {e}")
+                ISSUES.append(f"Manual fix needed: delete {bad_name} (conflicts with pip lazy-loader)")
         elif os.path.exists(fixed_path):
             _ok(f"{fixed_name} already in place (no conflict)")
         else:
