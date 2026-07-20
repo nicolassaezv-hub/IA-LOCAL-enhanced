@@ -38,6 +38,19 @@ _RENAME = {
 
 _REQUIRED = ["open", "high", "low", "close"]
 
+_PAIR_SUFFIXES = ['_TEST','_H1','_H4','_D1','_M15','_M30',
+                  '_TEST2','_BACKUP','_NEW','_OLD','_2024','_2025','_2026']
+
+def _normalize_pair(name: str) -> str:
+    """Normalize a pair name: remove underscores and strip known suffixes."""
+    name = str(name).upper().strip()
+    for sfx in _PAIR_SUFFIXES:
+        if name.endswith(sfx):
+            name = name[:-len(sfx)]
+            break
+    name = name.replace("_", "").replace("-", "").replace("/", "")
+    return name if name else "UNKNOWN"
+
 
 # ─────────────────────────────────────────────────────────────
 # FILL NaN INDICATORS
@@ -220,10 +233,12 @@ def adapt_csv(filepath: str, pair: str = None,
 
     # Inject pair
     if pair:
-        df["pair"] = pair
-    elif "pair" not in df.columns:
+        df["pair"] = _normalize_pair(pair)
+    elif "pair" in df.columns:
+        df["pair"] = df["pair"].astype(str).str.strip().str.upper().apply(_normalize_pair)
+    else:
         name = os.path.splitext(os.path.basename(filepath))[0].upper()
-        df["pair"] = name
+        df["pair"] = _normalize_pair(name)
 
     # Inject spread proxy
     if "spread" not in df.columns:

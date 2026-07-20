@@ -219,6 +219,53 @@ def compute_bollinger_bands(close, period=20, std_dev=2):
     return upper_band, middle_band, lower_band
 
 
+def compute_atr(high, low, close, period=14):
+    """
+    Compute Average True Range (ATR).
+
+    Args:
+        high, low, close: Series or array-like price data
+        period: smoothing period (default: 14)
+
+    Returns:
+        pd.Series with ATR values
+    """
+    import pandas as pd
+    high  = pd.Series(high).reset_index(drop=True)
+    low   = pd.Series(low).reset_index(drop=True)
+    close = pd.Series(close).reset_index(drop=True)
+
+    tr = pd.concat([
+        high - low,
+        (high - close.shift(1)).abs(),
+        (low  - close.shift(1)).abs(),
+    ], axis=1).max(axis=1)
+    return tr.ewm(com=period - 1, adjust=False).mean()
+
+
+def compute_atr_relative(high, low, atr):
+    """
+    Compute ATR relative to the candle range (high - low).
+
+    Returns ATR / candle_range. Values > 1.5 indicate a large-ATR candle;
+    values < 0.5 indicate a small-ATR candle relative to its range.
+
+    Args:
+        high, low: Series or array-like price data
+        atr: Series with ATR values (e.g. ATR_14)
+
+    Returns:
+        pd.Series with relative ATR values
+    """
+    import pandas as pd
+    high = pd.Series(high).reset_index(drop=True)
+    low  = pd.Series(low).reset_index(drop=True)
+    atr  = pd.Series(atr).reset_index(drop=True)
+
+    candle_range = (high - low).abs().replace(0, float("nan"))
+    return (atr / candle_range).fillna(1.0)
+
+
 def compute_adx(df, period=14):
     """
     Compute Average Directional Index (ADX).

@@ -67,6 +67,24 @@ def _load_tuned_params(pair: str) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────
+# BACKWARD COMPATIBILITY SHIM
+# Allows loading of models pickled before Roadmap V (pre-SoftVotingEnsemble).
+# ─────────────────────────────────────────────────────────────
+class _PreFitEnsemble:
+    """Legacy ensemble class — kept for unpickling old saved models."""
+    def __init__(self, estimators, weights=None):
+        self.estimators = estimators
+        self.classes_   = np.array([0, 1])
+
+    def predict_proba(self, X) -> np.ndarray:
+        proba = np.mean([est.predict_proba(X) for _, est in self.estimators], axis=0)
+        return proba
+
+    def predict(self, X) -> np.ndarray:
+        return np.argmax(self.predict_proba(X), axis=1)
+
+
+# ─────────────────────────────────────────────────────────────
 # SOFT VOTING ENSEMBLE
 # ─────────────────────────────────────────────────────────────
 class SoftVotingEnsemble:
