@@ -45,24 +45,38 @@ Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 Esta IA Local se compone de mas de 200 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
 El programa puente (main.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
 
-Se incluyen 5 codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python.
+Se incluyen 7 codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python del proyecto en general.
+
+Hay 2 codigos adicionales que estan hechos para verificar un funcionamiento optimo de la rama Forex
+
+## Sistema Principal General
 
 - check_startup
 
 - check_skeleton
 
-- self_doctor
+- astra_doctor
 
-- test_csv
+- check_functionality
 
-- test_functionality
+- check_skeleton
 
+- check_system
+
+- test_main
+
+## Forex Pipeline
+
+- test_complete_pipeline
+
+- test_forex_pipeline
 
 Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
 # Comandos y Programa Puente (main.py + iniciar_astra.bat)
+
 ### Comandos
 
 El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos 
