@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>ASTRA Workspace</title>
 <link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/ui_customization.css" />
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -495,7 +496,7 @@
       <section class="panel" id="panel-sentinel">
         <div class="panel-header">
           <h2>Dashboard Activo</h2>
-          <span class="panel-sub">Sistema Autónomo — Roadmap V en tiempo real</span>
+          <span class="panel-sub">Sistema Autónomo — Roadmap V + VI: Sentinel · Scheduler · Data Intelligence</span>
         </div>
         <div id="active-dashboard"></div>
       </section>
@@ -503,10 +504,47 @@
       <section class="panel" id="panel-config">
         <div class="panel-header">
           <h2>Configuración</h2>
-          <span class="panel-sub">Ajustes del Workspace</span>
+          <span class="panel-sub">Estado del sistema, versión y API key — datos reales</span>
+          <button class="icon-btn wide" id="config-refresh-btn" title="Refrescar">⟳ Refrescar</button>
         </div>
-        <div class="placeholder-card">
-          Preferencias de tema, modelo y notificaciones — próximamente.
+
+        <!-- Estado general -->
+        <div class="lab-card">
+          <h3>Estado del sistema</h3>
+          <div class="dashboard-cards" id="config-status-tiles"></div>
+        </div>
+
+        <!-- API Keys -->
+        <div class="lab-detail-grid">
+          <div class="lab-card">
+            <h3>API Keys</h3>
+            <table class="lab-table" id="config-keys-table">
+              <thead><tr><th>Proveedor</th><th>Estado</th><th>Modelo activo</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <!-- Entorno técnico -->
+          <div class="lab-card">
+            <h3>Entorno técnico</h3>
+            <table class="lab-table" id="config-env-table">
+              <thead><tr><th>Parámetro</th><th>Valor</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Rutas del sistema -->
+        <div class="lab-card">
+          <h3>Rutas del workspace</h3>
+          <div id="config-paths" class="train-stage-label" style="font-family:monospace; font-size:0.78rem; line-height:1.8;"></div>
+        </div>
+
+        <!-- Diagnóstico rápido -->
+        <div class="lab-card">
+          <h3>Diagnóstico rápido</h3>
+          <button id="config-doctor-btn" class="train-btn">🔬 Ejecutar diagnóstico (astra doctor)</button>
+          <div id="config-doctor-result" class="train-stage-label" style="white-space:pre-wrap;"></div>
         </div>
       </section>
 
@@ -537,5 +575,6 @@
   <script src="/js/notification_center.js"></script>
   <script src="/js/live_thinking.js"></script>
   <script src="/js/active_dashboard.js"></script>
+  <script src="/js/ui_customization.js"></script>
 </body>
 </html>

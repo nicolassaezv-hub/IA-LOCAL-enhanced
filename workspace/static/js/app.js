@@ -147,6 +147,98 @@ document.getElementById("export-btn").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
+// ── Panel Configuración (Sección 14) ──────────────────────────────
+async function configPanelLoad() {
+  try {
+    const res = await fetch("/api/config");
+    const d = await res.json();
+    if (!d.ok) return;
+
+    // Tiles de estado
+    const statusTiles = [
+      ["Versión ASTRA", "v" + d.version],
+      ["Estado", d.astra_status === "online" ? "✔ En línea" : "✗ Offline"],
+      ["Modelo activo", d.model_active],
+      ["Tools cargados", d.tools_loaded],
+      ["Memorias", d.memory_entries],
+      ["Uptime", d.uptime],
+    ];
+    document.getElementById("config-status-tiles").innerHTML = statusTiles
+      .map(([label, value]) => `
+        <div class="kpi-tile">
+          <div class="kpi-label">${label}</div>
+          <div class="kpi-value">${value}</div>
+        </div>`).join("");
+
+    // API Keys table
+    const keysRows = [
+      ["Groq (Llama-3.3-70B)", d.api_keys.groq ? "✔ Configurada" : "✗ No encontrada",
+        d.api_keys.groq ? d.model_active : "—"],
+      ["OpenAI (GPT-3.5-turbo)", d.api_keys.openai ? "✔ Configurada" : "✗ No encontrada",
+        d.api_keys.openai && !d.api_keys.groq ? d.model_active : "—"],
+    ];
+    document.querySelector("#config-keys-table tbody").innerHTML = keysRows
+      .map(([prov, status, model]) =>
+        `<tr><td>${prov}</td><td class="${status.startsWith("✔") ? "kpi-good" : "kpi-bad"}">${status}</td><td>${model}</td></tr>`
+      ).join("");
+
+    // Entorno técnico
+    const envRows = [
+      ["Python", d.python_version],
+      ["Plataforma", d.platform],
+      ["Proveedor AI activo", d.api_keys.active_provider],
+      ["Modelo configurado", d.model_configured],
+      ["Módulos Workspace", d.workspace_modules + " activos"],
+      ["Hora del servidor", d.server_time],
+    ];
+    document.querySelector("#config-env-table tbody").innerHTML = envRows
+      .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+
+    // Rutas
+    document.getElementById("config-paths").innerHTML = [
+      `📁 Raíz ASTRA : ${d.root_dir}`,
+      `📁 CSVs Forex  : ${d.csv_base}`,
+      `📁 Uploads     : ${d.upload_dir}`,
+    ].join("<br>");
+
+  } catch (e) {
+    document.getElementById("config-status-tiles").innerHTML =
+      `<div class="train-stage-label">Error cargando configuración: ${e.message}</div>`;
+  }
+}
+
+async function configRunDoctor() {
+  const btn = document.getElementById("config-doctor-btn");
+  const out = document.getElementById("config-doctor-result");
+  btn.disabled = true;
+  out.textContent = "Ejecutando diagnóstico...";
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "astra doctor" }),
+    });
+    const d = await res.json();
+    out.textContent = d.response || "(sin respuesta)";
+  } catch (e) {
+    out.textContent = "Error: " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const configNav = document.querySelector('.nav-item[data-section="config"]');
+  if (configNav) {
+    let initialized = false;
+    configNav.addEventListener("click", () => {
+      if (!initialized) { initialized = true; configPanelLoad(); }
+      document.getElementById("config-refresh-btn").addEventListener("click", configPanelLoad);
+      document.getElementById("config-doctor-btn").addEventListener("click", configRunDoctor);
+    });
+  }
+});
+
 // ── 3.1 Entrada enriquecida: adjuntar archivo / carpeta / drag&drop ─
 let pendingAttachment = null; // { filename, path }
 const attachPreview = document.getElementById("attach-preview");

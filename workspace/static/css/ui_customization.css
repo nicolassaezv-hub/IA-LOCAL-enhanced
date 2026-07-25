@@ -1,0 +1,117 @@
+/* ═══════════════════════════════════════════════════════════
+   VI.9 — ASTRA Workplace UI Customization
+   Hacker Mode · Glow FX · Command Palette · RGB Picker
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --astra-accent: #00d4ff;
+  --astra-glow: 0 0 10px var(--astra-accent), 0 0 20px var(--astra-accent);
+}
+
+/* ── Glow buttons ─────────────────────────────────────────── */
+body.astra-glow button,
+body.astra-glow .btn,
+body.astra-glow .topbar-chip {
+  transition: box-shadow .25s ease, transform .15s ease;
+}
+body.astra-glow button:hover,
+body.astra-glow .btn:hover {
+  box-shadow: var(--astra-glow);
+  transform: translateY(-1px);
+}
+
+/* ── Hacker Mode ──────────────────────────────────────────── */
+body.astra-hacker {
+  --astra-accent: #00ff66;
+  background: #000 !important;
+  color: #00ff66 !important;
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace !important;
+  text-shadow: 0 0 2px #00ff66;
+}
+body.astra-hacker * {
+  color: inherit !important;
+  border-color: rgba(0,255,102,.35) !important;
+}
+body.astra-hacker::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0,255,102,.04) 0px,
+    rgba(0,255,102,.04) 1px,
+    transparent 1px,
+    transparent 3px);
+  z-index: 9998;
+  animation: astra-flicker 3s infinite;
+}
+@keyframes astra-flicker {
+  0%,100% { opacity: 1 }
+  50%     { opacity: .92 }
+}
+
+/* ── Command Palette ──────────────────────────────────────── */
+#astra-cmd-palette {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(6px);
+  z-index: 10000;
+  display: none;
+  align-items: flex-start; justify-content: center;
+  padding-top: 12vh;
+}
+#astra-cmd-palette.open { display: flex; }
+#astra-cmd-panel {
+  width: min(640px, 90vw);
+  background: #111;
+  border: 1px solid var(--astra-accent);
+  border-radius: 10px;
+  box-shadow: var(--astra-glow);
+  overflow: hidden;
+  font-family: "JetBrains Mono", monospace;
+}
+#astra-cmd-input {
+  width: 100%; padding: 14px 16px;
+  background: #0a0a0a; color: #fff;
+  border: 0; border-bottom: 1px solid #222;
+  font-size: 15px; outline: none;
+}
+#astra-cmd-list { max-height: 55vh; overflow-y: auto; }
+.astra-cmd-item {
+  padding: 10px 16px;
+  color: #ccc;
+  cursor: pointer;
+  display: flex; justify-content: space-between;
+  border-bottom: 1px solid #1a1a1a;
+}
+.astra-cmd-item.active,
+.astra-cmd-item:hover { background: rgba(0,212,255,.12); color: #fff; }
+.astra-cmd-item small { color: #888; }
+
+/* ── Personalization panel ────────────────────────────────── */
+#astra-ui-panel {
+  position: fixed; right: 16px; bottom: 60px;
+  width: 280px; background: #111; color: #eee;
+  border: 1px solid var(--astra-accent); border-radius: 10px;
+  padding: 14px; z-index: 9999; display: none;
+  box-shadow: 0 6px 24px rgba(0,0,0,.5);
+  font-family: system-ui, sans-serif; font-size: 13px;
+}
+#astra-ui-panel.open { display: block; }
+#astra-ui-panel h4 { margin: 0 0 10px; color: var(--astra-accent); }
+#astra-ui-panel label { display: block; margin: 8px 0 4px; color: #bbb; }
+.astra-palette-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.astra-swatch {
+  width: 22px; height: 22px; border-radius: 4px;
+  cursor: pointer; border: 2px solid transparent;
+}
+.astra-swatch.selected { border-color: #fff; }
+
+#astra-ui-toggle {
+  position: fixed; right: 16px; bottom: 16px;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--astra-accent); color: #000;
+  border: 0; cursor: pointer; z-index: 9999;
+  font-size: 18px; font-weight: bold;
+  box-shadow: var(--astra-glow);
+}

@@ -422,6 +422,8 @@ body { display: flex; flex-direction: column; }
 
 .kpi-tile.kpi-good .kpi-value { color: hsl(var(--success)); }
 .kpi-tile.kpi-bad .kpi-value { color: hsl(var(--danger)); }
+td.kpi-good { color: hsl(var(--success)); font-weight: 600; }
+td.kpi-bad  { color: hsl(var(--danger));  font-weight: 600; }
 
 .biz-anomalies {
   font-size: 0.78rem;

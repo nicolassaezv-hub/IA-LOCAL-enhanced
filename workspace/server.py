@@ -206,6 +206,101 @@ def _module_label(user_input: str, matched_strict_command: bool) -> str:
 def _startup() -> None:
     memory.init_db()
     project_memory.init_project_db()
+    # ── Roadmap VI: auto-init sentinel con el par que tiene datos ──
+    _auto_init_sentinel()
+    # ── Roadmap VI: iniciar scanner de señales en background ───────
+    threading.Thread(target=_sentinel_scan_loop, daemon=True).start()
+
+
+def _auto_init_sentinel() -> None:
+    """Registra pares con CSV disponibles en el Market Sentinel al arrancar."""
+    import glob
+    csv_dirs = {
+        "H1": os.path.join(_CSV_BASE, "H1"),
+        "H4": os.path.join(_CSV_BASE, "H4"),
+        "D1": os.path.join(_CSV_BASE, "D1"),
+    }
+    pairs_found: set = set()
+    for tf, d in csv_dirs.items():
+        if not os.path.isdir(d):
+            continue
+        for f in glob.glob(os.path.join(d, "*.csv")):
+            pair = os.path.splitext(os.path.basename(f))[0].upper()
+            # Excluir archivos test/broken
+            if any(x in pair for x in ("TEST", "TPAIR", "BROKEN")):
+                continue
+            pairs_found.add(pair)
+    for pair in sorted(pairs_found):
+        if pair not in _sentinel_state["assets"]:
+            _sentinel_state["assets"][pair] = {
+                "last_signal": "HOLD",
+                "last_reliability": 0.0,
+                "scan_count": 0,
+            }
+    _sentinel_state["assets_monitored"] = len(_sentinel_state["assets"])
+    if _sentinel_state["assets"]:
+        _sentinel_state["state"] = "running"
+
+
+_sentinel_scan_results: dict = {}  # pair -> último resultado de predicción
+
+def _sentinel_scan_loop() -> None:
+    """Escanea señales de los pares vigilados cada 20 min en background."""
+    import time as _time
+    _time.sleep(15)  # Esperar a que el servidor arranque completamente
+    while True:
+        if not _scheduler_paused:
+            try:
+                _run_sentinel_scans()
+            except Exception:
+                pass
+        _time.sleep(1200)  # 20 minutos
+
+
+def _run_sentinel_scans() -> None:
+    """Ejecuta una predicción rápida sobre cada par vigilado y actualiza el estado."""
+    for pair in list(_sentinel_state["assets"].keys()):
+        # Buscar CSV H1 del par
+        csv_h1 = os.path.join(_CSV_BASE, "H1", f"{pair}.csv")
+        if not os.path.exists(csv_h1):
+            continue
+        try:
+            result_str = dispatch_command(f"analiza forex {pair} {csv_h1}")
+            if result_str:
+                # Parsear señal del resultado
+                signal = "HOLD"
+                reliability = 0.0
+                for line in str(result_str).splitlines():
+                    line_l = line.lower()
+                    if "signal:" in line_l or "señal:" in line_l:
+                        if "buy" in line_l:
+                            signal = "BUY"
+                        elif "sell" in line_l:
+                            signal = "SELL"
+                    if "confidence:" in line_l or "confianza:" in line_l:
+                        import re as _re
+                        m = _re.search(r"[\d.]+", line)
+                        if m:
+                            try:
+                                reliability = round(float(m.group()) * 100, 1)
+                            except Exception:
+                                pass
+                _sentinel_state["assets"][pair] = {
+                    "last_signal": signal,
+                    "last_reliability": reliability,
+                    "scan_count": _sentinel_state["assets"].get(pair, {}).get("scan_count", 0) + 1,
+                }
+                _sentinel_state["total_scans"] = sum(
+                    a.get("scan_count", 0) for a in _sentinel_state["assets"].values()
+                )
+                _sentinel_scan_results[pair] = {
+                    "signal": signal,
+                    "reliability": reliability,
+                    "full_report": str(result_str)[:2000],
+                    "timestamp": datetime.datetime.now().isoformat(),
+                }
+        except Exception:
+            pass
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -1526,11 +1621,388 @@ def retrain_force(body: _RetrainBody) -> JSONResponse:
                           "status": "entrenamiento iniciado en background"})
 
 
+# ══════════════════════════════════════════════════════════════════
+#  SECCIÓN 14 — Configuración del sistema
+# ══════════════════════════════════════════════════════════════════
+
+@app.get("/api/config")
+def get_config() -> JSONResponse:
+    """Panel Configuración: estado completo del sistema, versión, API key, entorno."""
+    import sys, platform
+    connected = _has_api_key()
+    has_groq = bool(os.environ.get("GROQ_API_KEY"))
+    has_openai = bool(os.environ.get("OPENAI_API_KEY"))
+
+    # Versión desde CHANGELOG si existe
+    version = "7.0.0"
+    changelog = os.path.join(_ROOT, "CHANGELOG.md")
+    if os.path.isfile(changelog):
+        try:
+            with open(changelog) as f:
+                for line in f:
+                    if line.startswith("## ["):
+                        version = line.split("[")[1].split("]")[0]
+                        break
+        except Exception:
+            pass
+
+    uptime_s = round(time.time() - _SERVER_START, 0)
+    h, rem = divmod(int(uptime_s), 3600)
+    m, s = divmod(rem, 60)
+    uptime_str = f"{h}h {m}m {s}s" if h else f"{m}m {s}s"
+
+    # Conteos de memoria
+    total_mem = 0
+    try:
+        import memory as _mem
+        rows = _mem.get_history(limit=9999)
+        total_mem = len(rows) if rows else 0
+    except Exception:
+        pass
+
+    # Módulos cargados
+    n_cognitive = sum(1 for m in ["cognitive_center", "activity_center",
+                                   "evolution_center", "notification_center",
+                                   "live_thinking"] if m in sys.modules)
+
+    return JSONResponse({
+        "ok": True,
+        "version": version,
+        "astra_status": "online",
+        "connected": connected,
+        "api_keys": {
+            "groq": has_groq,
+            "openai": has_openai,
+            "active_provider": "Groq" if has_groq else ("OpenAI" if has_openai else "ninguno"),
+        },
+        "model_active": _active_model() if connected else "sin API key",
+        "model_configured": _GROQ_MODEL,
+        "tools_loaded": len(TOOLS),
+        "memory_entries": total_mem,
+        "workspace_modules": n_cognitive,
+        "python_version": sys.version.split()[0],
+        "platform": platform.system(),
+        "uptime": uptime_str,
+        "uptime_seconds": int(uptime_s),
+        "server_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "csv_base": _CSV_BASE,
+        "upload_dir": _UPLOAD_DIR,
+        "root_dir": _ROOT,
+    })
+
+
+# ══════════════════════════════════════════════════════════════════
+#  SECCIÓN 15 — Roadmap VI: Data Intelligence & Autonomía
+# ══════════════════════════════════════════════════════════════════
+
+@app.get("/api/roadmap6/status")
+def roadmap6_status() -> JSONResponse:
+    """Estado completo del ecosistema Roadmap VI: scheduler, sentinel, hparam cache,
+    model cache, rolling datasets, opportunity ranking y data intelligence."""
+    result: dict = {"ok": True}
+
+    # ── Hyperparameter Cache ──────────────────────────────────────
+    try:
+        from forex.prediction.hyperparameter_cache import get_cache
+        cache = get_cache()
+        entries = cache.list_cached()
+        result["hparam_cache"] = {
+            "ok": True,
+            "total": len(entries),
+            "entries": [
+                {
+                    "pair": e.get("pair", "?"),
+                    "horizon": e.get("horizon", "?"),
+                    "accuracy": round(float(e.get("accuracy", 0)) * 100, 1),
+                    "trials": e.get("n_trials", 0),
+                    "updated": str(e.get("updated_at", ""))[:19],
+                }
+                for e in (entries or [])[:10]
+            ],
+        }
+    except Exception as ex:
+        result["hparam_cache"] = {"ok": False, "error": str(ex)[:120]}
+
+    # ── Model Cache ───────────────────────────────────────────────
+    try:
+        from forex.prediction.model_cache import get_model_cache
+        # ModelCacheManager no tiene list_cached() — query SQLite directa
+        import sqlite3 as _sqlite3
+        _mc_db = os.path.join(_ROOT, "astra_hparam_cache.db")
+        entries_mc = []
+        if os.path.exists(_mc_db):
+            with _sqlite3.connect(_mc_db) as _conn:
+                _conn.row_factory = _sqlite3.Row
+                try:
+                    rows_mc = _conn.execute(
+                        "SELECT pair, horizon, accuracy, row_count, created_at "
+                        "FROM model_version_log WHERE is_active=1 "
+                        "ORDER BY created_at DESC LIMIT 10"
+                    ).fetchall()
+                    entries_mc = [dict(r) for r in rows_mc]
+                except Exception:
+                    pass
+        result["model_cache"] = {
+            "ok": True,
+            "total": len(entries_mc),
+            "entries": [
+                {
+                    "pair": e.get("pair", "?"),
+                    "horizon": e.get("horizon", "?"),
+                    "accuracy": round(float(e.get("accuracy") or 0) * 100, 1),
+                    "rows": e.get("row_count", 0),
+                    "updated": str(e.get("created_at", ""))[:19],
+                }
+                for e in entries_mc
+            ],
+        }
+    except Exception as ex:
+        result["model_cache"] = {"ok": False, "error": str(ex)[:120]}
+
+    # ── Rolling Datasets — usa csv_dir (directorio), no csv_path ──
+    try:
+        import glob as _glob
+        from forex.data.rolling_dataset import RollingDataset
+        rolling: list = []
+        for tf_dir in ["H1", "H4", "D1"]:
+            d = os.path.join(_CSV_BASE, tf_dir)
+            if not os.path.isdir(d):
+                continue
+            for csv_f in _glob.glob(os.path.join(d, "*.csv")):
+                pair_name = os.path.splitext(os.path.basename(csv_f))[0].upper()
+                if any(x in pair_name for x in ("TEST", "TPAIR", "BROKEN")):
+                    continue
+                try:
+                    rd = RollingDataset(pair_name, tf_dir, csv_dir=d)
+                    loaded = rd.load()
+                    if not loaded:
+                        continue
+                    val = rd.validate()
+                    is_ok = val.get("ok", True) if isinstance(val, dict) else True
+                    errs = val.get("issues", []) if isinstance(val, dict) else []
+                    rows = len(rd._df) if rd._df is not None else 0
+                    rolling.append({
+                        "pair": pair_name,
+                        "timeframe": tf_dir,
+                        "rows": rows,
+                        "valid": is_ok,
+                        "errors": errs[:3] if isinstance(errs, list) else [],
+                    })
+                except Exception:
+                    pass
+        result["rolling_datasets"] = {"ok": True, "datasets": rolling, "total": len(rolling)}
+    except Exception as ex:
+        result["rolling_datasets"] = {"ok": False, "error": str(ex)[:120]}
+
+    # ── Autonomous Scheduler ──────────────────────────────────────
+    try:
+        sched_text = dispatch_command("scheduler info")
+        running = "activo" in str(sched_text).lower() or "running" in str(sched_text).lower()
+        result["autonomous_scheduler"] = {
+            "ok": True,
+            "running": running,
+            "text": str(sched_text)[:500],
+        }
+    except Exception as ex:
+        result["autonomous_scheduler"] = {"ok": False, "error": str(ex)[:120]}
+
+    # ── Opportunity Ranking — vía dispatch_command (ya funciona) ──
+    try:
+        rank_text = dispatch_command("opportunity ranking 10")
+        # Parsear número de elegibles del texto
+        eligible = 0
+        ops_parsed = []
+        for line in str(rank_text).splitlines():
+            if "elegibles:" in line.lower():
+                import re as _re2
+                m = _re2.search(r"(\d+)", line)
+                if m:
+                    eligible = int(m.group(1))
+            if "BUY" in line or "SELL" in line:
+                parts = line.split()
+                if len(parts) >= 2:
+                    ops_parsed.append({"pair": parts[0].strip(), "signal": "BUY" if "BUY" in line else "SELL",
+                                       "score": 0.0, "regime": ""})
+        result["opportunity_ranking"] = {
+            "ok": True,
+            "eligible": eligible,
+            "opportunities": ops_parsed[:10],
+            "total": len(ops_parsed),
+            "text": str(rank_text)[:800],
+        }
+    except Exception as ex:
+        result["opportunity_ranking"] = {"ok": False, "error": str(ex)[:120], "opportunities": []}
+
+    # ── Sentinel scan results ─────────────────────────────────────
+    result["sentinel"] = {
+        "state": _sentinel_state["state"],
+        "assets_monitored": _sentinel_state["assets_monitored"],
+        "total_scans": _sentinel_state["total_scans"],
+        "assets": _sentinel_state["assets"],
+        "scan_results": {
+            pair: {"signal": v["signal"], "reliability": v["reliability"],
+                   "timestamp": v["timestamp"]}
+            for pair, v in _sentinel_scan_results.items()
+        },
+    }
+
+    return JSONResponse(result)
+
+
+@app.get("/api/roadmap6/hparam_cache")
+def roadmap6_hparam_cache() -> JSONResponse:
+    """Hyperparameter Cache status (VI.1.A)."""
+    try:
+        result_str = dispatch_command("hparam cache")
+        return JSONResponse({"ok": True, "text": str(result_str)})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/api/roadmap6/model_cache")
+def roadmap6_model_cache() -> JSONResponse:
+    """Model Cache status (VI.1.C)."""
+    try:
+        result_str = dispatch_command("model cache")
+        return JSONResponse({"ok": True, "text": str(result_str)})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+class _CandlestickBody(BaseModel):
+    csv_path: str
+    pair: str = "UNKNOWN"
+    timeframe: str = "H1"
+
+
+@app.post("/api/roadmap6/candlestick")
+def roadmap6_candlestick(body: _CandlestickBody) -> JSONResponse:
+    """Detecta patrones de vela japonesa (VI.5.D)."""
+    try:
+        result_str = dispatch_command(f"candlestick {body.csv_path}")
+        return JSONResponse({"ok": True, "text": str(result_str)})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/api/roadmap6/opportunity_ranking")
+def roadmap6_opportunity_ranking(n: int = 10) -> JSONResponse:
+    """Opportunity Ranking (VI.8.A) — Top N señales por OpScore."""
+    try:
+        result_str = dispatch_command(f"opportunity ranking {n}")
+        return JSONResponse({"ok": True, "text": str(result_str)})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@app.post("/api/roadmap6/self_test")
+def roadmap6_self_test() -> JSONResponse:
+    """Diagnóstico rápido del sistema (VI.2.B) — verifica módulos, DBs, CSVs y API."""
+    ok_checks: list = []
+    warnings: list = []
+    errors: list = []
+
+    def _chk(label: str, fn):
+        try:
+            result = fn()
+            if result is False:
+                errors.append(label)
+            elif isinstance(result, str) and result:
+                ok_checks.append(f"{label}: {result}")
+            else:
+                ok_checks.append(label)
+        except ImportError as e:
+            warnings.append(f"{label}: módulo no instalado ({str(e)[:60]})")
+        except Exception as e:
+            errors.append(f"{label}: {str(e)[:80]}")
+
+    # ── Core modules ──
+    _chk("memory.db", lambda: __import__("memory").init_db() or True)
+    _chk("intent_router", lambda: __import__("intent_router"))
+    _chk("tool_registry", lambda: __import__("tool_registry"))
+    _chk("astra_agent", lambda: __import__("astra_agent"))
+    _chk("argument_parser", lambda: __import__("argument_parser"))
+    _chk("io_files", lambda: __import__("io_files"))
+    _chk("security", lambda: __import__("security"))
+    _chk("web_tools", lambda: __import__("web_tools"))
+
+    # ── Roadmap V modules ──
+    for mod in [
+        "forex.prediction.decision_engine",
+        "forex.prediction.risk_engine",
+        "forex.prediction.reliability_score",
+        "forex.prediction.regime_detector",
+        "forex.prediction.mtf_coherence",
+        "forex.prediction.model_selector",
+    ]:
+        _chk(mod, lambda m=mod: __import__(m))
+
+    # ── Roadmap VI modules ──
+    for mod in [
+        "forex.prediction.hyperparameter_cache",
+        "forex.prediction.model_cache",
+        "forex.scheduler.autonomous_scheduler",
+        "forex.portfolio.opportunity_score",
+        "forex.portfolio.portfolio_ranker",
+        "check_system",
+    ]:
+        _chk(mod, lambda m=mod: __import__(m))
+
+    # ── API key ──
+    _chk("GROQ_API_KEY", lambda: os.environ.get("GROQ_API_KEY", "") != "" or False)
+
+    # ── Hyperparameter cache DB ──
+    import sqlite3 as _sql
+    _hp_db = os.path.join(_ROOT, "astra_hparam_cache.db")
+    _chk("hparam_cache.db", lambda: os.path.exists(_hp_db) or False)
+
+    # ── CSV files ──
+    import glob as _gl
+    h1_csvs = _gl.glob(os.path.join(_CSV_BASE, "H1", "*.csv"))
+    _chk(f"CSVs H1 ({len(h1_csvs)} archivos)", lambda c=len(h1_csvs): c > 0 or False)
+
+    # ── Sentinel state ──
+    _chk(f"Market Sentinel ({_sentinel_state['state']}, {_sentinel_state['assets_monitored']} pares)",
+         lambda: True)
+
+    total = len(ok_checks) + len(warnings) + len(errors)
+    summary = (f"Self-Test VI completado: {len(ok_checks)} OK / "
+               f"{len(warnings)} WARN / {len(errors)} ERROR (total={total})")
+    return JSONResponse({
+        "ok": len(errors) == 0,
+        "summary": summary,
+        "ok_checks": ok_checks,
+        "warnings": warnings,
+        "errors": errors,
+    })
+
+
+@app.post("/api/roadmap6/sentinel/scan")
+def roadmap6_sentinel_scan() -> JSONResponse:
+    """Fuerza un ciclo de escaneo del Market Sentinel ahora mismo."""
+    try:
+        threading.Thread(target=_run_sentinel_scans, daemon=True).start()
+        return JSONResponse({"ok": True, "message": "Escaneo iniciado en background"})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/api/roadmap6/csvs_activos")
+def roadmap6_csvs_activos() -> JSONResponse:
+    """Lista el índice de CSVs activos (VI.3.C)."""
+    try:
+        result_str = dispatch_command("csvs activos")
+        return JSONResponse({"ok": True, "text": str(result_str)})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
 # Monta la SPA al final para que /api/* tenga prioridad sobre el catch-all estático.
 app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
 
 
 if __name__ == "__main__":
     import uvicorn
-    print("ASTRA Workspace disponible en http://localhost:8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    print(f"ASTRA Workspace disponible en http://localhost:{port}")
+    uvicorn.run(app, host="0.0.0.0", port=port)
