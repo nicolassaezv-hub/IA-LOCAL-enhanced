@@ -42,7 +42,7 @@ Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 
 # Estructura
 
-Esta IA Local se compone de mas de 40 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
+Esta IA Local se compone de mas de 200 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
 El programa puente (main.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
 
 Se incluyen 5 codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python.
