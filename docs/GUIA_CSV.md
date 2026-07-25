@@ -92,3 +92,28 @@ rolling info EURUSD H1     ← ver estado del dataset rolling de EURUSD/H1
 escanear csvs              ← registrar todos los CSVs en el índice
 csvs activos               ← ver los pares registrados
 ```
+
+## Comando: `generar csvs forex`
+
+Genera en lote todos los CSVs Forex que ASTRA necesita.
+
+- **Pares por defecto:** EURUSD GBPUSD USDJPY USDCHF AUDUSD NZDUSD USDCAD EURGBP EURJPY GBPJPY AUDJPY EURAUD XAUUSD XAGUSD
+- **Timeframes por defecto:** H1 · H4 · D1
+- **Fuente:** YahooProvider (real) con fallback automático a datos sintéticos.
+- **Destino:** `CSVs/<TF>/<PAIR>.csv` (crea las carpetas si no existen).
+
+Ejemplos:
+
+```
+generar csvs forex
+generar csvs forex H1,H4 800
+generar csvs forex EURUSD,GBPUSD,XAUUSD H1 300
+generar csvs forex sinteticos            # sin descargar, todo sintético
+generate forex csvs                       # alias inglés
+```
+
+Para usar la fuente real instala `yfinance`:
+
+```
+pip install yfinance
+```
