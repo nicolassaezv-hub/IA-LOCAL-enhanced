@@ -87,13 +87,15 @@ class CandlestickPatternDetector:
                 o1 < c2 and c1 > o2 and body1 < body2 * 0.6):
             detected.append({"name": "Bearish Harami", "bias": "bearish"})
 
+        # Morning / Evening Star (3 velas) — calcular body3 antes de usarlo
+        body3 = _body(o3, c3)
+
         # Morning Star (alcista — 3 velas)
         if (_is_bearish(o3, c3) and body2 < avg_body * 0.5 and _is_bullish(o1, c1) and
                 c1 > (o3 + c3) / 2 and body3 > avg_body * 0.8):
             detected.append({"name": "Morning Star", "bias": "bullish"})
 
         # Evening Star (bajista — 3 velas)
-        body3 = _body(o3, c3)
         if (_is_bullish(o3, c3) and body2 < avg_body * 0.5 and _is_bearish(o1, c1) and
                 c1 < (o3 + c3) / 2 and body3 > avg_body * 0.8):
             detected.append({"name": "Evening Star", "bias": "bearish"})

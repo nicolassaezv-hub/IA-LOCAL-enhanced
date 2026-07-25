@@ -25,8 +25,25 @@ from .hyperparameter_tuner import ForexHyperparameterTuner
 from .csv_adapter          import adapt_csv
 
 
+def _autoresolve_mtf(filepath: str, path_h4: str = None, path_d1: str = None):
+    """Si filepath contiene _H1, deriva _H4 y _D1 automáticamente cuando existen."""
+    import os
+    if not filepath or ("_H1" not in filepath and "_h1" not in filepath):
+        return path_h4, path_d1
+    if path_h4 is None:
+        cand = filepath.replace("_H1", "_H4").replace("_h1", "_h4")
+        if cand != filepath and os.path.exists(cand):
+            path_h4 = cand
+    if path_d1 is None:
+        cand = filepath.replace("_H1", "_D1").replace("_h1", "_d1")
+        if cand != filepath and os.path.exists(cand):
+            path_d1 = cand
+    return path_h4, path_d1
+
+
 def _load(filepath: str, pair: str = None,
           path_h4: str = None, path_d1: str = None) -> pd.DataFrame:
+    path_h4, path_d1 = _autoresolve_mtf(filepath, path_h4, path_d1)
     return adapt_csv(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
 
 
@@ -184,6 +201,26 @@ class ForexIntegratedPipeline:
 
         signal = self.predictor.signal(X_pred, pair=pair)
 
+        # ── VI.5.D: Candlestick pattern boost ────────────────────────
+        try:
+            from forex.prediction.candlestick_patterns import detect_patterns
+            cs = detect_patterns(df.tail(50))
+            signal["candlestick_patterns"] = cs.get("pattern_names", [])
+            signal["candlestick_bias"]     = cs.get("bias", "neutral")
+        except Exception:
+            pass
+
+        # ── Circuit Breaker guard ─────────────────────────────────────
+        try:
+            from forex.prediction.circuit_breaker import CircuitBreaker
+            cb = CircuitBreaker()
+            st = cb.check()
+            if st.get("open"):
+                signal["circuit_breaker"] = st
+                signal["signal"] = "HOLD"
+        except Exception:
+            pass
+
         # ── Roadmap V: Decision Engine (V.1) ────────────────────────
         try:
             from forex.prediction.roadmap_v_integration import run_decision_engine
@@ -199,6 +236,20 @@ class ForexIntegratedPipeline:
             signal["roadmap_v_risk_level"]   = getattr(_dec, "risk_level", "medium")
         except Exception:
             pass  # No bloquear si el módulo no está disponible
+
+        # ── V.14: Registrar predicción para Outcome Tracker ─────────
+        try:
+            from forex.prediction.outcome_tracker import OutcomeTracker
+            _sig  = signal.get("signal", signal.get("action", "HOLD"))
+            if _sig in ("BUY", "SELL"):
+                _price = float(df["close"].iloc[-1])
+                OutcomeTracker().record_prediction(
+                    pair=pair, timeframe="H1", signal=_sig,
+                    entry_price=_price,
+                    reliability_score=float(signal.get("confidence", 0.0)) * 100.0,
+                )
+        except Exception:
+            pass
 
         return {"type": "prediction", "rows_processed": len(df), **signal}
 

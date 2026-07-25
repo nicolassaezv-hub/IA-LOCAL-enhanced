@@ -147,7 +147,19 @@ class ForexHyperparameterTuner:
     # MAIN TUNE
     # ─────────────────────────────────────────────────────────
     def tune(self, X_train, y_train, X_val, y_val,
-             n_trials: int = 50, timeout: int = None) -> dict:
+             n_trials: int = 50, timeout: int = None,
+             horizon: str = "H1", csv_path: str = "") -> dict:
+
+        # VI.1.A — Smart Hyperparameter Cache
+        try:
+            from .hyperparameter_cache import HyperparameterCache
+            cached = HyperparameterCache().get(pair=self.pair, horizon=horizon, csv_path=csv_path)
+            if cached:
+                print(f"[TUNER] Cache HIT — reutilizando hiperparámetros para {self.pair} ({horizon})")
+                self.best_params = cached
+                return cached
+        except Exception:
+            pass
 
         if not _HAS_OPTUNA:
             print("[TUNER] Optuna no instalado. Instala: pip install optuna")
@@ -199,6 +211,14 @@ class ForexHyperparameterTuner:
 
         self.best_params = results
         self.save_params(results)
+        # VI.1.A — persistir en caché SQLite
+        try:
+            from .hyperparameter_cache import HyperparameterCache
+            HyperparameterCache().save(pair=self.pair, horizon=horizon,
+                                        params=results, csv_path=csv_path,
+                                        n_trials=n_trials)
+        except Exception:
+            pass
         print(f"[TUNER] Tuning completo. Params guardados para {self.pair}.")
         return results
 
