@@ -51,7 +51,13 @@ Se incluyen 5 codigos adicionales para verificar la integridad de los modulos pr
 
 - check_skeleton
 
-- check
+- self_doctor
+
+- test_csv
+
+- test_functionality
+
+
 Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
