@@ -361,6 +361,110 @@ INTENT_PATTERNS = {
         "generar reporte",
     ],
 
+    # ── Roadmap VI — Autonomía & Data Intelligence ─────────────────
+    "self_test": [
+        "self-test",
+        "selftest",
+        "check sistema",
+        "check system",
+        "diagnostico sistema",
+        "diagnóstico sistema",
+        "verificar sistema",
+    ],
+
+    "scheduler_control": [
+        "scheduler start",
+        "scheduler stop",
+        "scheduler info",
+        "scheduler status",
+        "iniciar scheduler",
+        "detener scheduler",
+        "estado scheduler",
+    ],
+
+    "circuit_control": [
+        "circuit status",
+        "circuit reset",
+        "circuit breaker status",
+        "circuit breaker reset",
+        "estado circuit",
+    ],
+
+    "hparam_cache_cmd": [
+        "hparam cache",
+        "hparam invalidar",
+        "hparam status",
+        "hyperparameter cache",
+        "cache hiperparametros",
+        "caché hiperparámetros",
+    ],
+
+    "model_cache_cmd": [
+        "model cache",
+        "model cache status",
+        "cache modelos",
+        "caché modelos",
+    ],
+
+    "rolling_dataset_cmd": [
+        "rolling info",
+        "rolling dataset",
+        "dataset rolling",
+        "estado dataset rolling",
+    ],
+
+    "opportunity_ranking_cmd": [
+        "opportunity ranking",
+        "oportunidades ranking",
+        "top señales",
+        "top signals",
+        "mejores señales",
+        "ranking señales",
+    ],
+
+    "candlestick_cmd": [
+        "candlestick",
+        "patrones vela",
+        "velas japonesas",
+        "patrones japoneses",
+    ],
+
+    "csv_scanner_cmd": [
+        "escanear csvs",
+        "csvs activos",
+        "escanear datos",
+        "indice csvs",
+        "índice csvs",
+    ],
+
+    "auto_update_cmd": [
+        "auto update",
+        "actualizar csvs",
+        "actualizar todos",
+        "update csvs",
+    ],
+
+    "adaptive_budget_cmd": [
+        "adaptive budget",
+        "budget adaptativo",
+        "presupuesto adaptativo",
+    ],
+
+    "quality_history_cmd": [
+        "quality history",
+        "historial calidad",
+        "historial precisión",
+        "historial precision",
+    ],
+
+    "forex_generate_csvs_cmd": [
+        "generar csvs forex",
+        "generar todos los csvs forex",
+        "generate forex csvs",
+        "crear csvs forex",
+        "descargar csvs forex",
+    ],
+
     "chat": []
 }
 
@@ -430,6 +534,21 @@ INTENT_TO_TOOL = {
     "sme_simulate":   "sme_simulate",
 
     "self_analysis": "self_analysis",
+
+    # ── Roadmap VI ────────────────────────────────────────────────
+    "self_test":              "self_test",
+    "scheduler_control":      "scheduler_control",
+    "circuit_control":        "circuit_control",
+    "hparam_cache_cmd":       "hparam_cache_cmd",
+    "model_cache_cmd":        "model_cache_cmd",
+    "rolling_dataset_cmd":    "rolling_dataset_cmd",
+    "opportunity_ranking_cmd": "opportunity_ranking_cmd",
+    "candlestick_cmd":        "candlestick_cmd",
+    "csv_scanner_cmd":        "csv_scanner_cmd",
+    "auto_update_cmd":        "auto_update_cmd",
+    "adaptive_budget_cmd":    "adaptive_budget_cmd",
+    "quality_history_cmd":    "quality_history_cmd",
+    "forex_generate_csvs_cmd": "forex_generate_csvs_cmd",
 }
 
 # ==========================================

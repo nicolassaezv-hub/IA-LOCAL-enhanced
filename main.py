@@ -761,6 +761,9 @@ def _ayuda():
   backtest forex <csv>           Backtest model on held-out data
   full forex <csv>               Train + Predict + Backtest in one shot
   scan forex <folder>            Scan all CSVs in folder, rank signals by strength
+  generar csvs forex [tf] [n]    Genera en lote CSVs Forex (Yahoo real -> sintético
+                                  fallback). Ej: generar csvs forex H1,H4 800
+                                  Alias: generate forex csvs / generar csvs forex sinteticos
   analiza forex <csv> <symbol>   Full technical report (RSI/MACD/EMA...)
   lista mercados                 Show all supported pairs & commodities
   historial forex <symbol>       View saved analysis history
@@ -1040,6 +1043,28 @@ def dispatch_command(user_input: str) -> str:
         elif user_input.startswith("escanear forex "):
             target = user_input[len("escanear forex "):].strip()
             respuesta = _forex_scan(target)
+
+        # ── FOREX: GENERAR TODOS LOS CSVs ─────────────────
+        elif (
+            user_input.lower().startswith("generar csvs forex")
+            or user_input.lower().startswith("generate forex csvs")
+            or user_input.lower().startswith("generar todos los csvs forex")
+        ):
+            try:
+                from forex.data.csv_bulk_generator import cmd_generate_all_csvs
+                # extraer lo que venga después del comando
+                _low = user_input.lower()
+                for _prefix in ("generar todos los csvs forex",
+                                "generar csvs forex",
+                                "generate forex csvs"):
+                    if _low.startswith(_prefix):
+                        _rest = user_input[len(_prefix):].strip()
+                        break
+                else:
+                    _rest = ""
+                respuesta = cmd_generate_all_csvs(_rest)
+            except Exception as ex:
+                respuesta = f"Error generando CSVs Forex: {ex}"
 
         # ── FOREX: BACKTEST ──────────────────────────────
         elif user_input.startswith("backtest forex "):

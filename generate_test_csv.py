@@ -124,8 +124,8 @@ def generate_synthetic_data(
     print(f"📊 Generating {n_candles} {timeframe} candles for {symbol}...")
     
     # Generate timestamps
-    freq_map = {"H1": "1H", "H4": "4H", "D1": "1D"}
-    freq = freq_map.get(timeframe, "1H")
+    freq_map = {"H1": "1h", "H4": "4h", "D1": "1D"}
+    freq = freq_map.get(timeframe, "1h")
     
     dates = pd.date_range(
         start=datetime(2023, 1, 1),

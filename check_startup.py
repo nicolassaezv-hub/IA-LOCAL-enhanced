@@ -624,8 +624,13 @@ def phase6_forex_pipeline():
         pipe   = ForexIntegratedPipeline()
         result = pipe.predict(csv_path, pair=PAIR)
         if isinstance(result, dict) and "error" in result:
-            _err(f"integrated_pipeline.predict(): {result['error']}")
-            ISSUES.append(f"integrated_pipeline.predict(): {result['error']}")
+            err_msg = result["error"]
+            # "No hay modelo entrenado" is expected on a fresh install — not a real failure
+            if "No hay modelo" in err_msg or "no model" in err_msg.lower():
+                _warn(f"integrated_pipeline: {err_msg} (train a model first with 'full forex <csv>')")
+            else:
+                _err(f"integrated_pipeline.predict(): {err_msg}")
+                ISSUES.append(f"integrated_pipeline.predict(): {err_msg}")
         else:
             action = result.get("action","?") if isinstance(result, dict) else "?"
             conf   = result.get("confidence",0) if isinstance(result, dict) else 0
@@ -634,8 +639,13 @@ def phase6_forex_pipeline():
             _ok(f"integrated_pipeline.predict(): pair={pair_r}  "
                 f"action={action}  conf={conf:.4f}")
     except Exception as e:
-        _err(f"integrated_pipeline.predict(): {e}")
-        ISSUES.append(f"integrated_pipeline: {e}")
+        err_str = str(e)
+        # "No hay modelo entrenado" is expected on a fresh install — not a real failure
+        if "No hay modelo" in err_str or "no model" in err_str.lower():
+            _warn(f"integrated_pipeline: {err_str} (train a model first with 'full forex <csv>')")
+        else:
+            _err(f"integrated_pipeline.predict(): {err_str}")
+            ISSUES.append(f"integrated_pipeline: {err_str}")
 
     # Limpiar CSV temporal
     try:

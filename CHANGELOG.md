@@ -4,6 +4,150 @@ Historial permanente de cambios del sistema. Cada entrada sigue el formato semá
 
 ---
 
+## [7.0.2] — Roadmap VI Display: Dashboard Activo completo + intents VI + endpoints /api/roadmap6/*
+**Fecha:** 2026-07-21
+**Tipo:** Feature + Bugfix
+**Estado:** ✅ Done
+
+### Cambios
+
+**workspace/server.py — Sección 15: Roadmap VI Data Intelligence (12 endpoints)**
+- `_auto_init_sentinel()`: auto-registra todos los pares con CSV real al arrancar (excluye TESTPAIR/TPAIR). EURJPY registrado en Market Sentinel desde el inicio.
+- `_sentinel_scan_loop()`: hilo background que escanea señales cada 20 min y actualiza `_sentinel_state`.
+- `_run_sentinel_scans()`: parsea señal (BUY/SELL/HOLD) y reliability desde el output de `analiza forex`.
+- `GET  /api/roadmap6/status` — estado completo del ecosistema VI: hparam_cache (SQLite), model_cache (SQLite), rolling datasets, scheduler, opportunity ranking vía dispatch_command.
+- `GET  /api/roadmap6/hparam_cache` — cache de hiperparámetros (texto completo).
+- `GET  /api/roadmap6/model_cache` — model versions log.
+- `POST /api/roadmap6/candlestick` — patrones de vela japonesa vía dispatch_command.
+- `GET  /api/roadmap6/opportunity_ranking?n=N` — OpScore ranking.
+- `POST /api/roadmap6/self_test` — diagnóstico directo: 24 checks (core, V, VI, API key, DBs, CSVs, Sentinel). 24 OK / 0 WARN / 0 ERROR.
+- `POST /api/roadmap6/sentinel/scan` — fuerza escaneo inmediato en background.
+- `GET  /api/roadmap6/csvs_activos` — índice de CSVs activos.
+
+**intent_router.py — Roadmap VI intents (12 nuevos)**
+- Añadidos: `self_test`, `scheduler_control`, `circuit_control`, `hparam_cache_cmd`, `model_cache_cmd`, `rolling_dataset_cmd`, `opportunity_ranking_cmd`, `candlestick_cmd`, `csv_scanner_cmd`, `auto_update_cmd`, `adaptive_budget_cmd`, `quality_history_cmd`.
+- Mapeados en `INTENT_TO_TOOL`.
+
+**workspace/static/js/active_dashboard.js — reescrito completo**
+- Sección V (Sentinel + Scheduler + Señales + Datasets): polling real a los endpoints de V.
+- Sección VI (Roadmap VI — Data Intelligence): polling a `/api/roadmap6/status` cada 30s.
+  - Hparam Cache card: entradas del caché de hiperparámetros con accuracy/trials.
+  - Model Cache card: modelos activos con accuracy/rows.
+  - Rolling Datasets card: estado de datasets (valid/issues).
+  - Opportunity Ranking: ranking real de señales por OpScore.
+  - Sentinel scan results: últimos resultados de predicción por par.
+  - Self-Test button: ejecuta diagnóstico completo, muestra OK/WARN/ERROR.
+  - Candlestick card: selector de CSV + botón de detección de patrones.
+
+**workspace/static/index.html — panel-sentinel subtitle actualizado**
+- `"Sistema Autónomo — Roadmap V + VI: Sentinel · Scheduler · Data Intelligence"`
+
+### Validación
+- `GET  /api/sentinel/status` → 200, state=running, assets_monitored=1 (EURJPY auto-init).
+- `GET  /api/roadmap6/status` → 200, hparam=1, model_cache=1, rolling=3, opportunity=4.
+- `POST /api/roadmap6/self_test` → 200, 24 OK / 0 WARN / 0 ERROR.
+- Todos los endpoints VI: 200 OK.
+- Comandos vía Chat: `hparam cache`, `model cache`, `opportunity ranking`, `circuit status` — todos responden con datos reales.
+
+---
+
+## [7.0.1] — Auditoría Workspace: Panel Configuración completo + /api/config
+**Fecha:** 2026-07-21
+**Tipo:** Bugfix + Feature
+**Estado:** ✅ Done
+
+### Cambios
+
+**workspace/server.py — nuevo endpoint `/api/config` (Sección 14)**
+- Devuelve versión (leída de CHANGELOG.md), estado del sistema, API keys activas,
+  modelo configurado, tools cargadas, memorias, módulos Workspace, Python, plataforma,
+  uptime formateado, rutas del sistema (root, CSVs, uploads).
+
+**workspace/static/index.html — Panel Configuración reemplazado**
+- Se elimina el placeholder "próximamente".
+- Nuevo UI: tiles de estado, tabla de API Keys (Groq/OpenAI), tabla de entorno técnico,
+  rutas del workspace en monospace, y botón de diagnóstico rápido (`astra doctor`).
+
+**workspace/static/js/app.js — `configPanelLoad()` + `configRunDoctor()`**
+- `configPanelLoad()`: llama a `/api/config`, renderiza todos los tiles y tablas.
+- `configRunDoctor()`: llama a `/api/chat` con el comando `astra doctor` y muestra el
+  resultado directamente en el panel.
+- Init lazy (solo al hacer clic en el botón de nav), con botón de Refrescar.
+
+**workspace/static/css/style.css — clases `td.kpi-good` / `td.kpi-bad`**
+- Añadidas para colorear estado de API keys (verde/rojo) en celdas de tabla.
+
+### Validación
+- `GET /api/config` → 200 OK, todos los campos presentes.
+- Panel Configuración carga datos reales al hacer clic.
+
+---
+
+## v7.0.0 — Roadmap IV: ASTRA Workspace (SPA completa)
+**Fecha:** 2026-07-21
+**Tipo:** Feature mayor
+**Estado:** ✅ Done
+
+### Workspace web — interfaz visual completa
+
+**workspace/server.py — Servidor FastAPI (1536 líneas)**
+- Reemplaza el api-server Node.js como servidor principal de Replit (puerto 8080, path `/`).
+- Sirve la SPA estática + 20 endpoints `/api/*` propios.
+- Lanza ASTRA en proceso interno: carga `tool_registry`, `cognitive_center`, `evolution_center`, `activity_center`, `notification_center`, `live_thinking`, `project_memory`.
+- Telemetría en tiempo real: CPU/RAM (psutil), Active Engine, Cognitive Core, Evolution Engine.
+
+**workspace/static/ — SPA vanilla JS (9 módulos)**
+- `index.html` — layout completo con barra lateral, paneles, telemetría inferior
+- `app.js` — navegación, chat, status polling, notificaciones push, Live Thinking
+- `forex_lab.js` — selector de par/CSV, gráfico OHLC interactivo, entrenamiento con progreso por etapa
+- `prediction_lab.js` — formulario de análisis ML, pipeline generado, historial de reportes
+- `business_lab.js` — análisis de negocio (KPIs + forecast + scorecard + plan de acción)
+- `cognitive_center.js` — memoria explorable: conversaciones, proyectos, timeline, knowledge graph
+- `evolution_center.js` — ciclo evolutivo: propuestas, aprobación/rechazo, reglas, rollback
+- `activity_center.js` — feed unificado en vivo con filtros por tipo
+- `active_dashboard.js` — Market Sentinel + Scheduler + señales activas + datasets
+- `live_thinking.js` — franja visual de progreso en tareas largas
+- `notification_center.js` — notificaciones push internas
+- `css/style.css` — tema oscuro completo con variables CSS
+
+### Endpoints FastAPI añadidos
+
+| Endpoint | Descripción |
+|---|---|
+| `GET /api/status` | Estado: modelo, tools, uptime |
+| `GET /api/telemetry` | CPU/RAM, Active Engine, Cognitive Core, Evolution Engine |
+| `POST /api/chat` | Chat real con ASTRA |
+| `GET /api/chat/history` | Historial desde memoria.db |
+| `POST /api/upload` | Subida de archivos |
+| `GET /api/forex/pairs` | Pares disponibles |
+| `GET /api/forex/csvs` | CSVs por timeframe |
+| `GET /api/forex/csv/ohlc` | Datos OHLC para gráfico |
+| `POST /api/forex/train/start` | Lanza entrenamiento en background |
+| `GET /api/forex/train/status` | Progreso del entrenamiento |
+| `POST /api/lab/run` | Prediction Lab sobre CSV |
+| `GET /api/lab/projects` | Reportes del Prediction Lab |
+| `POST /api/business/analyze` | Análisis de negocio completo |
+| `GET /api/cognitive/*` | Memoria explorable |
+| `GET /api/evolution/*` | Ciclo evolutivo |
+| `GET /api/activity/feed` | Feed unificado en vivo |
+| `GET /api/sentinel/status` | Market Sentinel |
+| `GET /api/scheduler/tasks` | Scheduler inteligente |
+| `GET /api/signals/active` | Señales activas (Reliability ≥ 50) |
+| `GET /api/datasets/status` | Estado de todos los datasets CSV |
+
+### Validación final
+- Workspace operativo en Replit: Chat funcional con llama-3.3-70b-versatile, 143 tools cargadas, 256 memorias
+- Todos los 8 módulos críticos importan OK: prediction_lab, cognitive_center, evolution_center, activity_center, notification_center, live_thinking, project_memory, forex.business
+- Barra telemetría en tiempo real: CPU/RAM live, motor evolutivo, Cognitive Core
+- Live Thinking operativo durante entrenamiento Forex y Prediction Lab
+
+### Documentación actualizada
+- `MANUAL.md` → v7.0 con Parte 0 (Workspace), tabla de endpoints, troubleshooting actualizado
+- `replit.md` (raíz) → sección Workspace completa con paneles y endpoints
+- `docs/ORACLE_CLOUD.md` → arquitectura actualizada con `workspace/server.py` como servicio
+
+---
+
 ## v6.1.0 — Integración & Validación Completa
 **Fecha:** 2026-07-20
 **Tipo:** Improvement + Feature

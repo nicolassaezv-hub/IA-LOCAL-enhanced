@@ -1,11 +1,9 @@
 {
-  "ts": "2026-07-20T21:11:42.905098",
-  "ok": 42,
-  "warn": 10,
+  "ts": "2026-07-24T13:33:36.522908",
+  "ok": 54,
+  "warn": 5,
   "fail": 0,
-  "issues": [
-    "Entrena modelos con: full forex <csv>"
-  ],
+  "issues": [],
   "checks": [
     {
       "category": "dependencies",
@@ -88,13 +86,13 @@
     {
       "category": "dependencies",
       "label": "yfinance (Yahoo Finance)",
-      "status": "warn",
+      "status": "ok",
       "detail": ""
     },
     {
       "category": "dependencies",
       "label": "redis",
-      "status": "warn",
+      "status": "ok",
       "detail": ""
     },
     {
@@ -106,7 +104,7 @@
     {
       "category": "dependencies",
       "label": "torch (PyTorch)",
-      "status": "warn",
+      "status": "ok",
       "detail": ""
     },
     {
@@ -131,13 +129,37 @@
       "category": "configuration",
       "label": "csv_dir",
       "status": "ok",
-      "detail": "7 csvs"
+      "detail": "223 csvs"
     },
     {
       "category": "models",
-      "label": "pkl_files",
-      "status": "warn",
-      "detail": ""
+      "label": "ensemble_AUDCAD_20260629_114126.pkl",
+      "status": "ok",
+      "detail": "25.1d ago"
+    },
+    {
+      "category": "models",
+      "label": "ensemble_AUDUSD_20260629_114220.pkl",
+      "status": "ok",
+      "detail": "25.1d ago"
+    },
+    {
+      "category": "models",
+      "label": "ensemble_AUDUSD_20260629_123358.pkl",
+      "status": "ok",
+      "detail": "25.0d ago"
+    },
+    {
+      "category": "models",
+      "label": "ensemble_BCHUSD_20260629_123611.pkl",
+      "status": "ok",
+      "detail": "25.0d ago"
+    },
+    {
+      "category": "models",
+      "label": "ensemble_BTCUSD_20260629_123048.pkl",
+      "status": "ok",
+      "detail": "25.0d ago"
     },
     {
       "category": "models",
@@ -154,14 +176,14 @@
     {
       "category": "apis",
       "label": "binance",
-      "status": "warn",
+      "status": "ok",
       "detail": ""
     },
     {
       "category": "apis",
       "label": "yahoo",
-      "status": "warn",
-      "detail": "not installed"
+      "status": "ok",
+      "detail": ""
     },
     {
       "category": "mt5",
@@ -173,7 +195,7 @@
       "category": "databases",
       "label": "memoria.db",
       "status": "ok",
-      "detail": "16 tables"
+      "detail": "17 tables"
     },
     {
       "category": "databases",
@@ -201,45 +223,63 @@
     },
     {
       "category": "datasets",
-      "label": "EURJPY.csv",
+      "label": "ADAUSD.csv",
+      "status": "ok",
+      "detail": "3141 rows"
+    },
+    {
+      "category": "datasets",
+      "label": "AUDCAD.csv",
+      "status": "ok",
+      "detail": "1426 rows"
+    },
+    {
+      "category": "datasets",
+      "label": "AUDCHF.csv",
       "status": "ok",
       "detail": "1427 rows"
     },
     {
       "category": "datasets",
-      "label": "EURJPY.csv",
+      "label": "AUDJPY.csv",
       "status": "ok",
-      "detail": "12222 rows"
+      "detail": "1426 rows"
     },
     {
       "category": "datasets",
-      "label": "TESTPAIR.csv",
+      "label": "AUDNZD.csv",
       "status": "ok",
-      "detail": "80 rows"
+      "detail": "1426 rows"
     },
     {
       "category": "datasets",
-      "label": "TPAIR.csv",
+      "label": "AUDUSD.csv",
       "status": "ok",
-      "detail": "101 rows"
+      "detail": "1428 rows"
     },
     {
       "category": "datasets",
-      "label": "TPAIR2.csv",
+      "label": "BCHUSD.csv",
       "status": "ok",
-      "detail": "101 rows"
+      "detail": "3141 rows"
     },
     {
       "category": "datasets",
-      "label": "TPAIR3.csv",
+      "label": "BRENT_CRUDE_OIL.csv",
       "status": "ok",
-      "detail": "101 rows"
+      "detail": "3005 rows"
     },
     {
       "category": "datasets",
-      "label": "EURJPY.csv",
+      "label": "BTCUSD.csv",
+      "status": "warn",
+      "detail": "5.1% NaN"
+    },
+    {
+      "category": "datasets",
+      "label": "CADCHF.csv",
       "status": "ok",
-      "detail": "5497 rows"
+      "detail": "1427 rows"
     },
     {
       "category": "integration",
@@ -317,7 +357,7 @@
       "category": "api",
       "label": "api_server",
       "status": "warn",
-      "detail": ""
+      "detail": "not reachable"
     }
   ]
 }

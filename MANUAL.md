@@ -1,5 +1,49 @@
 # ASTRA — Manual de Usuario
-**Sistema AI Modular · Consultor PYME · Forex Intelligence · v6.1.0**
+**Sistema AI Modular · Consultor PYME · Forex Intelligence · Workspace Web · v7.0**
+
+---
+
+## PARTE 0 — ASTRA WORKSPACE (interfaz visual)
+
+El Workspace es la interfaz visual completa de ASTRA. Disponible en dos modos:
+
+### En Replit
+Se abre automáticamente en el panel Preview. El workflow **"artifacts/api-server: ASTRA Workspace"** lo lanza al iniciar el proyecto.
+
+### En Windows (local)
+```cmd
+cd artifacts\astra
+pip install fastapi uvicorn python-multipart
+python workspace\server.py
+:: → Abre http://localhost:8000 en el navegador
+```
+
+### Paneles del Workspace
+
+| Panel | Acceso | Qué hace |
+|---|---|---|
+| **Chat** | Barra lateral → Chat | Conversación con ASTRA (Llama-3.3-70B), historial de sesión, subida de archivos |
+| **Forex Lab** | Barra lateral → Forex Lab | Selector de par/CSV, gráfico de velas OHLC interactivo, entrenamiento con barra de progreso visual por etapa |
+| **Prediction Lab** | Barra lateral → Prediction Lab | Análisis ML de cualquier dataset: describe el problema, ASTRA genera pipeline, valida y guarda el reporte |
+| **Business Lab** | Barra lateral → Business Lab | KPIs + health score + forecast + scorecard PYME + plan de acción sobre CSV de negocio |
+| **Cognitive Core** | Barra lateral → Cognitive Core | Memoria explorable: conversaciones, proyectos, modelos, timeline, knowledge graph, búsqueda natural |
+| **Evolution Engine** | Barra lateral → Evolution Engine | Ciclo evolutivo: propuestas, aprobación/rechazo manual, reglas constitucionales, audit, rollback |
+| **Activity Center** | Barra lateral → Activity Center | Feed unificado en vivo: alertas, señales, comandos, eventos |
+| **Dashboard Activo** | Barra lateral → Dashboard Activo | Market Sentinel (vigilancia de pares), Scheduler (estado de tareas), señales activas, datasets |
+| **Configuración** | Barra lateral → Configuración | Estado del sistema, API key, versión |
+
+### Funciones globales del Workspace
+
+**Barra superior**: modelo AI activo · proyecto activo · tools cargados · reloj · notificaciones push
+
+**Live Thinking**: franja visual que aparece durante tareas largas (entrenamiento Forex, Prediction Lab). Muestra en qué etapa está ASTRA en tiempo real.
+
+**Barra de telemetría inferior**: CPU · RAM · Active Engine (watchers/jobs) · Cognitive Core (memorias totales, turnos de sesión) · Evolution Engine (eventos/propuestas pendientes) · peticiones API · tiempo promedio de respuesta.
+
+**Subida de archivos**: el botón 📎 en el Chat permite subir CSV, PDF, Word, Excel. Se guardan en `workspace/uploads/` y quedan disponibles para todos los paneles.
+
+### Notificaciones push
+El sistema envía notificaciones automáticas para: entrenamiento completado · predicción lista · problema detectado · propuesta de evolución. Se acumulan en el botón 🔔 de la barra superior.
 
 ---
 
@@ -27,14 +71,20 @@ venv\Scripts\activate.bat          (CMD)
 
 :: 4. Instalar dependencias
 pip install -r artifacts\astra\requirements.txt
+pip install fastapi uvicorn python-multipart
 
 :: 5. Configurar la API key de Groq (una sola vez)
 setx GROQ_API_KEY "gsk_tu_key_aqui"
 :: Cierra y vuelve a abrir el terminal para que tome efecto
 
-:: 6. Lanzar ASTRA
+:: 6a. Lanzar ASTRA CLI
 cd artifacts\astra
 python main.py
+
+:: 6b. Lanzar ASTRA Workspace (interfaz web)
+cd artifacts\astra
+python workspace\server.py
+:: → Abre http://localhost:8000
 ```
 
 > **Alternativa a setx**: crea un archivo `.env` dentro de `artifacts\astra\` con:
@@ -49,15 +99,18 @@ python main.py
 ```bash
 # 1. Instalar dependencias
 pip install -r artifacts/astra/requirements.txt
+pip install fastapi uvicorn python-multipart
 
-# 2. La API key ya está configurada en Replit Secrets como GROQ_API_KEY
-#    (no se necesita ningún paso extra en Replit)
+# 2. La API key ya está en Replit Secrets como GROQ_API_KEY
 
-# 3. Lanzar ASTRA
+# 3a. Lanzar CLI
 cd artifacts/astra && python main.py
+
+# 3b. Lanzar Workspace
+cd artifacts/astra && python workspace/server.py
 ```
 
-En Replit el workflow **"ASTRA AI"** hace el paso 3 automáticamente al abrir el proyecto.
+En Replit los workflows **"ASTRA AI"** y **"artifacts/api-server: ASTRA Workspace"** hacen todo esto automáticamente.
 
 ---
 
@@ -83,6 +136,7 @@ También disponible desde el CLI con: `astra doctor`
 ### Instalar paquetes opcionales
 
 ```bash
+pip install fastapi uvicorn python-multipart  # Workspace web (requerido para server.py)
 pip install yfinance         # Yahoo Finance — datos Forex en tiempo real
 pip install torch            # PyTorch — deep learning
 pip install tensorflow       # TensorFlow
@@ -94,10 +148,12 @@ pip install python-dotenv    # carga .env automáticamente
 
 ---
 
-## PARTE 2 — COMANDOS DISPONIBLES
+## PARTE 2 — COMANDOS DISPONIBLES (CLI)
 
 Una vez dentro del asistente (prompt `Tú:`), escribe en lenguaje natural.
 El archivo CSV/Excel puede estar en cualquier ruta relativa a `artifacts/astra/`.
+
+> La mayor parte de estos comandos también están disponibles desde el **Workspace web** de forma visual.
 
 ---
 
@@ -106,7 +162,7 @@ El archivo CSV/Excel puede estar en cualquier ruta relativa a `artifacts/astra/`
 | Comando | Qué hace |
 |---|---|
 | `astra doctor` | Diagnóstico completo: dependencias, APIs, modelos, DBs, scheduler, datasets (10 categorías) |
-| `self-test` | Diagnóstico semáforo rápido del sistema (check_system.py) |
+| `self-test` | Diagnóstico semáforo rápido del sistema |
 | `analiza astra` | Genera reporte completo del sistema (REPORT DD-MM.md) |
 | `self analysis` | Alias en inglés de analiza astra |
 | `ayuda` | Lista todos los comandos disponibles |
@@ -114,39 +170,19 @@ El archivo CSV/Excel puede estar en cualquier ruta relativa a `artifacts/astra/`
 
 ---
 
-### API REST Interna
+### API REST Interna (legacy CLI)
 
-La API interna permite que el Workplace u otras aplicaciones consulten ASTRA por HTTP.
+> En el Workspace web el servidor FastAPI corre automáticamente y no necesitas `api start`.
 
 | Comando | Qué hace |
 |---|---|
-| `api start` | Inicia el servidor REST en `http://localhost:8766` |
-| `api stop` | Detiene el servidor REST |
-| `api status` | Muestra si la API está activa y en qué puerto |
-
-**Endpoints disponibles** (una vez iniciada la API):
-
-| Endpoint | Descripción |
-|---|---|
-| `GET /api/astra/health` | Health check básico |
-| `GET /api/astra/status` | Estado: CPU, RAM, scheduler, pares activos |
-| `GET /api/astra/predictions?pair=EURUSD&limit=20` | Predicciones recientes por par |
-| `GET /api/astra/ranking?top_n=10` | Top BUY/SELL por Opportunity Score |
-| `GET /api/astra/outcomes?pair=EURUSD` | Estadísticas de outcomes reales |
-| `GET /api/astra/history?limit=20` | Historial de calidad de modelos |
-| `GET /api/astra/datasets` | Lista de datasets activos en el índice |
-| `GET /api/astra/scheduler` | Estado del scheduler autónomo |
-| `GET /api/astra/doctor` | Resultado del último diagnóstico |
-| `POST /api/astra/signal` | Enviar señales activas para ranking |
-| `POST /api/astra/state` | Actualizar estado del sistema |
-
-> Estos mismos endpoints también están disponibles desde el api-server de Replit en `/api/astra/*` (con proxy automático hacia Python).
+| `api start` | Inicia el servidor REST legado en `http://localhost:8766` |
+| `api stop` | Detiene el servidor REST legado |
+| `api status` | Muestra si la API legada está activa y en qué puerto |
 
 ---
 
 ### Development Log
-
-Sistema de registro del desarrollo que reemplaza la creación de nuevos Roadmaps.
 
 | Comando | Qué hace |
 |---|---|
@@ -154,17 +190,10 @@ Sistema de registro del desarrollo que reemplaza la creación de nuevos Roadmaps
 | `dev log add [tipo] título \| detalle` | Añadir entrada al log |
 | `dev log bugfix título` | Registrar una corrección |
 | `dev log feature título` | Registrar una nueva función |
-| `dev log release <versión>` | Ver Release Notes de una versión (ej: `dev log release 6.0.0`) |
+| `dev log release <versión>` | Ver Release Notes de una versión |
 | `dev log versions` | Listar versiones disponibles |
 
 **Tipos válidos**: `feature`, `bugfix`, `optimization`, `refactor`, `docs`, `release`
-
-**Ejemplos:**
-```
-dev log add feature Nueva pantalla de resumen | muestra KPIs en tiempo real
-dev log bugfix Crash al cargar CSV vacío
-dev log release 6.0.0
-```
 
 ---
 
@@ -212,9 +241,9 @@ El sistema reconoce 41 pares: EUR/USD, GBP/USD, USD/JPY, BTC/USD, commodities, e
 | Momentum | RSI-14, Williams %R, Estocástico (14,3) |
 | Tendencia | MACD (12/26/9), EMA 20/50/150, ADX-14, cruce EMA |
 | Volatilidad | ATR-14, Bollinger Bands (20), ATR relativo |
-| Ciclo / extremos | CCI-20 — sobrecompra/sobreventa sin límite |
-| Volumen | OBV, MFI-14 — RSI ponderado por volumen |
-| Momentum % | ROC-10 — cambio normalizado, comparable entre pares |
+| Ciclo / extremos | CCI-20 |
+| Volumen | OBV, MFI-14 |
+| Momentum % | ROC-10 |
 | Patrones vela | Doji, Hammer, Shooting Star, Engulfing alcista/bajista |
 
 ---
@@ -234,17 +263,16 @@ El sistema reconoce 41 pares: EUR/USD, GBP/USD, USD/JPY, BTC/USD, commodities, e
 ### Branch 4 — Consultor PYME Avanzado
 
 Los cuatro módulos del consultor estratégico. Todos generan narración automática de **Llama-3.3-70B** al finalizar.
+También disponibles en el panel **Business Lab** del Workspace.
 
 #### `diagnóstico pyme`
 ```
 diagnóstico pyme ventas.csv
 ```
-Scorecard Multidimensional con tres dimensiones:
+Scorecard Multidimensional:
 - **Salud Financiera** (40%): márgenes bruto/neto, ratio gastos, saldo mínimo
 - **Salud de Crecimiento** (35%): CAGR, tendencia MoM, YoY
 - **Nivel de Riesgo** (25%): volatilidad, concentración, estabilidad
-
-Resultado: puntuación 0–100 por dimensión + puntuación global + KPI table + alertas.
 
 #### `forecast negocio`
 ```
@@ -252,13 +280,12 @@ forecast negocio ventas.csv
 forecast negocio ventas.csv 12
 ```
 Proyección con tres bandas: Optimista (+1σ), Esperado (lineal), Conservador (−1σ).
-Por defecto 6 meses; añade un número al final para otro plazo.
 
 #### `plan de accion`
 ```
 plan de accion ventas.csv
 ```
-Llama-3.3-70B genera un Plan Estratégico con 5 recomendaciones priorizadas (acción + impacto + plazo).
+Llama-3.3-70B genera 5 recomendaciones estratégicas priorizadas (acción + impacto + plazo).
 
 #### `simular escenario`
 ```
@@ -279,6 +306,7 @@ Simulación What-If: tabla Antes/Después con delta de KPIs y scorecard completo
 | `full forex eurusd datos.csv` | Pipeline completo: entrena modelo + Quality Gate + backtest + predicción |
 | `predice eurusd datos.csv` | Predicción con Decision Engine (señal + SL/TP + posición) |
 | `quality eurusd datos.csv` | Evaluación con Quality Gate (métricas de validación) |
+| `generar csvs forex [tf] [n]` | Genera en lote todos los CSVs Forex en `CSVs/<TF>/<PAIR>.csv` (Yahoo real → sintético fallback). Ej: `generar csvs forex H1,H4 800`. Alias: `generate forex csvs`. |
 
 #### Análisis técnico avanzado
 
@@ -300,32 +328,19 @@ Simulación What-If: tabla Antes/Después con delta de KPIs y scorecard completo
 | `retrain_check eurusd` | Check de reentrenamiento adaptativo |
 | `portfolio_ranking BUY 0.7` | Ranking multi-activo por señal y confianza mínima |
 
-#### Market Sentinel
-
-| Comando | Qué hace |
-|---|---|
-| `sentinel_status` | Estado del vigilante de mercado |
-| `sentinel_signals eurusd 10` | Últimas 10 señales del sentinel para ese par |
-
 ---
 
 ### Roadmap VI — Autonomización & Data Intelligence
 
-#### Gestión de datos (Data Sources unificadas)
+#### Gestión de datos
 
 | Comando | Qué hace |
 |---|---|
-| `descargar datos EURUSD H1` | Descarga datos de Yahoo Finance/Binance (500 velas por defecto) |
+| `descargar datos EURUSD H1` | Descarga datos de Yahoo Finance/Binance (500 velas) |
 | `descargar datos EURUSD H1 1000` | Descarga N velas |
 | `migrar csv datos.csv EURUSD H1` | Migra un CSV existente al formato rolling |
 | `escanear csvs` | Escanea el directorio CSVs/ y registra todos los pares |
 | `csvs activos` | Lista el índice de CSVs registrados |
-| `rolling info EURUSD H1` | Estado del RollingDataset de un par (filas, última actualización) |
-
-**Fuentes de datos soportadas:**
-- **Yahoo Finance** — 24+ pares Forex, commodities, índices (pip install yfinance)
-- **Binance** — Criptomonedas vía API pública (sin autenticación)
-- **MetaTrader 5** — Solo Windows, fuente primaria si está disponible
 
 #### Scheduler Autónomo
 
@@ -336,24 +351,6 @@ Simulación What-If: tabla Antes/Después con delta de KPIs y scorecard completo
 | `scheduler info` | Estado, tareas registradas y próxima ejecución |
 | `auto update` | Actualiza todos los CSVs activos ahora mismo |
 
-> Para operación 24/7 en Oracle Cloud, usar `python scheduler_service.py` como servicio systemd (ver `docs/ORACLE_CLOUD.md`).
-
-#### Modelos y calidad
-
-| Comando | Qué hace |
-|---|---|
-| `hparam cache` | Estado del caché de hiperparámetros (VI.1) |
-| `hparam invalidar EURUSD` | Fuerza re-tune en el próximo entrenamiento |
-| `model cache` | Estado del Model Cache Manager (evita re-entrenar si datos <5% distintos) |
-| `adaptive budget EURUSD` | Historial de budgets de Optuna adaptativos |
-| `quality history` | Historial de precisión verificada (últimos 30 días) |
-
-#### Patrones de vela
-
-| Comando | Qué hace |
-|---|---|
-| `candlestick datos.csv` | Detecta 9 patrones japoneses (Doji, Engulfing, Hammer, Morning Star, Evening Star, Harami, Shooting Star) |
-
 #### Ranking de oportunidades
 
 | Comando | Qué hace |
@@ -361,8 +358,7 @@ Simulación What-If: tabla Antes/Después con delta de KPIs y scorecard completo
 | `opportunity ranking` | Top 10 BUY/SELL por Opportunity Score compuesto |
 | `opportunity ranking 20` | Top 20 BUY/SELL |
 
-Fórmula del Opportunity Score:
-`Reliability × 0.35 + WinRate × 0.30 + Régimen × 0.20 + MTF × 0.15`
+Fórmula: `Reliability × 0.35 + WinRate × 0.30 + Régimen × 0.20 + MTF × 0.15`
 
 ---
 
@@ -382,7 +378,6 @@ Fórmula del Opportunity Score:
 | `macd` / `macd_signal` | ☑ Opcional | Se recalcula si NaN |
 | `atr_14` | ☑ Opcional | Se recalcula si NaN o = 0 |
 | `ema_20` / `ema_50` / `ema_150` | ☑ Opcional | Se recalcula si NaN |
-| `bollinger_upper_20` / `bollinger_lower_20` | ☑ Opcional | Se recalcula si NaN |
 
 > Los pares se detectan automáticamente desde el nombre del archivo (ej: `aud_usd_dataset.csv` → AUDUSD).
 
@@ -409,17 +404,17 @@ ASTRA usa **Llama-3.3-70B** (vía Groq). Si `GROQ_API_KEY` no está configurada,
 ### Memoria
 - **Sesión activa**: ASTRA recuerda los últimos 20 turnos en RAM.
 - **Persistencia**: Los turnos se guardan en `memoria.db` (SQLite). Al reiniciar, carga los últimos 6 intercambios.
-- La memoria se limpia sola al superar el límite. No necesitas hacer nada.
 
 ### Bases de datos internas
 
 | Archivo | Contenido |
 |---|---|
-| `memoria.db` | Memoria principal: predicciones, outcomes, retrain history, señales |
+| `memoria.db` | Memoria principal: conversaciones, predicciones, outcomes, señales |
 | `astra_hparam_cache.db` | Caché de hiperparámetros por par/horizonte (TTL 7 días) |
 | `astra_model_quality.db` | Historial de precisión verificada por modelo |
 | `dev_log.db` | Development Log: features, bugfixes, releases |
 | `astra_csv_index.json` | Índice de datasets activos (par, timeframe, ruta, filas) |
+| `project_memory.db` | Proyectos y tareas (Cognitive Core) |
 
 ---
 
@@ -437,17 +432,18 @@ Oracle Cloud VM
 │     ├── AutonomousScheduler (H1/H4/D1)
 │     └── AutoUpdater (descarga datos automáticamente)
 │
-├── astra-api.service        (systemd)   → astra_api.py (puerto 8766)
+├── astra-workspace.service  (systemd)   → workspace/server.py (FastAPI, puerto 8000)
+│     └── Sirve la SPA completa + todos los endpoints /api/*
 │
-└── nginx                                → proxy HTTPS a la API
-      └── /api/astra/* → localhost:8766
+└── nginx                                → proxy HTTPS
+      └── /* → localhost:8000
 ```
 
-### Punto de entrada del servicio
+### Punto de entrada del Workspace en producción
 ```bash
-python scheduler_service.py
+cd /path/to/artifacts/astra
+python workspace/server.py
 ```
-Inicia el Scheduler + API REST en un solo proceso, listo para systemd.
 
 ---
 
@@ -456,12 +452,13 @@ Inicia el Scheduler + API REST en un solo proceso, listo para systemd.
 | Versión | Nombre | Estado |
 |---|---|---|
 | v1–v4 | Core, Forex básico, BI Engine, PYME Consultant | ✅ Completo |
-| v5.x | Roadmap V — Quality Gate, Decision Engine, Risk Engine, Outcome Tracker, Portfolio Ranker | ✅ Completo |
+| v5.x | Roadmap V — Quality Gate, Decision Engine, Risk Engine, Outcome Tracker | ✅ Completo |
 | v6.0 | Roadmap VI — Autonomización, Data Intelligence, Scheduler 24/7 | ✅ Completo |
 | v6.1 | Integración & Validación — Doctor, API REST, Dev Log, Oracle Cloud | ✅ Completo |
-| v7.x | Industry Packs (Retail, Restaurante, E-Commerce, Manufactura) | Próximo |
-| v8.x | Multi-Agent ASTRA | Futuro |
-| v9.x | Executive Copilot | Futuro |
+| **v7.0** | **Roadmap IV — Workspace SPA completa** (Chat, Forex Lab, Prediction Lab, Business Lab, Cognitive Core, Evolution Engine, Activity Center, Dashboard Activo) | **✅ Completo** |
+| v8.x | Industry Packs (Retail, Restaurante, E-Commerce, Manufactura) | Próximo |
+| v9.x | Multi-Agent ASTRA | Futuro |
+| v10.x | Executive Copilot | Futuro |
 
 > A partir de v6.1, los cambios se registran directamente con `dev log add` en lugar de crear nuevos documentos de Roadmap.
 
@@ -473,16 +470,19 @@ Inicia el Scheduler + API REST en un solo proceso, listo para systemd.
 |---|---|---|
 | `GROQ_API_KEY not found` | Key no configurada | Sigue los pasos de la Parte 1 |
 | `ModuleNotFoundError: openai` | Falta el paquete | `pip install openai` |
+| `ModuleNotFoundError: fastapi` | Falta el paquete | `pip install fastapi uvicorn python-multipart` |
 | `lightgbm` crash en Linux | Falta libgomp | El workflow lo configura automáticamente vía `LD_LIBRARY_PATH` |
 | Torch / TensorFlow WARN | Son opcionales | Ignóralos o instala con `pip install torch` |
 | `redis` WARN | Es opcional | Ignóralo o instala con `pip install redis` |
 | `yfinance` no disponible | No instalado | `pip install yfinance` (necesario para `descargar datos`) |
 | Sin audio/TTS en Linux | pyttsx3 silenciado | Solo disponible en Windows con dispositivo de audio |
 | CSV no reconocido | Columnas con nombres distintos | Renombra a `date`, `revenue`, `expenses` (ver Parte 3) |
-| API 503 desde Node.js | Python API no iniciada | Ejecuta `api start` en el CLI de ASTRA primero |
+| Workspace no carga en Replit | Puerto 8080 ocupado | `lsof -i :8080 -t \| xargs kill -9`, luego reinicia el workflow |
+| Chat del Workspace sin respuesta | API key no configurada | Verifica `GROQ_API_KEY` en Replit Secrets |
 | Binance 451 | Restricción geográfica | Usar Yahoo Finance como fuente alternativa |
 | `astra doctor` muestra FAIL | Dependencia crítica faltante | Sigue la recomendación que muestra el doctor |
+| Forex Lab — CSV no aparece | CSV fuera de `CSVs/H1/` o `workspace/uploads/` | Mueve el CSV a `CSVs/H1/EURUSD.csv` o súbelo desde el Workspace |
 
 ---
 
-*ASTRA v6.1.0 — Julio 2026*
+*ASTRA v7.0 — Workspace Edition — Julio 2026*

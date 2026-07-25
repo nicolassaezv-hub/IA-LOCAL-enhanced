@@ -55,11 +55,52 @@ def run_service():
             ok_c = sum(1 for r in results if r.get("ok"))
             logger.info(f"  [H4] {ok_c}/{len(results)} pares actualizados")
 
-        # Registrar tareas por timeframe
-        scheduler.add_job_seconds("update_h1", interval_s=3600,  fn=_update_h1)
-        scheduler.add_job_seconds("update_h4", interval_s=14400, fn=_update_h4)
+        def _update_d1():
+            logger.info("  [D1] Actualizando datasets D1...")
+            try:
+                results = updater.update_all(bars_fetch=3)
+                ok_c = sum(1 for r in results if r.get("ok"))
+                logger.info(f"  [D1] {ok_c}/{len(results)} pares actualizados")
+            except Exception as e:
+                logger.error(f"  [D1] error: {e}")
 
-        logger.info("  ✅ Tareas registradas: update_h1 (1h), update_h4 (4h)")
+        def _outcome_eval():
+            """Evalúa predicciones pendientes cuando cierra la vela siguiente."""
+            try:
+                from forex.prediction.outcome_tracker import OutcomeTracker
+                from forex.data.data_router import fetch_data
+                def _price(pair: str):
+                    df = fetch_data(pair, tf="H1", bars=1)
+                    if df is not None and len(df) > 0:
+                        return float(df["close"].iloc[-1])
+                    return None
+                tracker = OutcomeTracker()
+                n = tracker.auto_evaluate(price_func=_price, max_age_hours=1)
+                if n:
+                    logger.info(f"  [OUTCOME] {n} predicciones evaluadas")
+            except Exception as e:
+                logger.warning(f"  [OUTCOME] skip: {e}")
+
+        def _retrain_check():
+            """Revisa reentrenamiento adaptativo por par."""
+            try:
+                from forex.prediction.retrain_manager import RetrainManager
+                mgr = RetrainManager()
+                for pair in ("EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"):
+                    dec = mgr.check_retrain_needed(pair=pair)
+                    if dec.needed:
+                        logger.info(f"  [RETRAIN] {pair} → {dec.trigger.value}: {dec.reason}")
+            except Exception as e:
+                logger.warning(f"  [RETRAIN] skip: {e}")
+
+        # Registrar tareas por timeframe + tareas adaptativas
+        scheduler.add_job_seconds("update_h1",     interval_s=3600,  fn=_update_h1)
+        scheduler.add_job_seconds("update_h4",     interval_s=14400, fn=_update_h4)
+        scheduler.add_job_seconds("update_d1",     interval_s=86400, fn=_update_d1)
+        scheduler.add_job_seconds("outcome_eval",  interval_s=1800,  fn=_outcome_eval)
+        scheduler.add_job_seconds("retrain_check", interval_s=21600, fn=_retrain_check)
+
+        logger.info("  ✅ Tareas registradas: update_h1/h4/d1 + outcome_eval + retrain_check")
         logger.info("  Iniciando bucle del scheduler...")
 
         scheduler.start(daemon=False)

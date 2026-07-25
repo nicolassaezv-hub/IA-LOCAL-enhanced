@@ -194,3 +194,20 @@ TOOL_REGISTRY = {
 ---
 
 *ASTRA — Roadmap V · Referencia de Comandos CLI*
+
+---
+
+## Generación masiva de CSVs (nuevo)
+
+```
+generar csvs forex                          # majors × H1,H4,D1 · 500 velas · Yahoo→sintético
+generar csvs forex H1,H4 800                # solo H1 y H4, 800 velas
+generar csvs forex EURUSD,GBPUSD H1 300     # pares específicos
+generar csvs forex sinteticos               # fuerza fuente sintética (sin red)
+generate forex csvs                         # alias inglés
+```
+
+Guarda en la estructura estándar `CSVs/<TF>/<PAIR>.csv`. Si `yfinance` está
+instalado y hay conexión descarga datos reales; en caso contrario genera
+OHLCV sintético válido (mismo motor que `generate_test_csv.py`) para poder
+entrenar y probar sin depender de la red.

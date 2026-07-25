@@ -2,7 +2,7 @@
 ASTRA Internal API Server
 Servidor REST interno (http.server) para que el Workplace consulte predicciones,
 rankings, estado del sistema y estadísticas.
-Puerto: 8766 (interno, no expuesto al exterior)
+Puerto: 8000 (por defecto; sobreescribible con ASTRA_API_PORT)
 Desacoplado del backend Python del frontend Node.js.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 _BASE = Path(__file__).parent
-_PORT = int(os.environ.get("ASTRA_API_PORT", "8766"))
+_PORT = int(os.environ.get("ASTRA_API_PORT", "8000"))
 
 # ── State helpers ─────────────────────────────────────────────────────────────
 
@@ -202,7 +202,29 @@ def _handle_doctor(_params: dict) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def _handle_root(_params: dict) -> dict:
+    return {
+        "ok": True,
+        "name": "ASTRA API",
+        "version": "6.1.1",
+        "port": _PORT,
+        "ts": datetime.now().isoformat(),
+        "endpoints": [
+            "/api/astra/health",
+            "/api/astra/status",
+            "/api/astra/predictions",
+            "/api/astra/ranking",
+            "/api/astra/outcomes",
+            "/api/astra/history",
+            "/api/astra/datasets",
+            "/api/astra/scheduler",
+            "/api/astra/doctor",
+        ],
+    }
+
+
 _ROUTES: dict[str, callable] = {
+    "/":                      _handle_root,
     "/api/astra/status":      _handle_status,
     "/api/astra/predictions": _handle_predictions,
     "/api/astra/ranking":     _handle_ranking,
@@ -211,8 +233,103 @@ _ROUTES: dict[str, callable] = {
     "/api/astra/datasets":    _handle_datasets,
     "/api/astra/scheduler":   _handle_scheduler,
     "/api/astra/doctor":      _handle_doctor,
-    "/api/astra/health":      lambda p: {"ok": True, "ts": datetime.now().isoformat(), "version": "6.0.0"},
+    "/api/astra/health":      lambda p: {"ok": True, "ts": datetime.now().isoformat(), "version": "6.1.1"},
 }
+
+
+# ── Root HTML dashboard (served to browsers at /) ─────────────────────────────
+
+_ROOT_HTML = """<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>ASTRA API — v6.1.1</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Courier New',monospace;background:#0d1117;color:#e6edf3;min-height:100vh;padding:40px 20px;display:flex;justify-content:center}
+    .wrap{max-width:720px;width:100%}
+    .logo{font-size:2.2rem;font-weight:700;color:#58a6ff;letter-spacing:5px}
+    .sub{color:#8b949e;font-size:.8rem;margin-top:4px;margin-bottom:30px}
+    .badge{display:inline-flex;align-items:center;gap:8px;background:#1c2a1c;border:1px solid #2ea043;border-radius:20px;padding:6px 16px;margin-bottom:30px}
+    .dot{width:9px;height:9px;border-radius:50%;background:#3fb950;box-shadow:0 0 6px #3fb950;animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    .badge-text{color:#3fb950;font-size:.85rem;font-weight:600}
+    .section{margin-bottom:28px}
+    .section-title{color:#8b949e;font-size:.68rem;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid #21262d;padding-bottom:6px;margin-bottom:12px}
+    .ep-grid{display:grid;gap:6px}
+    .ep{display:grid;grid-template-columns:1fr 1fr auto;align-items:center;background:#161b22;border:1px solid #21262d;border-radius:6px;padding:10px 14px;gap:12px;text-decoration:none;transition:border-color .15s}
+    .ep:hover{border-color:#388bfd}
+    .ep-path{color:#58a6ff;font-size:.85rem}
+    .ep-desc{color:#8b949e;font-size:.8rem}
+    .ep-badge{font-size:.7rem;padding:2px 8px;border-radius:10px;text-align:center}
+    .get{background:#0d2f5a;color:#58a6ff;border:1px solid #1f6feb}
+    .status-box{background:#161b22;border:1px solid #21262d;border-radius:6px;padding:14px 16px;font-size:.8rem}
+    .status-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #21262d}
+    .status-row:last-child{border-bottom:none}
+    .skey{color:#8b949e}
+    .sval{color:#e6edf3}
+    .sval.ok{color:#3fb950}
+    .footer{margin-top:28px;font-size:.7rem;color:#484f58;line-height:1.8}
+    code{background:#21262d;padding:1px 6px;border-radius:4px;color:#e6edf3}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">ASTRA</div>
+  <div class="sub">Modular AI System &nbsp;&middot;&nbsp; v6.1.1 &nbsp;&middot;&nbsp; Python REST API &nbsp;&middot;&nbsp; puerto 8000</div>
+  <div class="badge"><div class="dot"></div><span class="badge-text">API Online</span></div>
+
+  <div class="section">
+    <div class="section-title">Estado del sistema</div>
+    <div class="status-box" id="sysbox">
+      <div class="status-row"><span class="skey">Servidor</span><span class="sval ok">http://localhost:8000</span></div>
+      <div class="status-row"><span class="skey">Version</span><span class="sval">6.1.1</span></div>
+      <div class="status-row"><span class="skey">CPU</span><span class="sval" id="cpu">cargando...</span></div>
+      <div class="status-row"><span class="skey">RAM</span><span class="sval" id="ram">cargando...</span></div>
+      <div class="status-row"><span class="skey">Pares activos</span><span class="sval" id="pairs">cargando...</span></div>
+      <div class="status-row"><span class="skey">Scheduler</span><span class="sval" id="sched">cargando...</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Endpoints disponibles</div>
+    <div class="ep-grid">
+      <a class="ep" href="/api/astra/health"><span class="ep-path">/api/astra/health</span><span class="ep-desc">Health check</span><span class="ep-badge get">GET</span></a>
+      <a class="ep" href="/api/astra/status"><span class="ep-path">/api/astra/status</span><span class="ep-desc">CPU, RAM, scheduler, pares</span><span class="ep-badge get">GET</span></a>
+      <a class="ep" href="/api/astra/predictions"><span class="ep-path">/api/astra/predictions</span><span class="ep-desc">Predicciones recientes</span><span class="ep-badge get">GET</span></a>
+      <a class="ep" href="/api/astra/ranking"><span class="ep-path">/api/astra/ranking</span><span class="ep-desc">Top oportunidades Forex</span><span class="ep-badge get">GET</span></a>
+      <a class="ep" href="/api/astra/outcomes"><span class="ep-path">/api/astra/outcomes</span><span class="ep-desc">Estadísticas de outcomes</span><span class="ep-badge get">GET</span></a>
+      <a class="ep" href="/api/astra/datasets"><span class="ep-path">/api/astra/datasets</span><span class="ep-desc">Datasets activos</span><span class="ep-badge get">GET</span></a>
+      <a class="ep" href="/api/astra/scheduler"><span class="ep-path">/api/astra/scheduler</span><span class="ep-desc">Estado del scheduler</span><span class="ep-badge get">GET</span></a>
+      <a class="ep" href="/api/astra/doctor"><span class="ep-path">/api/astra/doctor</span><span class="ep-desc">Diagnóstico completo</span><span class="ep-badge get">GET</span></a>
+    </div>
+  </div>
+
+  <div class="footer">
+    Accede desde ASTRA CLI escribiendo <code>api start</code> &nbsp;&middot;&nbsp;
+    Proxy Node.js disponible en <code>/api/astra/*</code><br/>
+    Para Oracle Cloud ver <code>docs/ORACLE_CLOUD.md</code>
+  </div>
+</div>
+<script>
+  async function refreshStatus() {
+    try {
+      const r = await fetch('/api/astra/status');
+      const d = await r.json();
+      if (d.ok !== false) {
+        document.getElementById('cpu').textContent  = d.cpu_percent != null ? d.cpu_percent + '%' : '—';
+        document.getElementById('ram').textContent  = d.ram_percent != null ? d.ram_percent + '%' : '—';
+        document.getElementById('pairs').textContent = Array.isArray(d.active_pairs) ? d.active_pairs.length : (d.active_pairs ?? '—');
+        document.getElementById('sched').textContent = d.scheduler_running ? 'Activo' : 'Inactivo';
+      }
+    } catch(e) { /* silencioso */ }
+  }
+  refreshStatus();
+  setInterval(refreshStatus, 10000);
+</script>
+</body>
+</html>"""
 
 
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
@@ -223,13 +340,26 @@ class AstraAPIHandler(BaseHTTPRequestHandler):
         pass  # silenciar logs de acceso
 
     def _send_json(self, data: dict, status: int = 200):
-        body = json.dumps(data, default=str).encode()
+        body = json.dumps(data, default=str, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_html(self, html: str, status: int = 200):
+        body = html.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _wants_html(self) -> bool:
+        accept = self.headers.get("Accept", "")
+        return "text/html" in accept
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -242,6 +372,11 @@ class AstraAPIHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
         path   = parsed.path
+
+        # Root path: serve HTML dashboard for browsers, JSON for API clients
+        if path == "/" and self._wants_html():
+            self._send_html(_ROOT_HTML)
+            return
 
         handler = _ROUTES.get(path)
         if handler:

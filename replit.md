@@ -1,40 +1,51 @@
-# ASTRA — AI Local Modular System
+# ASTRA v7.0 — Workspace Edition
+**Sistema AI Modular · Consultor PYME · Forex Intelligence**
 
-A comprehensive local AI assistant and Forex analytics platform built in Python. It wraps OpenAI's API with dozens of specialized tools: document processing, web scraping, audio/video, machine learning (PyTorch, TensorFlow, Keras), security utilities, and an integrated Forex ML prediction pipeline.
+Este archivo es la copia del `replit.md` raíz dentro del proyecto ASTRA.
+La versión canónica está en `../../replit.md` (raíz del monorepo).
 
-## How to Run
+---
 
-Start via the **"Start application"** workflow (console output). The app opens an interactive CLI prompt `Tú:` where you type commands in Spanish or English.
+## Arranque rápido (Replit)
 
-## Requirements
+Dos workflows se inician automáticamente:
 
-**You must add your OpenAI API key** as an environment secret named `OPENAI_API_KEY` — the app uses GPT-3.5-turbo for the AI assistant and falls back to it for unrecognized commands.
+1. **"ASTRA AI"** — CLI de terminal: `cd artifacts/astra && python main.py`
+2. **"artifacts/api-server: ASTRA Workspace"** — Workspace web en el panel Preview (FastAPI en puerto 8080)
 
-## Key Commands
+La API key `GROQ_API_KEY` ya está configurada en Replit Secrets.
 
-| Command | What it does |
-|---|---|
-| `analiza forex` | Forex market analysis |
-| `estado pc` | Show CPU / RAM usage |
-| `lee pdf <path>` | Read a PDF file |
-| `extrae web <url>` | Scrape a webpage |
-| `traducir <text>` | Translate text |
-| `torch demo` | PyTorch tensor demo |
-| `tensorflow demo` | TensorFlow demo |
-| `sklearn demo` | Scikit-learn demo |
-| `hash pass <text>` | Bcrypt hash a password |
-| `crear jwt` | Generate a JWT token |
-| `integral` | Symbolic integration demo |
-| `salir` / `exit` | Quit |
+## Arranque rápido (Windows local)
 
-## Linux Adaptations Made
+```cmd
+:: CLI
+cd artifacts\astra
+python main.py
 
-- **Redis**: Optional (used for key-value memory). Not required to run.
-- **PyQt5 GUI**: Available but headless in server mode.
-- **Audio I/O**: SpeechRecognition / pyttsx3 require microphone/speakers (not available in hosted env).
-- **Windows-only packages**: `keyboard`, `mouse`, `pywin32`, `Kivy` — gracefully skipped.
-- **matplotlib**: Set to non-interactive `Agg` backend.
+:: Workspace web
+cd artifacts\astra
+pip install fastapi uvicorn python-multipart
+python workspace\server.py
+:: → http://localhost:8000
+```
 
-## User Preferences
+## Diagnóstico
+```bash
+cd artifacts/astra
+python check_startup.py     # rápido
+python astra_doctor.py      # completo (10 categorías)
+```
 
-- Project is a Python CLI, not a web app.
+## Documentación completa
+- `MANUAL.md` — Manual completo de usuario (v7.0)
+- `docs/ORACLE_CLOUD.md` — Despliegue en Oracle Cloud
+- `FOREX_USER_GUIDE.md` — Guía específica de Forex
+- `docs/GUIA_CSV.md` — Formato de CSVs aceptados
+
+## Workspace — Paneles disponibles
+Chat · Forex Lab · Prediction Lab · Business Lab · Cognitive Core · Evolution Engine · Activity Center · Dashboard Activo · Configuración
+
+## Stack
+- Python 3.11 · FastAPI + uvicorn · Groq (Llama-3.3-70B)
+- ML: XGBoost + LightGBM + scikit-learn + Optuna
+- Memoria: SQLite (memoria.db + especializados) · Redis/FAISS opcionales
