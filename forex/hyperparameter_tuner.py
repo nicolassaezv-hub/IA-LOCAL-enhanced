@@ -1,262 +1,214 @@
 """
-dataset_builder.py
+hyperparameter_tuner.py — Optuna-based hyperparameter optimizer
 
-FIX #1: predict_features() retorna la última vela real (sin drop de horizonte).
-FIX #3: Timeouts (ni TP ni SL) se excluyen del training.
-FIX #9: PAIR_CONFIG con horizon/rr_ratio óptimos por instrumento.
-
-NUEVO: rr_ratio=1.0 como default universal más balanceado.
-NUEVO: Las features MTF reales (h4_*, d1_*) se incluyen automáticamente si están presentes.
-NUEVO: filter_cols_by_variance() elimina features con varianza casi cero (ruido).
+FIX #5: El objetivo de Optuna es maximizar precision con umbral >= 0.65
+         (coherente con el nuevo MIN_PRECISION_THRESHOLD del trainer).
 """
 
-import pandas as pd
+import json
+import os
+import warnings
 import numpy as np
 
-# ─────────────────────────────────────────────────────────────
-# CONFIG POR PAR
-# ─────────────────────────────────────────────────────────────
-PAIR_CONFIG = {
-    "EURUSD": {"horizon": 12, "rr_ratio": 1.0},
-    "GBPUSD": {"horizon": 12, "rr_ratio": 1.0},
-    "USDJPY": {"horizon": 12, "rr_ratio": 1.0},
-    "USDCHF": {"horizon": 12, "rr_ratio": 1.0},
-    "AUDUSD": {"horizon": 10, "rr_ratio": 1.0},
-    "USDCAD": {"horizon": 10, "rr_ratio": 1.0},
-    "NZDUSD": {"horizon": 10, "rr_ratio": 1.0},
-    "AUDCAD": {"horizon": 10, "rr_ratio": 1.0},
-    "EURGBP": {"horizon": 10, "rr_ratio": 1.0},
-    "EURJPY": {"horizon": 10, "rr_ratio": 1.2},
-    "GBPJPY": {"horizon":  8, "rr_ratio": 1.2},
-    "XAUUSD": {"horizon":  8, "rr_ratio": 1.5},
-    "XAGUSD": {"horizon":  8, "rr_ratio": 1.5},
-    "USOIL":  {"horizon":  8, "rr_ratio": 1.5},
-    "UKOIL":  {"horizon":  8, "rr_ratio": 1.5},
-    "BTCUSD": {"horizon":  6, "rr_ratio": 2.0},
-    "ETHUSD": {"horizon":  6, "rr_ratio": 2.0},
-}
+from sklearn.metrics import precision_score
 
-DEFAULT_PAIR_CONFIG = {"horizon": 10, "rr_ratio": 1.0}
+warnings.filterwarnings("ignore")
 
+try:
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    _HAS_OPTUNA = True
+except ImportError:
+    _HAS_OPTUNA = False
 
-def get_pair_config(pair: str) -> dict:
-    if not pair:
-        return DEFAULT_PAIR_CONFIG
-    clean = pair.upper().replace("/", "").replace("_", "").replace("-", "")
-    return PAIR_CONFIG.get(clean, DEFAULT_PAIR_CONFIG)
+try:
+    from xgboost import XGBClassifier
+    _HAS_XGB = True
+except ImportError:
+    _HAS_XGB = False
+
+try:
+    import lightgbm as lgb
+    _HAS_LGB = True
+except ImportError:
+    _HAS_LGB = False
+
+PARAMS_DIR = "models/forex/params"
+
+# FIX #5: Coherente con MIN_PRECISION_THRESHOLD
+MIN_PRECISION_THRESHOLD = 0.65
 
 
-class DatasetBuilder:
+class ForexHyperparameterTuner:
+    """
+    Optuna-driven tuner para XGBoost y LightGBM.
+    Objetivo: maximizar precision en val con umbral >= 0.65.
+    """
 
-    def __init__(self, df: pd.DataFrame):
-        self.df = df.copy()
+    def __init__(self, pair: str = "default", params_dir: str = PARAMS_DIR):
+        self.pair       = pair.upper().replace("/", "").replace("_", "").replace("-", "")
+        self.params_dir = params_dir
+        os.makedirs(self.params_dir, exist_ok=True)
+        self.best_params: dict = {}
 
-    def process_time(self):
-        if "timestamp" in self.df.columns:
-            ts = pd.to_datetime(self.df["timestamp"])
-            self.df["hour"]        = ts.dt.hour
-            self.df["day_of_week"] = ts.dt.dayofweek
-        else:
-            self.df["hour"]        = 0
-            self.df["day_of_week"] = 0
-        return self
+    def _params_path(self) -> str:
+        return os.path.join(self.params_dir, f"best_params_{self.pair}.json")
 
-    def encode_session(self):
-        mapping = {"Tokyo": 0, "London": 1, "NewYork": 2}
-        if "session" in self.df.columns:
-            self.df["session"] = self.df["session"].map(mapping).fillna(-1)
-        else:
-            self.df["session"] = -1
-        return self
+    def save_params(self, params: dict):
+        with open(self._params_path(), "w") as f:
+            json.dump(params, f, indent=2)
+        print(f"[TUNER] Best params guardados → {self._params_path()}")
 
-    def encode_pair(self):
-        if "pair" in self.df.columns:
-            unique_pairs = self.df["pair"].unique()
-            pair_map     = {p: i for i, p in enumerate(unique_pairs)}
-            self.df["pair"] = self.df["pair"].map(pair_map)
-        else:
-            self.df["pair"] = 0
-        return self
+    def load_params(self) -> dict:
+        path = self._params_path()
+        if not os.path.exists(path):
+            return {}
+        with open(path) as f:
+            params = json.load(f)
+        print(f"[TUNER] Params cargados para {self.pair}")
+        return params
 
     # ─────────────────────────────────────────────────────────
-    # TARGET — RISK/REWARD AWARE (sin timeouts en train)
+    # XGBOOST OBJECTIVE — maximizar precision real con threshold busqueda
     # ─────────────────────────────────────────────────────────
-    def create_target(self, horizon: int = 10, rr_ratio: float = 1.0):
-        close   = self.df["close"].values
-        atr_col = self.df.get("ATR_14")
-        if atr_col is None or atr_col.isna().all():
-            atr = (pd.Series(close) * 0.01).values
-        else:
-            atr = atr_col.fillna(pd.Series(close) * 0.01).values
+    def _xgb_objective(self, trial, X_train, y_train, X_val, y_val, scale):
+        from sklearn.isotonic import IsotonicRegression
+        from sklearn.metrics import precision_recall_curve
 
-        n      = len(close)
-        target = np.full(n, -1, dtype=int)
+        params = {
+            "n_estimators":       trial.suggest_int("n_estimators", 200, 1000),
+            "max_depth":          trial.suggest_int("max_depth", 3, 10),
+            "learning_rate":      trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
+            "subsample":          trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree":   trial.suggest_float("colsample_bytree", 0.4, 1.0),
+            "min_child_weight":   trial.suggest_int("min_child_weight", 1, 20),
+            "gamma":              trial.suggest_float("gamma", 0.0, 2.0),
+            "reg_alpha":          trial.suggest_float("reg_alpha", 0.0, 2.0),
+            "reg_lambda":         trial.suggest_float("reg_lambda", 0.5, 5.0),
+            "scale_pos_weight":   scale,
+            "random_state":       42,
+            "eval_metric":        "logloss",
+            "early_stopping_rounds": 30,
+            "verbosity":          0,
+        }
+        model = XGBClassifier(**params)
+        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
 
-        for i in range(n - 1):
-            entry = close[i]
-            sl    = atr[i]
-            tp    = atr[i] * rr_ratio
+        # Calibración + búsqueda de umbral con prec >= 0.65
+        probs_train = model.predict_proba(X_train)[:, 1]
+        ir = IsotonicRegression(out_of_bounds="clip")
+        ir.fit(probs_train, y_train)
+        cal_probs = ir.predict(model.predict_proba(X_val)[:, 1])
 
-            if sl <= 0 or np.isnan(sl) or np.isnan(tp) or tp <= 0:
-                continue
-
-            tp_price = entry + tp
-            sl_price = entry - sl
-
-            hit_tp = False
-            hit_sl = False
-
-            for j in range(i + 1, min(i + 1 + horizon, n)):
-                high = self.df["high"].iloc[j]
-                low  = self.df["low"].iloc[j]
-                if high >= tp_price:
-                    hit_tp = True
-                    break
-                if low <= sl_price:
-                    hit_sl = True
-                    break
-
-            if hit_tp and not hit_sl:
-                target[i] = 1
-            elif hit_sl and not hit_tp:
-                target[i] = 0
-
-        self.df["target"] = target
-        return self
+        prec_arr, _, thresh_arr = precision_recall_curve(y_val, cal_probs)
+        prec_arr = prec_arr[:-1]
+        mask = prec_arr >= MIN_PRECISION_THRESHOLD
+        if mask.any():
+            return float(prec_arr[mask].max())
+        return float(prec_arr.max())
 
     # ─────────────────────────────────────────────────────────
-    # FEATURE COLUMNS
-    # Incluye features MTF reales (h4_*, d1_*) si están presentes
+    # LIGHTGBM OBJECTIVE
     # ─────────────────────────────────────────────────────────
-    def build_X(self):
-        always_include = [
-            "open", "high", "low", "close",
-            "returns", "hour", "day_of_week", "session", "pair",
-        ]
-        optional_csv = [
-            "volume", "spread",
-            "RSI_14", "MACD", "MACD_signal", "MACD_hist",
-            "ATR_14", "EMA20", "EMA50", "EMA200",
-            "volatility_24h", "BB_upper", "BB_lower",
-        ]
-        engineered_prefixes = (
-            "close_lag_", "returns_lag_",
-            "rolling_mean_", "rolling_std_",
-            "hl_range", "oc_range", "body_strength",
-            "upper_shadow", "lower_shadow",
-            "trend_strength", "volatility_regime",
-            "momentum_",
-            "ADX_14", "plus_DI", "minus_DI",
-            "stoch_k", "stoch_d", "stoch_cross",
-            "williams_r",
-            "tick_vol_flow", "obv",
-            "bb_width", "bb_squeeze", "bb_pct_b",
-            "pattern_",
-            "ema20_above_50", "ema50_above_200", "ema_cross_signal",
-            "rsi_overbought", "rsi_oversold", "rsi_slope",
-            "price_vs_ema200", "price_in_range_50", "ema20_slope",
-            "session_tokyo", "session_london", "session_newyork",
-            # MTF reales
-            "h4_", "d1_",
-            # Nuevos features alta señal
-            "atr_ratio", "atr_expansion", "trend_align_score",
-            "close_vs_h4", "rsi_divergence", "candle_body_ratio",
-            "momentum_accel", "volume_relative", "h4_rsi_extreme",
-        )
-        engineered_cols = [
-            c for c in self.df.columns
-            if any(c.startswith(p) for p in engineered_prefixes)
-        ]
-        use_optional = [c for c in optional_csv if c in self.df.columns]
-        all_features  = list(dict.fromkeys(always_include + use_optional + engineered_cols))
-        present       = [c for c in all_features if c in self.df.columns]
-        # Excluir siempre: timestamp, target y pair (pair tiene varianza 0
-        # en CSVs de un solo instrumento y causa feature mismatch train/predict)
-        exclude = {"timestamp", "target", "pair"}
-        present = [c for c in present if c not in exclude]
-        return self.df[present]
+    def _lgb_objective(self, trial, X_train, y_train, X_val, y_val, scale):
+        from sklearn.isotonic import IsotonicRegression
+        from sklearn.metrics import precision_recall_curve
 
-    def build_y(self):
-        return self.df["target"]
+        params = {
+            "n_estimators":      trial.suggest_int("n_estimators", 200, 1000),
+            "max_depth":         trial.suggest_int("max_depth", 3, 10),
+            "learning_rate":     trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
+            "subsample":         trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree":  trial.suggest_float("colsample_bytree", 0.4, 1.0),
+            "min_child_samples": trial.suggest_int("min_child_samples", 5, 50),
+            "num_leaves":        trial.suggest_int("num_leaves", 20, 150),
+            "reg_alpha":         trial.suggest_float("reg_alpha", 0.0, 2.0),
+            "reg_lambda":        trial.suggest_float("reg_lambda", 0.5, 5.0),
+            "scale_pos_weight":  scale,
+            "random_state":      42,
+            "verbose":           -1,
+        }
+        model = lgb.LGBMClassifier(**params)
+        model.fit(X_train, y_train)
+
+        probs_train = model.predict_proba(X_train)[:, 1]
+        ir = IsotonicRegression(out_of_bounds="clip")
+        ir.fit(probs_train, y_train)
+        cal_probs = ir.predict(model.predict_proba(X_val)[:, 1])
+
+        prec_arr, _, thresh_arr = precision_recall_curve(y_val, cal_probs)
+        prec_arr = prec_arr[:-1]
+        mask = prec_arr >= MIN_PRECISION_THRESHOLD
+        if mask.any():
+            return float(prec_arr[mask].max())
+        return float(prec_arr.max())
 
     # ─────────────────────────────────────────────────────────
-    # FILTER LOW VARIANCE FEATURES
-    # Elimina features con std ≈ 0 (constantes) que no aportan señal
+    # MAIN TUNE
     # ─────────────────────────────────────────────────────────
+    def tune(self, X_train, y_train, X_val, y_val,
+             n_trials: int = 50, timeout: int = None) -> dict:
+
+        if not _HAS_OPTUNA:
+            print("[TUNER] Optuna no instalado. Instala: pip install optuna")
+            return {}
+
+        n_pos = int(y_train.sum())
+        n_neg = int((y_train == 0).sum())
+        scale = n_neg / n_pos if n_pos > 0 else 1.0
+
+        print(f"\n{'='*60}")
+        print(f" OPTUNA TUNING — {self.pair}")
+        print(f" Objetivo: MAXIMIZAR PRECISION ≥ {MIN_PRECISION_THRESHOLD:.0%}")
+        print(f" Train: {len(X_train)} | Val: {len(X_val)} | Trials: {n_trials}")
+        print(f"{'='*60}\n")
+
+        results = {}
+
+        if _HAS_XGB:
+            print(f"[TUNER] Tuning XGBoost ({n_trials} trials)...")
+            xgb_study = optuna.create_study(
+                direction="maximize",
+                sampler=optuna.samplers.TPESampler(seed=42),
+                pruner=optuna.pruners.MedianPruner(n_startup_trials=10),
+            )
+            xgb_study.optimize(
+                lambda t: self._xgb_objective(t, X_train, y_train, X_val, y_val, scale),
+                n_trials=n_trials, timeout=timeout, show_progress_bar=False,
+            )
+            best_xgb           = xgb_study.best_params
+            best_xgb["scale_pos_weight"] = scale
+            print(f"[TUNER] XGBoost mejor precision calibrada: {xgb_study.best_value:.4f}")
+            results["xgb"] = best_xgb
+
+        if _HAS_LGB:
+            print(f"[TUNER] Tuning LightGBM ({n_trials} trials)...")
+            lgb_study = optuna.create_study(
+                direction="maximize",
+                sampler=optuna.samplers.TPESampler(seed=42),
+                pruner=optuna.pruners.MedianPruner(n_startup_trials=10),
+            )
+            lgb_study.optimize(
+                lambda t: self._lgb_objective(t, X_train, y_train, X_val, y_val, scale),
+                n_trials=n_trials, timeout=timeout, show_progress_bar=False,
+            )
+            best_lgb           = lgb_study.best_params
+            best_lgb["scale_pos_weight"] = scale
+            print(f"[TUNER] LightGBM mejor precision calibrada: {lgb_study.best_value:.4f}")
+            results["lgb"] = best_lgb
+
+        self.best_params = results
+        self.save_params(results)
+        print(f"[TUNER] Tuning completo. Params guardados para {self.pair}.")
+        return results
+
     @staticmethod
-    def filter_low_variance(X: pd.DataFrame, threshold: float = 1e-6) -> pd.DataFrame:
-        # Siempre preservar MTF reales y columnas clave aunque tengan varianza baja
-        protected = {c for c in X.columns if c.startswith("h4_") or c.startswith("d1_")}
-        var  = X.var()
-        keep = list(var[var > threshold].index) + [c for c in protected if c not in var[var > threshold].index]
-        keep = [c for c in X.columns if c in keep]  # mantener orden original
-        removed = len(X.columns) - len(keep)
-        if removed > 0:
-            print(f"[DATASET] Features baja varianza eliminadas: {removed}")
-        return X[keep]
-
-    # ─────────────────────────────────────────────────────────
-    # BUILD — para TRAINING
-    # ─────────────────────────────────────────────────────────
-    def build(self, horizon: int = 10, rr_ratio: float = 1.0):
-        self.process_time()
-        self.encode_session()
-        self.encode_pair()
-        self.create_target(horizon=horizon, rr_ratio=rr_ratio)
-
-        X = self.build_X()
-        y = self.build_y()
-
-        X = X.replace([np.inf, -np.inf], np.nan).dropna()
-        y = y.loc[X.index]
-
-        if len(X) > horizon:
-            X = X.iloc[:-horizon]
-            y = y.iloc[:-horizon]
-
-        # Eliminar timeouts
-        valid_mask = y != -1
-        X = X[valid_mask]
-        y = y[valid_mask]
-
-        # Eliminar features de baja varianza
-        X = self.filter_low_variance(X)
-
-        timeout_pct = (1 - valid_mask.sum() / len(valid_mask)) * 100
-        buy_pct     = (y == 1).sum() / len(y) * 100
-        sell_pct    = (y == 0).sum() / len(y) * 100
-        print(f"[DATASET] Filas train: {len(X)} | BUY: {buy_pct:.1f}% | SELL: {sell_pct:.1f}% | Timeout: {timeout_pct:.1f}%")
-
-        return X, y
-
-    # ─────────────────────────────────────────────────────────
-    # PREDICT FEATURES — última vela real (FIX #1)
-    # ─────────────────────────────────────────────────────────
-    def predict_features(self, n_rows: int = 1,
-                          train_columns: list = None) -> pd.DataFrame:
-        """
-        Extrae features de la(s) última(s) vela(s) para predicción.
-        Si se pasan train_columns, alinea exactamente con las columnas
-        del modelo entrenado (evita feature mismatch).
-        """
-        self.process_time()
-        self.encode_session()
-        self.encode_pair()
-
-        X = self.build_X()
-        X = X.replace([np.inf, -np.inf], np.nan).dropna()
-
-        if len(X) == 0:
-            raise ValueError("Sin filas válidas tras feature engineering.")
-
-        X_tail = X.tail(n_rows)
-
-        # Alinear con columnas del modelo si se proporcionan
-        if train_columns is not None:
-            for col in train_columns:
-                if col not in X_tail.columns:
-                    X_tail = X_tail.copy()
-                    X_tail[col] = 0.0
-            X_tail = X_tail[train_columns]
-
-        return X_tail
+    def recommend_trials(n_rows: int) -> int:
+        if n_rows < 500:
+            return 30
+        elif n_rows < 2000:
+            return 50
+        elif n_rows < 10000:
+            return 75
+        else:
+            return 100

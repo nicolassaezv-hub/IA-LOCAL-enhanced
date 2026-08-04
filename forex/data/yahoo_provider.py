@@ -23,7 +23,7 @@ _FOREX_TICKER_MAP = {
 
 _TF_MAP = {
     "M1": "1m",   "M5": "5m",   "M15": "15m",  "M30": "30m",
-    "H1": "1h",   "H4": "4h",   "D1": "1d",    "W1": "1wk",
+    "H1": "1h",   "H4": "1h",   "D1": "1d",    "W1": "1wk",  # H4 se resamplea desde 1h
 }
 
 
@@ -39,7 +39,10 @@ def _to_yf_interval(tf: str) -> str:
 def _normalize_df(df: pd.DataFrame, pair: str) -> pd.DataFrame:
     """Convierte el DataFrame de yfinance al schema estándar de ASTRA."""
     df = df.copy()
-    df.columns = [c.lower() for c in df.columns]
+    # yfinance >= 0.2.28 devuelve columnas MultiIndex (campo, ticker) -> aplanar
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    df.columns = [str(c).lower() for c in df.columns]
     col_map = {
         "open": "open", "high": "high", "low": "low",
         "close": "close", "volume": "volume",
@@ -59,6 +62,21 @@ def _normalize_df(df: pd.DataFrame, pair: str) -> pd.DataFrame:
     df = df.dropna(subset=["open", "high", "low", "close"])
     keep = ["timestamp", "open", "high", "low", "close", "volume", "pair"]
     return df[[c for c in keep if c in df.columns]].reset_index(drop=True)
+
+
+def _resample_h4(df: pd.DataFrame) -> pd.DataFrame:
+    """Yahoo no ofrece intervalo 4h: se agregan velas 1h en bloques de 4h."""
+    if df.empty or "timestamp" not in df.columns:
+        return df
+    pair = df["pair"].iloc[-1] if "pair" in df.columns else ""
+    out = (df.set_index("timestamp")
+             .resample("4h")
+             .agg({"open": "first", "high": "max", "low": "min",
+                   "close": "last", "volume": "sum"})
+             .dropna()
+             .reset_index())
+    out["pair"] = pair
+    return out
 
 
 class YahooProvider:
@@ -101,7 +119,8 @@ class YahooProvider:
         bars_per_day = {"1m": 1440, "5m": 288, "15m": 96, "30m": 48,
                         "1h": 24, "4h": 6, "1d": 1, "1wk": 0.14}
         bpd = bars_per_day.get(interval, 24)
-        days_needed = max(2, int(bars / max(bpd, 0.1)) + 5)
+        needed_bars = bars * 4 if tf.upper() == "H4" else bars
+        days_needed = max(2, int(needed_bars / max(bpd, 0.1)) + 5)
 
         # yfinance limite: datos intraday solo van 60 días atrás
         if interval in ("1m", "5m", "15m", "30m"):
@@ -115,6 +134,8 @@ class YahooProvider:
             if df_raw is None or df_raw.empty:
                 return None
             df = _normalize_df(df_raw, pair)
+            if tf.upper() == "H4":
+                df = _resample_h4(df)
             return df.tail(bars).reset_index(drop=True)
         except Exception as e:
             print(f"[YahooProvider] Error descargando {pair}/{tf}: {e}")

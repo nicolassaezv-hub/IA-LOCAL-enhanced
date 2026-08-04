@@ -61,7 +61,9 @@ def _parse_args(argstr: str):
     Si un token contiene ":" o "=" se interpreta como pair:timeframe override.
     Faltas -> defaults.
     """
-    tokens = [t for t in (argstr or "").strip().split() if t]
+    _NOISE = {"generar", "genera", "generate", "crear", "crea", "create",
+              "csvs", "csv", "forex", "todos", "los", "all", "de"}
+    tokens = [t for t in (argstr or "").strip().split() if t and t.lower() not in _NOISE]
     pairs: List[str] = list(DEFAULT_PAIRS)
     tfs: List[str] = list(DEFAULT_TIMEFRAMES)
     bars: int = DEFAULT_BARS

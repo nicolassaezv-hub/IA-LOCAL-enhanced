@@ -112,7 +112,7 @@ class ForexIntegratedPipeline:
     # ─────────────────────────────────────────────────────────
     def train(self, filepath: str, pair: str = None,
               path_h4: str = None, path_d1: str = None,
-              use_wfv: bool = True) -> dict:
+              use_wfv: bool = True, force: bool = False) -> dict:
         df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
         pair = _infer_pair(df, pair, filepath=filepath)
         df   = build_features(df)
@@ -146,7 +146,7 @@ class ForexIntegratedPipeline:
         print(f"\n[PIPELINE] Par: {pair} | Horizon: {horizon} | RR: {rr_ratio}{mtf_note}")
 
         if use_wfv and len(X) >= 300:
-            trainer, wfv_r, acc, prec = train_with_wfv(X, y, pair=pair, save=True)
+            trainer, wfv_r, acc, prec = train_with_wfv(X, y, pair=pair, save=True, force=force)
             self.predictor.invalidate_cache(pair=pair)
             return {
                 "type":        "training_complete",
@@ -291,7 +291,14 @@ class ForexIntegratedPipeline:
             if model is None:
                 continue
 
-            X_pred = builder.predict_features(n_rows=1)
+            # Cargar feature_names del modelo guardado (evita mismatch)
+            train_columns = None
+            try:
+                _, train_columns = storage.load_model_with_features(pair=f"{pair}_h{h}")
+            except Exception:
+                train_columns = None
+
+            X_pred = builder.predict_features(n_rows=1, train_columns=train_columns)
             if len(X_pred) == 0:
                 continue
 

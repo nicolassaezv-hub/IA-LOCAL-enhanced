@@ -1,319 +1,162 @@
 """
-integrated_pipeline.py — Pipeline completo de predicción Forex
+predictor.py — Generador de señales con confidence gate + regime filter (ADX)
 
-NUEVO: soporte MTF real — train/predict aceptan path_h4 y path_d1
-       para enriquecer el CSV H1 con features de H4 y D1 vía merge_asof.
+FIX #1: predict usa predict_features() (NO el X con horizonte dropeado)
+FIX #2: load_model(pair=...) carga el modelo correcto por par
+FIX #5: MIN_CONFIDENCE elevado a 0.65
+FIX #10: signal_strength calibrado — usa directamente la confidence como proxy principal
 
-Modos:
-  train          — entrena ensemble (WFV deslizante)
-  predict        — señal de la última vela real
-  multi_horizon  — consenso horizontes 5/10/20
-  backtest       — simulación histórica
-  tune           — Optuna + train
-  full           — train + predict + backtest
+Retorna BUY / SELL / HOLD con metadata completa.
+
+Filtros antes de disparar señal:
+  1. Confianza mínima (0.65) — debajo de esto → HOLD
+  2. ADX mínimo (22) — mercado ranging → señales poco confiables → HOLD
+  3. Modelo válido — si el modelo no pasó el umbral de calibración → HOLD con aviso
 """
 
 import numpy as np
 import pandas as pd
+from .model_storage import ModelStorage
 
-from .feature_engineering  import build_features
-from .dataset_builder      import DatasetBuilder, get_pair_config
-from .predictor            import ForexPredictor
-from .backtester           import ForexBacktester
-from .xgb_trainer          import ForexEnsembleTrainer, train_with_wfv
-from .hyperparameter_tuner import ForexHyperparameterTuner
-from .csv_adapter          import adapt_csv
+MIN_CONFIDENCE = 0.65   # FIX #5: antes 0.62
+MIN_ADX        = 22.0
 
 
-def _load(filepath: str, pair: str = None,
-          path_h4: str = None, path_d1: str = None) -> pd.DataFrame:
-    return adapt_csv(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
+class ForexPredictor:
 
-
-def _infer_pair(df: pd.DataFrame, pair: str = None) -> str:
-    if pair:
-        return pair
-    if "pair" in df.columns:
-        val = df["pair"].iloc[-1]
-        if isinstance(val, str):
-            return str(val)
-    return "UNKNOWN"
-
-
-class ForexIntegratedPipeline:
-
-    def __init__(
-        self,
-        horizon: int          = None,
-        rr_ratio: float       = None,
-        min_confidence: float = 0.65,
-        min_adx: float        = 22.0,
-    ):
-        from .model_storage import ModelStorage
-        self._horizon        = horizon
-        self._rr_ratio       = rr_ratio
-        self.min_confidence  = min_confidence
-        self.min_adx         = min_adx
-        self.storage         = ModelStorage()
-        self.predictor       = ForexPredictor(
-            min_confidence=min_confidence,
-            min_adx=min_adx,
-        )
-        self.backtester      = ForexBacktester()
-
-    def _pair_params(self, pair: str):
-        cfg = get_pair_config(pair)
-        return (
-            self._horizon  if self._horizon  is not None else cfg["horizon"],
-            self._rr_ratio if self._rr_ratio is not None else cfg["rr_ratio"],
-        )
+    def __init__(self, min_confidence: float = MIN_CONFIDENCE,
+                 min_adx: float = MIN_ADX):
+        self.storage        = ModelStorage()
+        self._models        = {}          # caché por par
+        self.min_confidence = min_confidence
+        self.min_adx        = min_adx
 
     # ─────────────────────────────────────────────────────────
-    # TRAIN — con WFV deslizante + MTF opcional
+    # Carga el modelo correcto por par (con caché)
     # ─────────────────────────────────────────────────────────
-    def train(self, filepath: str, pair: str = None,
-              path_h4: str = None, path_d1: str = None,
-              use_wfv: bool = True) -> dict:
-        df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
-        pair = _infer_pair(df, pair)
-        df   = build_features(df)
+    def load_model(self, pair: str = None):
+        key = (pair or "").upper().replace("/", "").replace("_", "")
+        if key not in self._models:
+            self._models[key] = self.storage.load_model(pair=pair)
+        return self._models[key]
 
-        horizon, rr_ratio = self._pair_params(pair)
+    def invalidate_cache(self, pair: str = None):
+        """Forzar recarga del modelo (después de un nuevo entrenamiento)."""
+        key = (pair or "").upper().replace("/", "").replace("_", "")
+        self._models.pop(key, None)
 
-        builder = DatasetBuilder(df)
-        X, y    = builder.build(horizon=horizon, rr_ratio=rr_ratio)
+    # ─────────────────────────────────────────────────────────
+    # Predicción cruda (sin filtros)
+    # ─────────────────────────────────────────────────────────
+    def predict(self, X: pd.DataFrame, pair: str = None) -> dict:
+        model = self.load_model(pair=pair)
+        prob  = model.predict_proba(X)[0]
+        pred  = int(np.argmax(prob))
+        conf  = float(np.max(prob))
+        return {
+            "prediction": pred,
+            "direction":  "bullish" if pred == 1 else "bearish",
+            "confidence": conf,
+        }
 
-        if len(X) < 100:
-            return {"error": f"Filas insuficientes: {len(X)}. Mínimo 100."}
-
-        mtf_note = ""
-        h4_cols = [c for c in X.columns if c.startswith("h4_")]
-        d1_cols = [c for c in X.columns if c.startswith("d1_")]
-        if h4_cols or d1_cols:
-            mtf_note = f" | MTF: H4={len(h4_cols)} D1={len(d1_cols)} features"
-
-        print(f"\n[PIPELINE] Par: {pair} | Horizon: {horizon} | RR: {rr_ratio}{mtf_note}")
-
-        if use_wfv and len(X) >= 300:
-            trainer, wfv_r, acc, prec = train_with_wfv(X, y, pair=pair, save=True)
-            self.predictor.invalidate_cache(pair=pair)
-            return {
-                "type":        "training_complete",
-                "pair":        pair,
-                "rows":        len(X),
-                "features":    len(X.columns),
-                "horizon":     horizon,
-                "rr_ratio":    rr_ratio,
-                "mtf_features": len(h4_cols) + len(d1_cols),
-                "accuracy":    round(acc,  4),
-                "precision":   round(prec, 4),
-                "wfv":         wfv_r,
-                "model_valid": getattr(trainer.model, "sufficient", False) if trainer.model else False,
-                "model":       "guardado" if prec >= 0.65 else "NO guardado (prec < 65%)",
+    def predict_batch(self, X: pd.DataFrame, pair: str = None) -> list:
+        model = self.load_model(pair=pair)
+        probs = model.predict_proba(X)
+        preds = np.argmax(probs, axis=1)
+        return [
+            {
+                "prediction": int(preds[i]),
+                "direction":  "bullish" if preds[i] == 1 else "bearish",
+                "confidence": float(np.max(probs[i])),
             }
+            for i in range(len(X))
+        ]
+
+    # ─────────────────────────────────────────────────────────
+    # SEÑAL PRINCIPAL — BUY / SELL / HOLD
+    # FIX #1: recibe X ya preparado con predict_features()
+    # FIX #2: carga modelo por par
+    # FIX #10: signal_strength simplificado y calibrado
+    # ─────────────────────────────────────────────────────────
+    def signal(self, X: pd.DataFrame, pair: str = None) -> dict:
+        raw        = self.predict(X.tail(1), pair=pair)
+        confidence = raw["confidence"]
+        direction  = raw["direction"]
+
+        # ADX de la última fila
+        if "ADX_14" in X.columns:
+            adx = float(X["ADX_14"].iloc[-1])
+            if np.isnan(adx):
+                adx = 25.0
         else:
-            trainer   = ForexEnsembleTrainer(pair=pair)
-            acc, prec = trainer.train(X, y, save=True)
-            self.predictor.invalidate_cache(pair=pair)
-            return {
-                "type":        "training_complete",
-                "pair":        pair,
-                "rows":        len(X),
-                "features":    len(X.columns),
-                "accuracy":    round(acc,  4),
-                "precision":   round(prec, 4),
-                "model_valid": getattr(trainer.model, "sufficient", False) if trainer.model else False,
-                "model":       "guardado" if prec >= 0.65 else "NO guardado (prec < 65%)",
-            }
+            adx = 25.0
 
-    # ─────────────────────────────────────────────────────────
-    # PREDICT — última vela real + MTF opcional
-    # ─────────────────────────────────────────────────────────
-    def predict(self, filepath: str, pair: str = None,
-                path_h4: str = None, path_d1: str = None) -> dict:
-        df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
-        pair = _infer_pair(df, pair)
-        df   = build_features(df)
+        is_trending = adx >= self.min_adx
 
-        # Cargar feature_names guardadas junto al modelo (evita mismatch)
-        train_columns = None
-        try:
-            _, train_columns = self.storage.load_model_with_features(pair=pair)
-        except Exception:
-            train_columns = None
+        # Verificar si el modelo pasó la calibración (sufficient flag)
+        model = self.load_model(pair=pair)
+        model_sufficient = getattr(model, "sufficient", True)
 
-        builder = DatasetBuilder(df)
-        X_pred  = builder.predict_features(n_rows=1, train_columns=train_columns)
+        # Aplicar filtros
+        reasons = []
+        if confidence < self.min_confidence:
+            reasons.append(f"confidence {confidence:.2f} < umbral {self.min_confidence:.2f}")
+        if not is_trending:
+            reasons.append(f"ADX {adx:.1f} < {self.min_adx} (mercado ranging)")
+        if not model_sufficient:
+            reasons.append("modelo con precision < 65% — requiere re-tune con más datos")
 
-        if len(X_pred) == 0:
-            return {"error": "Sin filas válidas tras feature engineering."}
+        action = "HOLD" if reasons else ("BUY" if direction == "bullish" else "SELL")
 
-        signal = self.predictor.signal(X_pred, pair=pair)
-        return {"type": "prediction", "rows_processed": len(df), **signal}
+        # FIX #10: signal_strength = confidence calibrada * ADX factor
+        # La confidence ya está calibrada isotónicamente — refleja tasa de acierto real
+        adx_factor    = min(adx / 40.0, 1.0)   # normalizado a [0,1] con max 40
+        signal_strength = round(
+            (confidence * 0.75 + adx_factor * 0.25) * 100, 1
+        )
 
-    # ─────────────────────────────────────────────────────────
-    # MULTI-HORIZON
-    # ─────────────────────────────────────────────────────────
-    def predict_multi_horizon(self, filepath: str, pair: str = None,
-                               path_h4: str = None, path_d1: str = None) -> dict:
-        df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
-        pair = _infer_pair(df, pair)
-        df   = build_features(df)
+        # Probabilidad estimada de que la señal sea correcta
+        # Con calibración isotónica: confidence ≈ P(TP | señal)
+        est_prob_correct = round(confidence * 100, 1)
 
-        from .model_storage import ModelStorage
-        storage = ModelStorage()
-
-        votes       = []
-        horizons    = [5, 10, 20]
-        _, rr_ratio = self._pair_params(pair)
-
-        for h in horizons:
-            builder = DatasetBuilder(df)
-            X, y    = builder.build(horizon=h, rr_ratio=rr_ratio)
-            if len(X) < 100:
-                continue
-
-            model_exists = storage.latest_exists(pair=f"{pair}_h{h}")
-            model_name   = f"ensemble_{pair.replace('/','')}_h{h}"
-
-            if not model_exists:
-                print(f"[MULTI] Entrenando h={h}...")
-                trainer = ForexEnsembleTrainer(pair=pair)
-                trainer.train(X, y, save=False)
-                if trainer.model is not None and trainer.model.sufficient:
-                    storage.save_model(trainer.model, name=model_name, pair=f"{pair}_h{h}")
-                model = trainer.model
-            else:
-                model = storage.load_model(pair=f"{pair}_h{h}")
-
-            if model is None:
-                continue
-
-            X_pred = builder.predict_features(n_rows=1)
-            if len(X_pred) == 0:
-                continue
-
-            probs = model.predict_proba(X_pred)[0]
-            pred  = int(np.argmax(probs))
-            conf  = float(np.max(probs))
-            votes.append({
-                "horizon":    h,
-                "direction":  "bullish" if pred == 1 else "bearish",
-                "confidence": round(conf, 4),
-                "valid":      getattr(model, "sufficient", True),
-            })
-
-        if not votes:
-            return {"error": "No se pudo obtener señal en ningún horizonte."}
-
-        bull        = sum(1 for v in votes if v["direction"] == "bullish")
-        bear        = len(votes) - bull
-        avg_conf    = round(float(np.mean([v["confidence"] for v in votes])), 4)
-        valid_votes = [v for v in votes if v["valid"]]
-
-        if bull >= 2 and avg_conf >= self.min_confidence and len(valid_votes) >= 2:
-            action = "BUY";  dir_ = "bullish"
-        elif bear >= 2 and avg_conf >= self.min_confidence and len(valid_votes) >= 2:
-            action = "SELL"; dir_ = "bearish"
+        # Régimen de mercado
+        if adx >= 40:
+            regime = "strong trend"
+        elif adx >= 25:
+            regime = "moderate trend"
+        elif adx >= self.min_adx:
+            regime = "weak trend"
         else:
-            action = "HOLD"; dir_ = "mixed"
+            regime = "ranging"
 
         return {
-            "type":             "multi_horizon",
             "pair":             pair,
             "action":           action,
-            "direction":        dir_,
-            "avg_confidence":   avg_conf,
-            "est_prob_correct": round(avg_conf * 100, 1),
-            "horizon_votes":    votes,
-            "bullish_votes":    bull,
-            "bearish_votes":    bear,
+            "direction":        direction,
+            "confidence":       round(confidence, 4),
+            "est_prob_correct": est_prob_correct,   # % prob real de acierto (calibrado)
+            "signal_strength":  signal_strength,
+            "regime":           regime,
+            "adx":              round(adx, 2),
+            "model_valid":      model_sufficient,
+            "hold_reason":      "; ".join(reasons) if reasons else None,
+            "interpretation":   _interpret(action, confidence, signal_strength, est_prob_correct),
         }
 
-    # ─────────────────────────────────────────────────────────
-    # TUNE
-    # ─────────────────────────────────────────────────────────
-    def tune(self, filepath: str, pair: str = None,
-             n_trials: int = None, rr_ratio: float = None,
-             horizon: int = None, path_h4: str = None,
-             path_d1: str = None) -> dict:
-        df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
-        pair = _infer_pair(df, pair)
-        df   = build_features(df)
+    # Alias para compatibilidad
+    def predict_summary(self, X: pd.DataFrame, pair: str = None) -> dict:
+        return self.signal(X, pair=pair)
 
-        hz, rr = self._pair_params(pair)
-        rr = rr_ratio or rr
-        hz = horizon  or hz
+    # Legacy — para código que pasa df completo (no X procesado)
+    def predict_latest(self, df: pd.DataFrame) -> dict:
+        return self.predict(df.tail(1))
 
-        X, y = DatasetBuilder(df).build(horizon=hz, rr_ratio=rr)
-        if len(X) < 100:
-            return {"error": f"Filas insuficientes: {len(X)}."}
 
-        if n_trials is None:
-            n_trials = ForexHyperparameterTuner.recommend_trials(len(X))
-
-        split        = int(len(X) * 0.80)
-        X_tr, y_tr   = X.iloc[:split], y.iloc[:split]
-        X_val, y_val = X.iloc[split:],  y.iloc[split:]
-
-        tuner = ForexHyperparameterTuner(pair=pair)
-        best  = tuner.tune(X_tr, y_tr, X_val, y_val, n_trials=n_trials)
-
-        trainer, wfv_r, acc, prec = train_with_wfv(X, y, pair=pair, save=True)
-        self.predictor.invalidate_cache(pair=pair)
-
-        X_pred = DatasetBuilder(df).predict_features(n_rows=1)
-        signal = self.predictor.signal(X_pred, pair=pair) if len(X_pred) > 0 else {}
-
-        return {
-            "type":      "tune_complete",
-            "pair":      pair,
-            "rows":      len(X),
-            "n_trials":  n_trials,
-            "accuracy":  round(acc,  4),
-            "precision": round(prec, 4),
-            "wfv":       wfv_r,
-            "signal":    signal,
-        }
-
-    # ─────────────────────────────────────────────────────────
-    # BACKTEST
-    # ─────────────────────────────────────────────────────────
-    def backtest(self, filepath: str, pair: str = None,
-                 path_h4: str = None, path_d1: str = None) -> dict:
-        df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
-        pair = _infer_pair(df, pair)
-        df   = build_features(df)
-
-        horizon, rr_ratio = self._pair_params(pair)
-        X, _ = DatasetBuilder(df).build(horizon=horizon, rr_ratio=rr_ratio)
-        if len(X) < 50:
-            return {"error": "Datos insuficientes."}
-
-        return self.backtester.run(X, pair=pair)
-
-    # ─────────────────────────────────────────────────────────
-    # FULL
-    # ─────────────────────────────────────────────────────────
-    def run(self, filepath: str, mode: str = "full", pair: str = None,
-            path_h4: str = None, path_d1: str = None) -> dict:
-        kw = dict(pair=pair, path_h4=path_h4, path_d1=path_d1)
-        if mode == "train":
-            return self.train(filepath, **kw)
-        if mode == "predict":
-            return self.predict(filepath, **kw)
-        if mode == "backtest":
-            return self.backtest(filepath, **kw)
-        if mode == "multi_horizon":
-            return self.predict_multi_horizon(filepath, **kw)
-
-        train_r   = self.train(filepath, **kw)
-        predict_r = self.predict(filepath, **kw)
-        back_r    = self.backtest(filepath, **kw)
-
-        return {
-            "type":     "full_pipeline",
-            "training": train_r,
-            "signal":   predict_r,
-            "backtest": back_r,
-        }
+def _interpret(action: str, confidence: float, strength: float, prob: float) -> str:
+    if action == "HOLD":
+        return "Condiciones no cumplidas — espera un setup más claro."
+    if prob >= 75:
+        return f"Señal {action} de ALTA CALIDAD — probabilidad estimada de acierto: {prob:.1f}%."
+    if prob >= 65:
+        return f"Señal {action} válida — probabilidad estimada de acierto: {prob:.1f}%."
+    return f"Señal {action} marginal ({prob:.1f}%) — reducir tamaño o esperar confirmación adicional."
