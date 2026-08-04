@@ -1,0 +1,11 @@
+{
+  "current_balance": 10000,
+  "peak_balance": 10000,
+  "daily_start": 10000,
+  "weekly_start": 10000,
+  "daily_pnl": 0.0,
+  "weekly_pnl": 0.0,
+  "tripped": false,
+  "trip_reason": "",
+  "trip_time": null
+}

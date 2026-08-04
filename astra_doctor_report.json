@@ -1,9 +1,11 @@
 {
-  "ts": "2026-07-24T13:33:36.522908",
-  "ok": 54,
-  "warn": 5,
-  "fail": 0,
-  "issues": [],
+  "ts": "2026-08-01T01:19:18.132822",
+  "ok": 38,
+  "warn": 11,
+  "fail": 1,
+  "issues": [
+    "Configurar GROQ_API_KEY en Replit Secrets o .env"
+  ],
   "checks": [
     {
       "category": "dependencies",
@@ -92,19 +94,19 @@
     {
       "category": "dependencies",
       "label": "redis",
-      "status": "ok",
+      "status": "warn",
       "detail": ""
     },
     {
       "category": "dependencies",
       "label": "faiss-cpu",
-      "status": "ok",
+      "status": "warn",
       "detail": ""
     },
     {
       "category": "dependencies",
       "label": "torch (PyTorch)",
-      "status": "ok",
+      "status": "warn",
       "detail": ""
     },
     {
@@ -115,9 +117,9 @@
     },
     {
       "category": "configuration",
-      "label": "GROQ_API_KEY",
-      "status": "ok",
-      "detail": ""
+      "label": "API_KEY",
+      "status": "fail",
+      "detail": "Set GROQ_API_KEY"
     },
     {
       "category": "configuration",
@@ -128,38 +130,38 @@
     {
       "category": "configuration",
       "label": "csv_dir",
-      "status": "ok",
-      "detail": "223 csvs"
+      "status": "warn",
+      "detail": ""
     },
     {
       "category": "models",
-      "label": "ensemble_AUDCAD_20260629_114126.pkl",
+      "label": "ensemble_USDJPYH1YTD2026(1)1781885306995_20260801_011633.pkl",
       "status": "ok",
-      "detail": "25.1d ago"
+      "detail": "0h ago"
     },
     {
       "category": "models",
-      "label": "ensemble_AUDUSD_20260629_114220.pkl",
+      "label": "latest_model.pkl",
       "status": "ok",
-      "detail": "25.1d ago"
+      "detail": "0h ago"
     },
     {
       "category": "models",
-      "label": "ensemble_AUDUSD_20260629_123358.pkl",
+      "label": "latest_USDJPYH1YTD2026(1)1781885306995.pkl",
       "status": "ok",
-      "detail": "25.0d ago"
+      "detail": "0h ago"
     },
     {
       "category": "models",
-      "label": "ensemble_BCHUSD_20260629_123611.pkl",
+      "label": "ensemble_USDJPYH1YTD2026(1)1781885306995_20260801_011904.pkl",
       "status": "ok",
-      "detail": "25.0d ago"
+      "detail": "0h ago"
     },
     {
       "category": "models",
-      "label": "ensemble_BTCUSD_20260629_123048.pkl",
+      "label": "ensemble_USDJPYH1YTD2026(1)1781885306995_20260726_001809.pkl",
       "status": "ok",
-      "detail": "25.0d ago"
+      "detail": "6.0d ago"
     },
     {
       "category": "models",
@@ -170,13 +172,13 @@
     {
       "category": "apis",
       "label": "groq",
-      "status": "ok",
+      "status": "warn",
       "detail": ""
     },
     {
       "category": "apis",
       "label": "binance",
-      "status": "ok",
+      "status": "warn",
       "detail": ""
     },
     {
@@ -195,7 +197,7 @@
       "category": "databases",
       "label": "memoria.db",
       "status": "ok",
-      "detail": "17 tables"
+      "detail": "21 tables"
     },
     {
       "category": "databases",
@@ -223,63 +225,9 @@
     },
     {
       "category": "datasets",
-      "label": "ADAUSD.csv",
-      "status": "ok",
-      "detail": "3141 rows"
-    },
-    {
-      "category": "datasets",
-      "label": "AUDCAD.csv",
-      "status": "ok",
-      "detail": "1426 rows"
-    },
-    {
-      "category": "datasets",
-      "label": "AUDCHF.csv",
-      "status": "ok",
-      "detail": "1427 rows"
-    },
-    {
-      "category": "datasets",
-      "label": "AUDJPY.csv",
-      "status": "ok",
-      "detail": "1426 rows"
-    },
-    {
-      "category": "datasets",
-      "label": "AUDNZD.csv",
-      "status": "ok",
-      "detail": "1426 rows"
-    },
-    {
-      "category": "datasets",
-      "label": "AUDUSD.csv",
-      "status": "ok",
-      "detail": "1428 rows"
-    },
-    {
-      "category": "datasets",
-      "label": "BCHUSD.csv",
-      "status": "ok",
-      "detail": "3141 rows"
-    },
-    {
-      "category": "datasets",
-      "label": "BRENT_CRUDE_OIL.csv",
-      "status": "ok",
-      "detail": "3005 rows"
-    },
-    {
-      "category": "datasets",
-      "label": "BTCUSD.csv",
+      "label": "csvs_dir",
       "status": "warn",
-      "detail": "5.1% NaN"
-    },
-    {
-      "category": "datasets",
-      "label": "CADCHF.csv",
-      "status": "ok",
-      "detail": "1427 rows"
+      "detail": ""
     },
     {
       "category": "integration",

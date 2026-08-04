@@ -1,4 +1,5 @@
 try:
+
     from cryptography.fernet import Fernet
     HAS_CRYPTOGRAPHY = True
 except ImportError:
@@ -34,6 +35,14 @@ except ImportError:
     CryptContext = None
     pwd_context = None
     HAS_PASSLIB = False
+
+
+
+import secrets as _secrets
+
+def generate_token(nbytes: int = 32) -> str:
+    """Genera un token seguro aleatorio (hex). Para API keys, CSRF y similares."""
+    return _secrets.token_hex(nbytes)
 
 
 def cifra_archivo(ruta):
@@ -111,7 +120,7 @@ def verificar_jwt(token: str, secret: str = "mi_clave_secreta"):
         return f"Error al verificar JWT: {e}"
 
 
-def paramiko_demo(host="localhost", user="usuario", password="clave"):
+def paramiko_demo(host="localhost", user="usuario", password=None):  # noqa: password loaded from env in production
     if not HAS_PARAMIKO:
         return "paramiko no disponible. Instale: pip install paramiko"
     try:

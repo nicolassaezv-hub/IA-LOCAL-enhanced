@@ -1,0 +1,5843 @@
+{
+  "total_files": 193,
+  "files_state": [
+    {
+      "rel_path": "active_engine.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 19,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "activity_center.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 13,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "ai_models.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 17,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "analytics_memory.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 18,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "argument_parser.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 11,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "astra.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 16,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "astra_agent.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 2,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "astra_api.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 23,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "astra_doctor.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 13,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "astra_lazy_loader.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 33,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "astra_lazy_loader_custom.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 26,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "audio_video.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 6,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "bi_analytics.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 8,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "check_functionality.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 6,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "check_skeleton.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 4,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "check_startup.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 18,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "check_system.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 6,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "cloud_tools.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 20,
+      "classes_count": 4,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "cognitive_center.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 15,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "conversation_context.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 17,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "creando.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 15,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "dev_log.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 8,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "evolution_center.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 14,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "evolutionary_cycle.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 5,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex_analytics.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 18,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex_watcher.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 19,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "generate_test_csv.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 8,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "intent_router.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 3,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "io_files.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "lazy_loader.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 33,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "live_thinking.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 5,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "main.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 30,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "memory.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 8,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "memory_router.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "ml_advanced.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 9,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "modules_extra.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 11,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "news_intelligence.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 10,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "nlp_tools.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 23,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "notification_center.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "package_registry.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 1,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "progress_utils.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 3,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "project_memory.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 21,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "scheduler_service.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 8,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "security.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 8,
+      "classes_count": 0,
+      "secrets_count": 2,
+      "secrets": [
+        {
+          "line": 98,
+          "variable": "token",
+          "value_preview": "HS256"
+        },
+        {
+          "line": 104,
+          "variable": "def verificar_jwt(token: str, secret: str",
+          "value_preview": "mi_clave_s..."
+        }
+      ]
+    },
+    {
+      "rel_path": "self_analysis.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "setup_windows.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 11,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "signal_tracker.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "sme_consultant.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "test_complete_pipeline.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 6,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "test_forex_pipeline.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 9,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "test_main.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 2,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "tool_executor.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 4,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "tool_registry.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "utils.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 10,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "visualization.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 6,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "web_tools.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 11,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "constitution/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "constitution/approval_flow.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 11,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "constitution/audit_log.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "constitution/constitution_rules.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 13,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "constitution/constitution_validator.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 6,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "constitution/rollback_manager.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 15,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "evolution/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "evolution/evolution_proposal.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 11,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "evolution/improvement_detector.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 5,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "evolution/performance_monitor.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "evolution/proposal_store.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 18,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "feedback/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "feedback/adaptive_thresholds.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 14,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "feedback/contextual_memory.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "feedback/evolution_memory.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "feedback/feedback_analyzer.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "feedback/feedback_collector.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "feedback/feedback_dashboard.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 3,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/__init__ (1).py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 8,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/__init__ (3).py",
+      "syntax_ok": false,
+      "syntax_err": "SyntaxError: source code string cannot contain null bytes\n",
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/backtester.py",
+      "syntax_ok": false,
+      "syntax_err": "SyntaxError: source code string cannot contain null bytes\n",
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/business_dataset_builder.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 3,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/business_feature_engineering.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 2,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/business_pipeline.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 3,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/business_predictor.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/csv_adapter.py",
+      "syntax_ok": false,
+      "syntax_err": "SyntaxError: source code string cannot contain null bytes\n",
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/feature_engineering.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 4,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/forex_memory.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 12,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/forex_models.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 8,
+      "classes_count": 4,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/forex_prediction_bridge.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 6,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/forex_report.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 7,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/hyperparameter_tuner.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 11,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/indicators.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/integrated_pipeline.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 19,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/kpi_engine.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 6,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/market_sentinel.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 23,
+      "classes_count": 4,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/market_universe.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 9,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/model_storage.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/multi_pair_scanner.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 8,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/predictor.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 10,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/xgb_trainer.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 10,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/business/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/business/business_csv_adapter.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 3,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/business/business_dataset_builder.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 2,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/business/business_feature_engineering.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 3,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/business/business_pipeline.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/business/business_predictor.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 6,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/business/kpi_engine.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 14,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/data/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/data/binance_provider.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 8,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/data/csv_bulk_generator.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 7,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/data/csv_migrator.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 6,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/data/data_router.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/data/dataset_updater.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/data/indicator_delta.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 6,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/data/mt5_provider.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/data/rolling_dataset.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/data/yahoo_provider.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 8,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/portfolio/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/portfolio/opportunity_score.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 5,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/portfolio/portfolio_ranker.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 12,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/adaptive_trainer.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/backtest_protocol.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 20,
+      "classes_count": 5,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/backtester.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 4,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/candlestick_patterns.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/circuit_breaker.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 13,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/csv_adapter.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/dataset_builder.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 11,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/decision_engine.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 5,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/decision_explainer.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 2,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/feature_engineering.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 19,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/feature_importance.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 16,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/forex_prediction_bridge.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/hyperparameter_cache.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/hyperparameter_tuner.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 8,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/integrated_pipeline.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 11,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/model_cache.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/model_quality_history.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/model_selector.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 16,
+      "classes_count": 4,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/model_storage.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 10,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/mtf_coherence.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 15,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/multi_pair_scanner.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/outcome_tracker.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 12,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/position_sizing.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 4,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/predictor.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 10,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/quality_analyzer.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 14,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/quality_report.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 4,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/regime_detector.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 19,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/reliability_score.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 11,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/retrain_manager.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 13,
+      "classes_count": 4,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/risk_engine.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 11,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/roadmap_v_integration.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 29,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/prediction/xgb_trainer.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 23,
+      "classes_count": 5,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/scheduler/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/scheduler/auto_updater.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/scheduler/autonomous_scheduler.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 13,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "forex/scheduler/task_manager.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 20,
+      "classes_count": 4,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/evolutionary_cycle.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 5,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/constitution/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/constitution/approval_flow.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 11,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/constitution/audit_log.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/constitution/constitution_rules.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 13,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/constitution/constitution_validator.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 6,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/constitution/rollback_manager.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 15,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/evolution/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/evolution/evolution_proposal.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 11,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/evolution/improvement_detector.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 5,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/evolution/performance_monitor.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/evolution/proposal_store.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 16,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/feedback/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/feedback/adaptive_thresholds.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 13,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/feedback/contextual_memory.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/feedback/evolution_memory.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/feedback/feedback_analyzer.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 7,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/feedback/feedback_collector.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/feedback/feedback_dashboard.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 3,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/dataset_analyzer_bolt_variant.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/feasibility_engine_bolt_variant.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 14,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 14,
+      "classes_count": 5,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/pipeline_generator.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 5,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/prompt_analyzer_bolt_variant.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 10,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 6,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 3,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "legacy/astra_legacy_v1.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 16,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "notifications/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "notifications/notifier.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 18,
+      "classes_count": 5,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "prediction_lab/__init__.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 0,
+      "classes_count": 0,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "prediction_lab/dataset_analyzer.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 14,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "prediction_lab/feasibility_engine.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 8,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "prediction_lab/model_planner.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 16,
+      "classes_count": 4,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "prediction_lab/pipeline_generator.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 9,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "prediction_lab/prompt_analyzer.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "prediction_lab/report_generator.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 15,
+      "classes_count": 1,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "prediction_lab/validation_engine.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": false,
+      "functions_count": 12,
+      "classes_count": 2,
+      "secrets_count": 0,
+      "secrets": []
+    },
+    {
+      "rel_path": "workspace/server.py",
+      "syntax_ok": true,
+      "syntax_err": null,
+      "has_main": true,
+      "functions_count": 86,
+      "classes_count": 8,
+      "secrets_count": 0,
+      "secrets": []
+    }
+  ],
+  "broken_imports": [
+    {
+      "file": "ai_models.py",
+      "line": 20,
+      "imported_module": "torch",
+      "reason": "External library 'torch' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "ai_models.py",
+      "line": 27,
+      "imported_module": "tensorflow",
+      "reason": "External library 'tensorflow' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "ai_models.py",
+      "line": 34,
+      "imported_module": "keras",
+      "reason": "External library 'keras' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "ai_models.py",
+      "line": 48,
+      "imported_module": "torchvision.models",
+      "reason": "External library 'torchvision' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "ai_models.py",
+      "line": 55,
+      "imported_module": "torchaudio",
+      "reason": "External library 'torchaudio' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 47,
+      "imported_module": "speech_recognition",
+      "reason": "External library 'speech_recognition' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 54,
+      "imported_module": "pyttsx3",
+      "reason": "External library 'pyttsx3' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 61,
+      "imported_module": "pyautogui",
+      "reason": "External library 'pyautogui' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 68,
+      "imported_module": "mss",
+      "reason": "External library 'mss' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 75,
+      "imported_module": "pytesseract",
+      "reason": "External library 'pytesseract' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 82,
+      "imported_module": "pygetwindow",
+      "reason": "External library 'pygetwindow' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 156,
+      "imported_module": "pydub",
+      "reason": "External library 'pydub' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 163,
+      "imported_module": "skimage",
+      "reason": "External library 'skimage' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 170,
+      "imported_module": "imageio",
+      "reason": "External library 'imageio' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 177,
+      "imported_module": "librosa",
+      "reason": "External library 'librosa' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 184,
+      "imported_module": "sounddevice",
+      "reason": "External library 'sounddevice' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 191,
+      "imported_module": "torch",
+      "reason": "External library 'torch' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 198,
+      "imported_module": "tensorflow",
+      "reason": "External library 'tensorflow' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 205,
+      "imported_module": "keras",
+      "reason": "External library 'keras' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 212,
+      "imported_module": "httpx",
+      "reason": "External library 'httpx' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 226,
+      "imported_module": "websocket",
+      "reason": "External library 'websocket' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 268,
+      "imported_module": "keyring",
+      "reason": "External library 'keyring' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 309,
+      "imported_module": "h5py",
+      "reason": "External library 'h5py' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 316,
+      "imported_module": "PyQt5",
+      "reason": "External library 'PyQt5' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 323,
+      "imported_module": "kivy",
+      "reason": "External library 'kivy' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 330,
+      "imported_module": "dearpygui.dearpygui",
+      "reason": "External library 'dearpygui' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 337,
+      "imported_module": "keyboard",
+      "reason": "External library 'keyboard' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 344,
+      "imported_module": "mouse",
+      "reason": "External library 'mouse' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 351,
+      "imported_module": "pytube",
+      "reason": "External library 'pytube' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra.py",
+      "line": 358,
+      "imported_module": "deep_translator",
+      "reason": "External library 'deep_translator' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra_doctor.py",
+      "line": 245,
+      "imported_module": "MetaTrader5",
+      "reason": "External library 'MetaTrader5' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra_lazy_loader.py",
+      "line": 251,
+      "imported_module": "azure.storage.blob",
+      "reason": "External library 'azure' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "astra_lazy_loader.py",
+      "line": 257,
+      "imported_module": "google.cloud",
+      "reason": "External library 'google' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "audio_video.py",
+      "line": 4,
+      "imported_module": "speech_recognition",
+      "reason": "External library 'speech_recognition' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "audio_video.py",
+      "line": 11,
+      "imported_module": "pyttsx3",
+      "reason": "External library 'pyttsx3' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "audio_video.py",
+      "line": 18,
+      "imported_module": "librosa",
+      "reason": "External library 'librosa' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "audio_video.py",
+      "line": 25,
+      "imported_module": "sounddevice",
+      "reason": "External library 'sounddevice' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "audio_video.py",
+      "line": 32,
+      "imported_module": "pydub",
+      "reason": "External library 'pydub' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "audio_video.py",
+      "line": 39,
+      "imported_module": "pytube",
+      "reason": "External library 'pytube' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "check_functionality.py",
+      "line": 25,
+      "imported_module": "llama_index.core",
+      "reason": "External library 'llama_index' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "cloud_tools.py",
+      "line": 22,
+      "imported_module": "azure.storage.blob",
+      "reason": "External library 'azure' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "cloud_tools.py",
+      "line": 91,
+      "imported_module": "google.cloud",
+      "reason": "External library 'google' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "creando.py",
+      "line": 39,
+      "imported_module": "MetaTrader5",
+      "reason": "External library 'MetaTrader5' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "lazy_loader.py",
+      "line": 251,
+      "imported_module": "azure.storage.blob",
+      "reason": "External library 'azure' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "lazy_loader.py",
+      "line": 257,
+      "imported_module": "google.cloud",
+      "reason": "External library 'google' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "main.py",
+      "line": 38,
+      "imported_module": "feedback",
+      "reason": "External library 'feedback' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "main.py",
+      "line": 42,
+      "imported_module": "evolution",
+      "reason": "External library 'evolution' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "main.py",
+      "line": 51,
+      "imported_module": "constitution",
+      "reason": "External library 'constitution' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "memory_router.py",
+      "line": 85,
+      "imported_module": "redis",
+      "reason": "External library 'redis' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "modules_extra.py",
+      "line": 13,
+      "imported_module": "llama_index.core",
+      "reason": "External library 'llama_index' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "modules_extra.py",
+      "line": 28,
+      "imported_module": "redis",
+      "reason": "External library 'redis' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "nlp_tools.py",
+      "line": 13,
+      "imported_module": "nltk",
+      "reason": "External library 'nltk' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "nlp_tools.py",
+      "line": 22,
+      "imported_module": "regex",
+      "reason": "External library 'regex' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "nlp_tools.py",
+      "line": 42,
+      "imported_module": "nltk.tokenize",
+      "reason": "External library 'nltk' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "nlp_tools.py",
+      "line": 53,
+      "imported_module": "nltk.tokenize",
+      "reason": "External library 'nltk' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "nlp_tools.py",
+      "line": 68,
+      "imported_module": "nltk.corpus",
+      "reason": "External library 'nltk' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "nlp_tools.py",
+      "line": 80,
+      "imported_module": "nltk",
+      "reason": "External library 'nltk' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "nlp_tools.py",
+      "line": 96,
+      "imported_module": "nltk",
+      "reason": "External library 'nltk' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "nlp_tools.py",
+      "line": 113,
+      "imported_module": "nltk.sentiment",
+      "reason": "External library 'nltk' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "nlp_tools.py",
+      "line": 167,
+      "imported_module": "nltk.corpus",
+      "reason": "External library 'nltk' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "setup_windows.py",
+      "line": 87,
+      "imported_module": "MetaTrader5",
+      "reason": "External library 'MetaTrader5' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "test_main.py",
+      "line": 2,
+      "imported_module": "pytest",
+      "reason": "External library 'pytest' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "utils.py",
+      "line": 49,
+      "imported_module": "keyboard",
+      "reason": "External library 'keyboard' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "utils.py",
+      "line": 56,
+      "imported_module": "mouse",
+      "reason": "External library 'mouse' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "visualization.py",
+      "line": 40,
+      "imported_module": "skimage",
+      "reason": "External library 'skimage' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "visualization.py",
+      "line": 55,
+      "imported_module": "PyQt5",
+      "reason": "External library 'PyQt5' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "web_tools.py",
+      "line": 5,
+      "imported_module": "deep_translator",
+      "reason": "External library 'deep_translator' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "web_tools.py",
+      "line": 12,
+      "imported_module": "pytube",
+      "reason": "External library 'pytube' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "web_tools.py",
+      "line": 19,
+      "imported_module": "httpx",
+      "reason": "External library 'httpx' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "web_tools.py",
+      "line": 33,
+      "imported_module": "socketio",
+      "reason": "External library 'socketio' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "web_tools.py",
+      "line": 54,
+      "imported_module": "azure.identity",
+      "reason": "External library 'azure' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "web_tools.py",
+      "line": 55,
+      "imported_module": "azure.storage.blob",
+      "reason": "External library 'azure' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "web_tools.py",
+      "line": 63,
+      "imported_module": "grpc",
+      "reason": "External library 'grpc' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "web_tools.py",
+      "line": 70,
+      "imported_module": "websockets",
+      "reason": "External library 'websockets' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "forex/data/mt5_provider.py",
+      "line": 20,
+      "imported_module": "MetaTrader5",
+      "reason": "External library 'MetaTrader5' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "forex/data/mt5_provider.py",
+      "line": 62,
+      "imported_module": "MetaTrader5",
+      "reason": "External library 'MetaTrader5' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "forex/data/mt5_provider.py",
+      "line": 79,
+      "imported_module": "MetaTrader5",
+      "reason": "External library 'MetaTrader5' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "forex/data/mt5_provider.py",
+      "line": 104,
+      "imported_module": "MetaTrader5",
+      "reason": "External library 'MetaTrader5' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "forex/prediction/feature_importance.py",
+      "line": 42,
+      "imported_module": "shap",
+      "reason": "External library 'shap' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "forex/prediction/xgb_trainer.py",
+      "line": 47,
+      "imported_module": "imblearn.over_sampling",
+      "reason": "External library 'imblearn' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py",
+      "line": 163,
+      "imported_module": "imblearn.over_sampling",
+      "reason": "External library 'imblearn' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 47,
+      "imported_module": "speech_recognition",
+      "reason": "External library 'speech_recognition' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 54,
+      "imported_module": "pyttsx3",
+      "reason": "External library 'pyttsx3' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 61,
+      "imported_module": "pyautogui",
+      "reason": "External library 'pyautogui' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 68,
+      "imported_module": "mss",
+      "reason": "External library 'mss' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 75,
+      "imported_module": "pytesseract",
+      "reason": "External library 'pytesseract' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 82,
+      "imported_module": "pygetwindow",
+      "reason": "External library 'pygetwindow' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 156,
+      "imported_module": "pydub",
+      "reason": "External library 'pydub' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 163,
+      "imported_module": "skimage",
+      "reason": "External library 'skimage' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 170,
+      "imported_module": "imageio",
+      "reason": "External library 'imageio' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 177,
+      "imported_module": "librosa",
+      "reason": "External library 'librosa' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 184,
+      "imported_module": "sounddevice",
+      "reason": "External library 'sounddevice' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 191,
+      "imported_module": "torch",
+      "reason": "External library 'torch' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 198,
+      "imported_module": "tensorflow",
+      "reason": "External library 'tensorflow' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 205,
+      "imported_module": "keras",
+      "reason": "External library 'keras' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 212,
+      "imported_module": "httpx",
+      "reason": "External library 'httpx' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 226,
+      "imported_module": "websocket",
+      "reason": "External library 'websocket' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 268,
+      "imported_module": "keyring",
+      "reason": "External library 'keyring' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 309,
+      "imported_module": "h5py",
+      "reason": "External library 'h5py' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 316,
+      "imported_module": "PyQt5",
+      "reason": "External library 'PyQt5' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 323,
+      "imported_module": "kivy",
+      "reason": "External library 'kivy' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 330,
+      "imported_module": "dearpygui.dearpygui",
+      "reason": "External library 'dearpygui' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 337,
+      "imported_module": "keyboard",
+      "reason": "External library 'keyboard' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 344,
+      "imported_module": "mouse",
+      "reason": "External library 'mouse' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 351,
+      "imported_module": "pytube",
+      "reason": "External library 'pytube' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "legacy/astra_legacy_v1.py",
+      "line": 358,
+      "imported_module": "deep_translator",
+      "reason": "External library 'deep_translator' is not installed and not listed in requirements.txt"
+    },
+    {
+      "file": "prediction_lab/validation_engine.py",
+      "line": 218,
+      "imported_module": "imblearn.over_sampling",
+      "reason": "External library 'imblearn' is not installed and not listed in requirements.txt"
+    }
+  ],
+  "orphans": [
+    "astra_lazy_loader.py",
+    "astra_lazy_loader_custom.py",
+    "cloud_tools.py",
+    "conversation_context.py",
+    "evolutionary_cycle.py",
+    "lazy_loader.py",
+    "ml_advanced.py",
+    "nlp_tools.py",
+    "package_registry.py",
+    "scheduler_service.py",
+    "constitution/__init__.py",
+    "evolution/__init__.py",
+    "feedback/__init__.py",
+    "forex/__init__ (1).py",
+    "forex/__init__ (3).py",
+    "forex/__init__.py",
+    "forex/business_dataset_builder.py",
+    "forex/business_feature_engineering.py",
+    "forex/business_pipeline.py",
+    "forex/business_predictor.py",
+    "forex/forex_prediction_bridge.py",
+    "forex/integrated_pipeline.py",
+    "forex/kpi_engine.py",
+    "forex/multi_pair_scanner.py",
+    "forex/business/__init__.py",
+    "forex/business/business_dataset_builder.py",
+    "forex/business/business_feature_engineering.py",
+    "forex/data/__init__.py",
+    "forex/portfolio/__init__.py",
+    "forex/prediction/__init__.py",
+    "forex/prediction/forex_prediction_bridge.py",
+    "forex/scheduler/__init__.py",
+    "future_phases_draft/constitution/__init__.py",
+    "future_phases_draft/evolution/__init__.py",
+    "future_phases_draft/feedback/__init__.py",
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/dataset_analyzer_bolt_variant.py",
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/feasibility_engine_bolt_variant.py",
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/prompt_analyzer_bolt_variant.py",
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+    "legacy/astra_legacy_v1.py",
+    "notifications/__init__.py",
+    "prediction_lab/__init__.py"
+  ],
+  "duplicate_functions": {
+    "start": [
+      "active_engine.py",
+      "forex/market_sentinel.py",
+      "forex/scheduler/autonomous_scheduler.py",
+      "forex/scheduler/task_manager.py"
+    ],
+    "stop": [
+      "active_engine.py",
+      "forex_watcher.py",
+      "forex_watcher.py",
+      "forex/market_sentinel.py",
+      "forex/scheduler/autonomous_scheduler.py",
+      "forex/scheduler/task_manager.py"
+    ],
+    "is_running": [
+      "active_engine.py",
+      "forex_watcher.py",
+      "forex/scheduler/autonomous_scheduler.py"
+    ],
+    "status": [
+      "active_engine.py",
+      "analytics_memory.py",
+      "forex_watcher.py",
+      "forex/data/csv_migrator.py",
+      "forex/prediction/adaptive_trainer.py",
+      "forex/prediction/hyperparameter_cache.py",
+      "forex/prediction/model_cache.py",
+      "forex/prediction/model_quality_history.py",
+      "forex/scheduler/auto_updater.py",
+      "forex/scheduler/autonomous_scheduler.py"
+    ],
+    "get_alerts": [
+      "activity_center.py",
+      "workspace/server.py"
+    ],
+    "system_status": [
+      "ai_models.py",
+      "astra.py",
+      "utils.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "ask_openai": [
+      "ai_models.py",
+      "astra.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "calcular_integral": [
+      "ai_models.py",
+      "modules_extra.py"
+    ],
+    "save_analysis": [
+      "analytics_memory.py",
+      "forex/forex_memory.py"
+    ],
+    "load_analysis": [
+      "analytics_memory.py",
+      "forex/forex_memory.py"
+    ],
+    "init_db": [
+      "astra.py",
+      "memory.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "guardar_memoria": [
+      "astra.py",
+      "memory.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "cargar_memoria": [
+      "astra.py",
+      "memory.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "leer_pdf": [
+      "astra.py",
+      "io_files.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "leer_word": [
+      "astra.py",
+      "io_files.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "leer_excel": [
+      "astra.py",
+      "io_files.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "leer_csv": [
+      "astra.py",
+      "io_files.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "escribe_pdf": [
+      "astra.py",
+      "io_files.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "escribe_word": [
+      "astra.py",
+      "io_files.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "escribe_excel": [
+      "astra.py",
+      "io_files.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "escribe_csv": [
+      "astra.py",
+      "io_files.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "grafica_csv": [
+      "astra.py",
+      "visualization.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "extrae_web": [
+      "astra.py",
+      "web_tools.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "cifra_archivo": [
+      "astra.py",
+      "security.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "check_mt5": [
+      "astra_doctor.py",
+      "setup_windows.py"
+    ],
+    "load_torch": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_tensorflow": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_keras": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_sklearn": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_nltk": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py",
+      "nlp_tools.py"
+    ],
+    "load_spacy": [
+      "astra_lazy_loader.py",
+      "lazy_loader.py"
+    ],
+    "load_fastapi": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_flask": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_azure_blob": [
+      "astra_lazy_loader.py",
+      "lazy_loader.py"
+    ],
+    "load_google_cloud_storage": [
+      "astra_lazy_loader.py",
+      "lazy_loader.py"
+    ],
+    "load_librosa": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_pydub": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_pytest": [
+      "astra_lazy_loader.py",
+      "lazy_loader.py"
+    ],
+    "load_hypothesis": [
+      "astra_lazy_loader.py",
+      "lazy_loader.py"
+    ],
+    "load_module": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_from_module": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "lazy_import": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "get_status": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py",
+      "forex/market_sentinel.py",
+      "forex/scheduler/task_manager.py",
+      "workspace/server.py"
+    ],
+    "print_status": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_ml_suite": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_audio_suite": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_web_suite": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "load_cloud_suite": [
+      "astra_lazy_loader.py",
+      "lazy_loader.py"
+    ],
+    "load_nlp_suite": [
+      "astra_lazy_loader.py",
+      "lazy_loader.py"
+    ],
+    "get_free_memory": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "can_load": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "safe_load": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "memory_status": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py",
+      "memory_router.py"
+    ],
+    "decorator": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "wrapper": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "test_module": [
+      "check_functionality.py",
+      "check_skeleton.py"
+    ],
+    "add": [
+      "check_system.py",
+      "modules_extra.py"
+    ],
+    "upload_file": [
+      "cloud_tools.py",
+      "cloud_tools.py",
+      "cloud_tools.py"
+    ],
+    "download_file": [
+      "cloud_tools.py",
+      "cloud_tools.py",
+      "cloud_tools.py"
+    ],
+    "list_blobs": [
+      "cloud_tools.py",
+      "cloud_tools.py"
+    ],
+    "search_memory": [
+      "cognitive_center.py",
+      "memory_router.py"
+    ],
+    "build_context": [
+      "conversation_context.py",
+      "conversation_context.py"
+    ],
+    "build_prompt_context": [
+      "conversation_context.py",
+      "conversation_context.py"
+    ],
+    "get_recent_chat": [
+      "conversation_context.py",
+      "memory_router.py"
+    ],
+    "stats": [
+      "conversation_context.py",
+      "constitution/audit_log.py",
+      "evolution/proposal_store.py",
+      "feedback/evolution_memory.py",
+      "future_phases_draft/constitution/audit_log.py",
+      "future_phases_draft/evolution/proposal_store.py",
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "calculate_rsi": [
+      "creando.py",
+      "generate_test_csv.py",
+      "test_forex_pipeline.py"
+    ],
+    "calculate_macd": [
+      "creando.py",
+      "generate_test_csv.py"
+    ],
+    "calculate_atr": [
+      "creando.py",
+      "generate_test_csv.py"
+    ],
+    "add_indicators": [
+      "creando.py",
+      "generate_test_csv.py"
+    ],
+    "validate_ohlcv": [
+      "creando.py",
+      "generate_test_csv.py",
+      "test_forex_pipeline.py"
+    ],
+    "main": [
+      "creando.py",
+      "generate_test_csv.py",
+      "setup_windows.py",
+      "test_complete_pipeline.py"
+    ],
+    "run_evolutionary_cycle": [
+      "evolutionary_cycle.py",
+      "future_phases_draft/evolutionary_cycle.py"
+    ],
+    "system_health_report": [
+      "evolutionary_cycle.py",
+      "future_phases_draft/evolutionary_cycle.py"
+    ],
+    "cmd_ciclo_evolutivo": [
+      "evolutionary_cycle.py",
+      "future_phases_draft/evolutionary_cycle.py"
+    ],
+    "cmd_health_report": [
+      "evolutionary_cycle.py",
+      "future_phases_draft/evolutionary_cycle.py"
+    ],
+    "summary": [
+      "evolutionary_cycle.py",
+      "constitution/audit_log.py",
+      "constitution/constitution_rules.py",
+      "constitution/constitution_validator.py",
+      "constitution/rollback_manager.py",
+      "evolution/evolution_proposal.py",
+      "evolution/improvement_detector.py",
+      "evolution/performance_monitor.py",
+      "evolution/proposal_store.py",
+      "feedback/adaptive_thresholds.py",
+      "feedback/feedback_analyzer.py",
+      "forex/prediction/quality_report.py",
+      "future_phases_draft/evolutionary_cycle.py",
+      "future_phases_draft/constitution/audit_log.py",
+      "future_phases_draft/constitution/constitution_rules.py",
+      "future_phases_draft/constitution/constitution_validator.py",
+      "future_phases_draft/constitution/rollback_manager.py",
+      "future_phases_draft/evolution/evolution_proposal.py",
+      "future_phases_draft/evolution/improvement_detector.py",
+      "future_phases_draft/evolution/performance_monitor.py",
+      "future_phases_draft/evolution/proposal_store.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py",
+      "future_phases_draft/feedback/feedback_analyzer.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/dataset_analyzer_bolt_variant.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/feasibility_engine_bolt_variant.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/pipeline_generator.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/prompt_analyzer_bolt_variant.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py",
+      "prediction_lab/dataset_analyzer.py",
+      "prediction_lab/feasibility_engine.py",
+      "prediction_lab/model_planner.py",
+      "prediction_lab/pipeline_generator.py",
+      "prediction_lab/prompt_analyzer.py",
+      "prediction_lab/report_generator.py",
+      "prediction_lab/validation_engine.py"
+    ],
+    "generate_report": [
+      "forex_analytics.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py"
+    ],
+    "run": [
+      "forex_watcher.py",
+      "forex/feature_engineering.py",
+      "forex/predictor.py",
+      "forex/prediction/backtester.py",
+      "forex/prediction/integrated_pipeline.py"
+    ],
+    "evaluate": [
+      "ml_advanced.py",
+      "forex/prediction/backtest_protocol.py",
+      "forex/prediction/xgb_trainer.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/feasibility_engine_bolt_variant.py"
+    ],
+    "print_report": [
+      "ml_advanced.py",
+      "forex/__init__ (1).py",
+      "forex/prediction/multi_pair_scanner.py"
+    ],
+    "fit": [
+      "ml_advanced.py",
+      "forex/prediction/xgb_trainer.py"
+    ],
+    "register_model": [
+      "project_memory.py",
+      "forex/prediction/model_cache.py"
+    ],
+    "get_model": [
+      "project_memory.py",
+      "forex/prediction/model_selector.py"
+    ],
+    "list_models": [
+      "project_memory.py",
+      "forex/xgb_trainer.py",
+      "forex/prediction/model_storage.py"
+    ],
+    "execute": [
+      "tool_executor.py",
+      "forex/scheduler/autonomous_scheduler.py"
+    ],
+    "submit_for_approval": [
+      "constitution/approval_flow.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "approve": [
+      "constitution/approval_flow.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "reject": [
+      "constitution/approval_flow.py",
+      "constitution/approval_flow.py",
+      "future_phases_draft/constitution/approval_flow.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "cmd_aprobar_propuesta": [
+      "constitution/approval_flow.py",
+      "evolution/proposal_store.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "cmd_rechazar_propuesta": [
+      "constitution/approval_flow.py",
+      "evolution/proposal_store.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "submit": [
+      "constitution/approval_flow.py",
+      "feedback/feedback_collector.py",
+      "future_phases_draft/constitution/approval_flow.py",
+      "future_phases_draft/feedback/feedback_collector.py"
+    ],
+    "manual_approve": [
+      "constitution/approval_flow.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "apply_approved": [
+      "constitution/approval_flow.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "log_audit": [
+      "constitution/audit_log.py",
+      "future_phases_draft/constitution/audit_log.py"
+    ],
+    "get_audit_trail": [
+      "constitution/audit_log.py",
+      "future_phases_draft/constitution/audit_log.py"
+    ],
+    "cmd_audit_log": [
+      "constitution/audit_log.py",
+      "future_phases_draft/constitution/audit_log.py"
+    ],
+    "log": [
+      "constitution/audit_log.py",
+      "feedback/evolution_memory.py",
+      "future_phases_draft/constitution/audit_log.py",
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "get_trail": [
+      "constitution/audit_log.py",
+      "future_phases_draft/constitution/audit_log.py"
+    ],
+    "render": [
+      "constitution/audit_log.py",
+      "constitution/constitution_rules.py",
+      "feedback/feedback_dashboard.py",
+      "future_phases_draft/constitution/audit_log.py",
+      "future_phases_draft/constitution/constitution_rules.py",
+      "future_phases_draft/feedback/feedback_dashboard.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py"
+    ],
+    "get_rules": [
+      "constitution/constitution_rules.py",
+      "future_phases_draft/constitution/constitution_rules.py"
+    ],
+    "add_rule": [
+      "constitution/constitution_rules.py",
+      "future_phases_draft/constitution/constitution_rules.py"
+    ],
+    "cmd_reglas_ver": [
+      "constitution/constitution_rules.py",
+      "future_phases_draft/constitution/constitution_rules.py"
+    ],
+    "get_all": [
+      "constitution/constitution_rules.py",
+      "evolution/proposal_store.py",
+      "feedback/adaptive_thresholds.py",
+      "future_phases_draft/constitution/constitution_rules.py",
+      "future_phases_draft/evolution/proposal_store.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py"
+    ],
+    "get": [
+      "constitution/constitution_rules.py",
+      "evolution/proposal_store.py",
+      "feedback/adaptive_thresholds.py",
+      "forex/prediction/hyperparameter_cache.py",
+      "future_phases_draft/constitution/constitution_rules.py",
+      "future_phases_draft/evolution/proposal_store.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py"
+    ],
+    "add_custom": [
+      "constitution/constitution_rules.py",
+      "future_phases_draft/constitution/constitution_rules.py"
+    ],
+    "validate_proposal": [
+      "constitution/constitution_validator.py",
+      "future_phases_draft/constitution/constitution_validator.py"
+    ],
+    "cmd_validar_propuesta": [
+      "constitution/constitution_validator.py",
+      "future_phases_draft/constitution/constitution_validator.py"
+    ],
+    "validate": [
+      "constitution/constitution_validator.py",
+      "forex/data/rolling_dataset.py",
+      "future_phases_draft/constitution/constitution_validator.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py"
+    ],
+    "create_rollback_point": [
+      "constitution/rollback_manager.py",
+      "future_phases_draft/constitution/rollback_manager.py"
+    ],
+    "rollback_to": [
+      "constitution/rollback_manager.py",
+      "future_phases_draft/constitution/rollback_manager.py"
+    ],
+    "cmd_rollback_ver": [
+      "constitution/rollback_manager.py",
+      "future_phases_draft/constitution/rollback_manager.py"
+    ],
+    "cmd_rollback_aplicar": [
+      "constitution/rollback_manager.py",
+      "future_phases_draft/constitution/rollback_manager.py"
+    ],
+    "create": [
+      "constitution/rollback_manager.py",
+      "future_phases_draft/constitution/rollback_manager.py"
+    ],
+    "rollback": [
+      "constitution/rollback_manager.py",
+      "future_phases_draft/constitution/rollback_manager.py"
+    ],
+    "get_recent": [
+      "constitution/rollback_manager.py",
+      "feedback/evolution_memory.py",
+      "feedback/feedback_collector.py",
+      "future_phases_draft/constitution/rollback_manager.py",
+      "future_phases_draft/feedback/evolution_memory.py",
+      "future_phases_draft/feedback/feedback_collector.py"
+    ],
+    "summary_text": [
+      "constitution/rollback_manager.py",
+      "evolution/performance_monitor.py",
+      "evolution/proposal_store.py",
+      "feedback/contextual_memory.py",
+      "feedback/evolution_memory.py",
+      "future_phases_draft/constitution/rollback_manager.py",
+      "future_phases_draft/evolution/performance_monitor.py",
+      "future_phases_draft/evolution/proposal_store.py",
+      "future_phases_draft/feedback/contextual_memory.py",
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "propose_evolution": [
+      "evolution/evolution_proposal.py",
+      "future_phases_draft/evolution/evolution_proposal.py"
+    ],
+    "cmd_evolucionar": [
+      "evolution/evolution_proposal.py",
+      "future_phases_draft/evolution/evolution_proposal.py"
+    ],
+    "cmd_aplicar_propuesta": [
+      "evolution/evolution_proposal.py",
+      "future_phases_draft/evolution/evolution_proposal.py"
+    ],
+    "propose": [
+      "evolution/evolution_proposal.py",
+      "future_phases_draft/evolution/evolution_proposal.py"
+    ],
+    "apply": [
+      "evolution/evolution_proposal.py",
+      "future_phases_draft/evolution/evolution_proposal.py"
+    ],
+    "detect_improvements": [
+      "evolution/improvement_detector.py",
+      "future_phases_draft/evolution/improvement_detector.py"
+    ],
+    "cmd_mejoras_detectar": [
+      "evolution/improvement_detector.py",
+      "future_phases_draft/evolution/improvement_detector.py"
+    ],
+    "detect": [
+      "evolution/improvement_detector.py",
+      "forex/prediction/candlestick_patterns.py",
+      "forex/prediction/regime_detector.py",
+      "future_phases_draft/evolution/improvement_detector.py"
+    ],
+    "take_snapshot": [
+      "evolution/performance_monitor.py",
+      "future_phases_draft/evolution/performance_monitor.py"
+    ],
+    "cmd_monitor_snapshot": [
+      "evolution/performance_monitor.py",
+      "future_phases_draft/evolution/performance_monitor.py"
+    ],
+    "cmd_monitor_historial": [
+      "evolution/performance_monitor.py",
+      "future_phases_draft/evolution/performance_monitor.py"
+    ],
+    "snapshot": [
+      "evolution/performance_monitor.py",
+      "future_phases_draft/evolution/performance_monitor.py"
+    ],
+    "get_history": [
+      "evolution/performance_monitor.py",
+      "forex/forex_memory.py",
+      "forex/portfolio/portfolio_ranker.py",
+      "forex/prediction/outcome_tracker.py",
+      "forex/prediction/retrain_manager.py",
+      "future_phases_draft/evolution/performance_monitor.py"
+    ],
+    "trend": [
+      "evolution/performance_monitor.py",
+      "future_phases_draft/evolution/performance_monitor.py"
+    ],
+    "save_proposal": [
+      "evolution/proposal_store.py",
+      "future_phases_draft/evolution/proposal_store.py"
+    ],
+    "get_proposals": [
+      "evolution/proposal_store.py",
+      "future_phases_draft/evolution/proposal_store.py"
+    ],
+    "cmd_proposals_ver": [
+      "evolution/proposal_store.py",
+      "future_phases_draft/evolution/proposal_store.py"
+    ],
+    "save": [
+      "evolution/proposal_store.py",
+      "feedback/contextual_memory.py",
+      "forex/prediction/hyperparameter_cache.py",
+      "future_phases_draft/evolution/proposal_store.py",
+      "future_phases_draft/feedback/contextual_memory.py",
+      "prediction_lab/report_generator.py"
+    ],
+    "get_pending": [
+      "evolution/proposal_store.py",
+      "forex/prediction/outcome_tracker.py",
+      "future_phases_draft/evolution/proposal_store.py"
+    ],
+    "update_status": [
+      "evolution/proposal_store.py",
+      "future_phases_draft/evolution/proposal_store.py"
+    ],
+    "update_thresholds": [
+      "feedback/adaptive_thresholds.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py"
+    ],
+    "get_thresholds": [
+      "feedback/adaptive_thresholds.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py"
+    ],
+    "adapt_thresholds_from_feedback": [
+      "feedback/adaptive_thresholds.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py"
+    ],
+    "cmd_thresholds_ver": [
+      "feedback/adaptive_thresholds.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py"
+    ],
+    "update": [
+      "feedback/adaptive_thresholds.py",
+      "forex/data/rolling_dataset.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py"
+    ],
+    "adapt_from_feedback": [
+      "feedback/adaptive_thresholds.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py"
+    ],
+    "save_context_memory": [
+      "feedback/contextual_memory.py",
+      "future_phases_draft/feedback/contextual_memory.py"
+    ],
+    "get_context_success_rate": [
+      "feedback/contextual_memory.py",
+      "future_phases_draft/feedback/contextual_memory.py"
+    ],
+    "cmd_contextual_memory": [
+      "feedback/contextual_memory.py",
+      "future_phases_draft/feedback/contextual_memory.py"
+    ],
+    "get_for_key": [
+      "feedback/contextual_memory.py",
+      "future_phases_draft/feedback/contextual_memory.py"
+    ],
+    "success_rate": [
+      "feedback/contextual_memory.py",
+      "future_phases_draft/feedback/contextual_memory.py"
+    ],
+    "top_contexts": [
+      "feedback/contextual_memory.py",
+      "future_phases_draft/feedback/contextual_memory.py"
+    ],
+    "log_evolution": [
+      "feedback/evolution_memory.py",
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "get_evolution_history": [
+      "feedback/evolution_memory.py",
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "cmd_evolution_history": [
+      "feedback/evolution_memory.py",
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "count": [
+      "feedback/evolution_memory.py",
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "analyze_feedback": [
+      "feedback/feedback_analyzer.py",
+      "future_phases_draft/feedback/feedback_analyzer.py"
+    ],
+    "cmd_feedback_analisis": [
+      "feedback/feedback_analyzer.py",
+      "future_phases_draft/feedback/feedback_analyzer.py"
+    ],
+    "analyze": [
+      "feedback/feedback_analyzer.py",
+      "forex/business_predictor.py",
+      "forex/model_storage.py",
+      "forex/business/business_pipeline.py",
+      "forex/prediction/feature_importance.py",
+      "forex/prediction/forex_prediction_bridge.py",
+      "forex/prediction/mtf_coherence.py",
+      "forex/prediction/quality_analyzer.py",
+      "future_phases_draft/feedback/feedback_analyzer.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/dataset_analyzer_bolt_variant.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/prompt_analyzer_bolt_variant.py"
+    ],
+    "collect_feedback": [
+      "feedback/feedback_collector.py",
+      "future_phases_draft/feedback/feedback_collector.py"
+    ],
+    "cmd_feedback_votar": [
+      "feedback/feedback_collector.py",
+      "future_phases_draft/feedback/feedback_collector.py"
+    ],
+    "cmd_feedback_ver": [
+      "feedback/feedback_collector.py",
+      "future_phases_draft/feedback/feedback_collector.py"
+    ],
+    "get_for_target": [
+      "feedback/feedback_collector.py",
+      "future_phases_draft/feedback/feedback_collector.py"
+    ],
+    "score_for": [
+      "feedback/feedback_collector.py",
+      "future_phases_draft/feedback/feedback_collector.py"
+    ],
+    "summary_by_type": [
+      "feedback/feedback_collector.py",
+      "future_phases_draft/feedback/feedback_collector.py"
+    ],
+    "cmd_feedback_dashboard": [
+      "feedback/feedback_dashboard.py",
+      "future_phases_draft/feedback/feedback_dashboard.py"
+    ],
+    "predictor": [
+      "forex/__init__ (1).py",
+      "forex/prediction/multi_pair_scanner.py"
+    ],
+    "scan": [
+      "forex/__init__ (1).py",
+      "forex/prediction/multi_pair_scanner.py"
+    ],
+    "scan_folder": [
+      "forex/__init__ (1).py",
+      "forex/prediction/multi_pair_scanner.py"
+    ],
+    "astra_summary": [
+      "forex/__init__ (1).py",
+      "forex/prediction/multi_pair_scanner.py"
+    ],
+    "detect_business_type": [
+      "forex/business_dataset_builder.py",
+      "forex/business/business_csv_adapter.py"
+    ],
+    "adapt_business_csv": [
+      "forex/business_dataset_builder.py",
+      "forex/business/business_csv_adapter.py"
+    ],
+    "check_business_compatibility": [
+      "forex/business_dataset_builder.py",
+      "forex/business/business_csv_adapter.py"
+    ],
+    "build": [
+      "forex/business_feature_engineering.py",
+      "forex/hyperparameter_tuner.py",
+      "forex/integrated_pipeline.py",
+      "forex/business/business_dataset_builder.py",
+      "forex/prediction/dataset_builder.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "build_business_features": [
+      "forex/business_pipeline.py",
+      "forex/business/business_feature_engineering.py"
+    ],
+    "consult": [
+      "forex/business_predictor.py",
+      "forex/business/business_pipeline.py"
+    ],
+    "predict": [
+      "forex/business_predictor.py",
+      "forex/kpi_engine.py",
+      "forex/predictor.py",
+      "forex/business/business_pipeline.py",
+      "forex/business/business_predictor.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/predictor.py",
+      "forex/prediction/xgb_trainer.py",
+      "forex/prediction/xgb_trainer.py",
+      "forex/prediction/xgb_trainer.py"
+    ],
+    "train": [
+      "forex/business_predictor.py",
+      "forex/kpi_engine.py",
+      "forex/predictor.py",
+      "forex/business/business_pipeline.py",
+      "forex/business/business_predictor.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/xgb_trainer.py"
+    ],
+    "fill_nan_indicators": [
+      "forex/forex_prediction_bridge.py",
+      "forex/prediction/csv_adapter.py"
+    ],
+    "filter_weekend_gaps": [
+      "forex/forex_prediction_bridge.py",
+      "forex/prediction/csv_adapter.py"
+    ],
+    "merge_mtf_context": [
+      "forex/forex_prediction_bridge.py",
+      "forex/prediction/csv_adapter.py"
+    ],
+    "adapt_csv": [
+      "forex/forex_prediction_bridge.py",
+      "forex/prediction/csv_adapter.py"
+    ],
+    "check_compatibility": [
+      "forex/forex_prediction_bridge.py",
+      "forex/prediction/csv_adapter.py"
+    ],
+    "to_dict": [
+      "forex/forex_report.py",
+      "forex/market_sentinel.py",
+      "forex/market_sentinel.py",
+      "forex/data/dataset_updater.py",
+      "forex/portfolio/portfolio_ranker.py",
+      "forex/portfolio/portfolio_ranker.py",
+      "forex/prediction/backtest_protocol.py",
+      "forex/prediction/backtest_protocol.py",
+      "forex/prediction/backtest_protocol.py",
+      "forex/prediction/backtest_protocol.py",
+      "forex/prediction/decision_engine.py",
+      "forex/prediction/feature_importance.py",
+      "forex/prediction/feature_importance.py",
+      "forex/prediction/model_selector.py",
+      "forex/prediction/model_selector.py",
+      "forex/prediction/mtf_coherence.py",
+      "forex/prediction/mtf_coherence.py",
+      "forex/prediction/outcome_tracker.py",
+      "forex/prediction/outcome_tracker.py",
+      "forex/prediction/quality_report.py",
+      "forex/prediction/quality_report.py",
+      "forex/prediction/regime_detector.py",
+      "forex/prediction/reliability_score.py",
+      "forex/prediction/reliability_score.py",
+      "forex/prediction/retrain_manager.py",
+      "forex/prediction/retrain_manager.py",
+      "forex/prediction/risk_engine.py",
+      "forex/scheduler/task_manager.py",
+      "forex/scheduler/task_manager.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+      "notifications/notifier.py",
+      "notifications/notifier.py",
+      "prediction_lab/dataset_analyzer.py",
+      "prediction_lab/feasibility_engine.py",
+      "prediction_lab/model_planner.py",
+      "prediction_lab/prompt_analyzer.py",
+      "prediction_lab/report_generator.py"
+    ],
+    "to_json": [
+      "forex/forex_report.py",
+      "forex/prediction/backtest_protocol.py",
+      "forex/prediction/backtest_protocol.py",
+      "forex/prediction/decision_engine.py",
+      "forex/prediction/feature_importance.py",
+      "forex/prediction/model_selector.py",
+      "forex/prediction/mtf_coherence.py",
+      "forex/prediction/quality_report.py",
+      "forex/prediction/regime_detector.py",
+      "forex/prediction/reliability_score.py",
+      "forex/prediction/risk_engine.py",
+      "prediction_lab/prompt_analyzer.py"
+    ],
+    "get_pair_config": [
+      "forex/hyperparameter_tuner.py",
+      "forex/prediction/dataset_builder.py"
+    ],
+    "process_time": [
+      "forex/hyperparameter_tuner.py",
+      "forex/prediction/dataset_builder.py"
+    ],
+    "encode_session": [
+      "forex/hyperparameter_tuner.py",
+      "forex/prediction/dataset_builder.py"
+    ],
+    "encode_pair": [
+      "forex/hyperparameter_tuner.py",
+      "forex/prediction/dataset_builder.py"
+    ],
+    "create_target": [
+      "forex/hyperparameter_tuner.py",
+      "forex/prediction/dataset_builder.py"
+    ],
+    "build_X": [
+      "forex/hyperparameter_tuner.py",
+      "forex/prediction/dataset_builder.py"
+    ],
+    "build_y": [
+      "forex/hyperparameter_tuner.py",
+      "forex/prediction/dataset_builder.py"
+    ],
+    "filter_low_variance": [
+      "forex/hyperparameter_tuner.py",
+      "forex/prediction/dataset_builder.py"
+    ],
+    "predict_features": [
+      "forex/hyperparameter_tuner.py",
+      "forex/prediction/dataset_builder.py"
+    ],
+    "build_features": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_lag_features": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_rolling_stats": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_price_structure": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_market_regime": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_momentum": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_adx": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_stochastic": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_williams_r": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_tick_vol_flow": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_bb_features": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_candle_patterns": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_ema_signals": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_rsi_features": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_mtf_context": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "add_high_signal_features": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "clean": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "load_data": [
+      "forex/model_storage.py",
+      "forex/prediction/forex_prediction_bridge.py"
+    ],
+    "prepare_features": [
+      "forex/model_storage.py",
+      "forex/prediction/forex_prediction_bridge.py"
+    ],
+    "prepare_data": [
+      "forex/model_storage.py",
+      "forex/prediction/forex_prediction_bridge.py"
+    ],
+    "predict_from_csv": [
+      "forex/model_storage.py",
+      "forex/prediction/forex_prediction_bridge.py"
+    ],
+    "analyze_for_astra": [
+      "forex/model_storage.py",
+      "forex/prediction/forex_prediction_bridge.py"
+    ],
+    "save_params": [
+      "forex/multi_pair_scanner.py",
+      "forex/prediction/hyperparameter_tuner.py"
+    ],
+    "load_params": [
+      "forex/multi_pair_scanner.py",
+      "forex/prediction/hyperparameter_tuner.py"
+    ],
+    "tune": [
+      "forex/multi_pair_scanner.py",
+      "forex/predictor.py",
+      "forex/prediction/hyperparameter_tuner.py",
+      "forex/prediction/integrated_pipeline.py"
+    ],
+    "recommend_trials": [
+      "forex/multi_pair_scanner.py",
+      "forex/prediction/hyperparameter_tuner.py"
+    ],
+    "predict_multi_horizon": [
+      "forex/predictor.py",
+      "forex/prediction/integrated_pipeline.py"
+    ],
+    "backtest": [
+      "forex/predictor.py",
+      "forex/prediction/integrated_pipeline.py"
+    ],
+    "save_model": [
+      "forex/xgb_trainer.py",
+      "forex/prediction/model_storage.py"
+    ],
+    "load_model": [
+      "forex/xgb_trainer.py",
+      "forex/prediction/model_storage.py",
+      "forex/prediction/predictor.py"
+    ],
+    "load_model_with_features": [
+      "forex/xgb_trainer.py",
+      "forex/prediction/model_storage.py"
+    ],
+    "load_latest": [
+      "forex/xgb_trainer.py",
+      "forex/prediction/model_storage.py"
+    ],
+    "load_version": [
+      "forex/xgb_trainer.py",
+      "forex/prediction/model_storage.py"
+    ],
+    "latest_exists": [
+      "forex/xgb_trainer.py",
+      "forex/prediction/model_storage.py"
+    ],
+    "is_available": [
+      "forex/data/binance_provider.py",
+      "forex/data/mt5_provider.py",
+      "forex/data/yahoo_provider.py"
+    ],
+    "fetch": [
+      "forex/data/binance_provider.py",
+      "forex/data/data_router.py",
+      "forex/data/mt5_provider.py",
+      "forex/data/yahoo_provider.py"
+    ],
+    "fetch_and_save": [
+      "forex/data/binance_provider.py",
+      "forex/data/yahoo_provider.py"
+    ],
+    "info": [
+      "forex/data/data_router.py",
+      "forex/data/rolling_dataset.py"
+    ],
+    "update_pair": [
+      "forex/data/dataset_updater.py",
+      "forex/scheduler/auto_updater.py"
+    ],
+    "update_all": [
+      "forex/data/dataset_updater.py",
+      "forex/scheduler/auto_updater.py"
+    ],
+    "rank": [
+      "forex/portfolio/opportunity_score.py",
+      "forex/portfolio/portfolio_ranker.py"
+    ],
+    "record_prediction": [
+      "forex/prediction/model_quality_history.py",
+      "forex/prediction/outcome_tracker.py"
+    ],
+    "predict_proba": [
+      "forex/prediction/xgb_trainer.py",
+      "forex/prediction/xgb_trainer.py",
+      "forex/prediction/xgb_trainer.py"
+    ],
+    "get_log": [
+      "forex/scheduler/task_manager.py",
+      "notifications/notifier.py"
+    ],
+    "analyze_dataset": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/dataset_analyzer_bolt_variant.py",
+      "prediction_lab/dataset_analyzer.py"
+    ],
+    "cmd_lab_viabilidad": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/feasibility_engine_bolt_variant.py",
+      "prediction_lab/feasibility_engine.py"
+    ],
+    "generate_pipeline": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/pipeline_generator.py",
+      "prediction_lab/pipeline_generator.py"
+    ],
+    "generate": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/pipeline_generator.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py"
+    ],
+    "analyze_prompt": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/prompt_analyzer_bolt_variant.py",
+      "prediction_lab/prompt_analyzer.py"
+    ],
+    "cmd_lab_analiza": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/prompt_analyzer_bolt_variant.py",
+      "prediction_lab/prompt_analyzer.py"
+    ],
+    "cmd_lab_reporte": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+      "prediction_lab/report_generator.py"
+    ],
+    "bar": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+      "prediction_lab/report_generator.py"
+    ]
+  },
+  "duplicate_classes": {
+    "_ForeStub": [
+      "astra.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "_StyleStub": [
+      "astra.py",
+      "legacy/astra_legacy_v1.py"
+    ],
+    "LazyLoader": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "BatchLoader": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "MemoryAwareLoader": [
+      "astra_lazy_loader.py",
+      "astra_lazy_loader_custom.py",
+      "lazy_loader.py"
+    ],
+    "CycleResult": [
+      "evolutionary_cycle.py",
+      "future_phases_draft/evolutionary_cycle.py"
+    ],
+    "ApprovalRequest": [
+      "constitution/approval_flow.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "ApprovalFlow": [
+      "constitution/approval_flow.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "AuditEntry": [
+      "constitution/audit_log.py",
+      "future_phases_draft/constitution/audit_log.py"
+    ],
+    "AuditLog": [
+      "constitution/audit_log.py",
+      "future_phases_draft/constitution/audit_log.py"
+    ],
+    "Rule": [
+      "constitution/constitution_rules.py",
+      "future_phases_draft/constitution/constitution_rules.py"
+    ],
+    "ConstitutionRules": [
+      "constitution/constitution_rules.py",
+      "future_phases_draft/constitution/constitution_rules.py"
+    ],
+    "ValidationDecision": [
+      "constitution/constitution_validator.py",
+      "future_phases_draft/constitution/constitution_validator.py"
+    ],
+    "ConstitutionValidator": [
+      "constitution/constitution_validator.py",
+      "future_phases_draft/constitution/constitution_validator.py"
+    ],
+    "RollbackPoint": [
+      "constitution/rollback_manager.py",
+      "future_phases_draft/constitution/rollback_manager.py"
+    ],
+    "RollbackManager": [
+      "constitution/rollback_manager.py",
+      "future_phases_draft/constitution/rollback_manager.py"
+    ],
+    "ProposalBundle": [
+      "evolution/evolution_proposal.py",
+      "future_phases_draft/evolution/evolution_proposal.py"
+    ],
+    "EvolutionProposal": [
+      "evolution/evolution_proposal.py",
+      "future_phases_draft/evolution/evolution_proposal.py"
+    ],
+    "ImprovementOpportunity": [
+      "evolution/improvement_detector.py",
+      "future_phases_draft/evolution/improvement_detector.py"
+    ],
+    "ImprovementDetector": [
+      "evolution/improvement_detector.py",
+      "future_phases_draft/evolution/improvement_detector.py"
+    ],
+    "PerformanceSnapshot": [
+      "evolution/performance_monitor.py",
+      "future_phases_draft/evolution/performance_monitor.py"
+    ],
+    "PerformanceMonitor": [
+      "evolution/performance_monitor.py",
+      "future_phases_draft/evolution/performance_monitor.py"
+    ],
+    "Proposal": [
+      "evolution/proposal_store.py",
+      "future_phases_draft/evolution/proposal_store.py"
+    ],
+    "ProposalStore": [
+      "evolution/proposal_store.py",
+      "future_phases_draft/evolution/proposal_store.py"
+    ],
+    "ThresholdUpdate": [
+      "feedback/adaptive_thresholds.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py"
+    ],
+    "AdaptiveThresholds": [
+      "feedback/adaptive_thresholds.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py"
+    ],
+    "MemoryEntry": [
+      "feedback/contextual_memory.py",
+      "future_phases_draft/feedback/contextual_memory.py"
+    ],
+    "ContextualMemory": [
+      "feedback/contextual_memory.py",
+      "future_phases_draft/feedback/contextual_memory.py"
+    ],
+    "EvolutionEvent": [
+      "feedback/evolution_memory.py",
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "EvolutionMemory": [
+      "feedback/evolution_memory.py",
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "FeedbackPattern": [
+      "feedback/feedback_analyzer.py",
+      "future_phases_draft/feedback/feedback_analyzer.py"
+    ],
+    "FeedbackAnalyzer": [
+      "feedback/feedback_analyzer.py",
+      "future_phases_draft/feedback/feedback_analyzer.py"
+    ],
+    "FeedbackEntry": [
+      "feedback/feedback_collector.py",
+      "future_phases_draft/feedback/feedback_collector.py"
+    ],
+    "FeedbackCollector": [
+      "feedback/feedback_collector.py",
+      "future_phases_draft/feedback/feedback_collector.py"
+    ],
+    "FeedbackDashboard": [
+      "feedback/feedback_dashboard.py",
+      "future_phases_draft/feedback/feedback_dashboard.py"
+    ],
+    "MultiPairScanner": [
+      "forex/__init__ (1).py",
+      "forex/prediction/multi_pair_scanner.py"
+    ],
+    "BusinessDatasetBuilder": [
+      "forex/business_feature_engineering.py",
+      "forex/business/business_dataset_builder.py"
+    ],
+    "BusinessPipeline": [
+      "forex/business_predictor.py",
+      "forex/business/business_pipeline.py"
+    ],
+    "ForexBacktester": [
+      "forex/feature_engineering.py",
+      "forex/prediction/backtester.py"
+    ],
+    "DatasetBuilder": [
+      "forex/hyperparameter_tuner.py",
+      "forex/prediction/dataset_builder.py"
+    ],
+    "FeatureEngineering": [
+      "forex/integrated_pipeline.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "BusinessPredictor": [
+      "forex/kpi_engine.py",
+      "forex/business/business_predictor.py"
+    ],
+    "ForexPredictionBridge": [
+      "forex/model_storage.py",
+      "forex/prediction/forex_prediction_bridge.py"
+    ],
+    "ForexHyperparameterTuner": [
+      "forex/multi_pair_scanner.py",
+      "forex/prediction/hyperparameter_tuner.py"
+    ],
+    "ForexIntegratedPipeline": [
+      "forex/predictor.py",
+      "forex/prediction/integrated_pipeline.py"
+    ],
+    "ModelStorage": [
+      "forex/xgb_trainer.py",
+      "forex/prediction/model_storage.py"
+    ],
+    "AlgorithmConfig": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py",
+      "prediction_lab/model_planner.py"
+    ],
+    "FeaturePlan": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py",
+      "prediction_lab/model_planner.py"
+    ],
+    "ValidationStrategy": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py",
+      "prediction_lab/model_planner.py"
+    ],
+    "ModelPlan": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py",
+      "prediction_lab/model_planner.py"
+    ],
+    "GeneratedPipeline": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/pipeline_generator.py",
+      "prediction_lab/pipeline_generator.py"
+    ],
+    "ProblemSpec": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/prompt_analyzer_bolt_variant.py",
+      "prediction_lab/prompt_analyzer.py"
+    ],
+    "LabReport": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+      "prediction_lab/report_generator.py"
+    ],
+    "FoldResult": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py",
+      "prediction_lab/validation_engine.py"
+    ],
+    "ValidationResult": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py",
+      "prediction_lab/validation_engine.py"
+    ]
+  },
+  "dependencies": {
+    "active_engine.py": [
+      "forex/prediction/circuit_breaker.py",
+      "forex/prediction/position_sizing.py",
+      "forex/prediction/integrated_pipeline.py",
+      "signal_tracker.py",
+      "signal_tracker.py"
+    ],
+    "activity_center.py": [
+      "memory.py",
+      "signal_tracker.py",
+      "feedback/evolution_memory.py"
+    ],
+    "ai_models.py": [
+      "memory.py"
+    ],
+    "analytics_memory.py": [
+      "memory_router.py"
+    ],
+    "argument_parser.py": [
+      "forex/market_universe.py"
+    ],
+    "astra.py": [],
+    "astra_agent.py": [
+      "memory_router.py",
+      "argument_parser.py",
+      "tool_registry.py",
+      "tool_executor.py",
+      "intent_router.py",
+      "ai_models.py"
+    ],
+    "astra_api.py": [
+      "workspace/server.py",
+      "forex/scheduler/autonomous_scheduler.py",
+      "forex/portfolio/opportunity_score.py",
+      "forex/prediction/outcome_tracker.py",
+      "forex/prediction/model_quality_history.py",
+      "forex/data/csv_migrator.py",
+      "forex/scheduler/autonomous_scheduler.py",
+      "astra_doctor.py"
+    ],
+    "astra_doctor.py": [
+      "forex/prediction/model_cache.py",
+      "forex/scheduler/autonomous_scheduler.py",
+      "forex/scheduler/auto_updater.py"
+    ],
+    "astra_lazy_loader.py": [],
+    "astra_lazy_loader_custom.py": [],
+    "audio_video.py": [],
+    "bi_analytics.py": [
+      "forex/business/business_pipeline.py",
+      "forex/business/business_csv_adapter.py",
+      "forex/business/kpi_engine.py"
+    ],
+    "check_functionality.py": [],
+    "check_skeleton.py": [],
+    "check_startup.py": [
+      "forex/market_universe.py",
+      "forex/business/kpi_engine.py",
+      "forex/prediction/csv_adapter.py",
+      "modules_extra.py",
+      "creando.py",
+      "forex/prediction/csv_adapter.py",
+      "forex/prediction/feature_engineering.py",
+      "forex/prediction/dataset_builder.py",
+      "forex/prediction/xgb_trainer.py",
+      "forex/prediction/model_storage.py",
+      "forex/prediction/predictor.py",
+      "forex/prediction/model_storage.py",
+      "forex/prediction/backtester.py",
+      "forex/prediction/integrated_pipeline.py"
+    ],
+    "check_system.py": [
+      "forex/scheduler/autonomous_scheduler.py"
+    ],
+    "cloud_tools.py": [],
+    "cognitive_center.py": [
+      "memory.py",
+      "project_memory.py",
+      "feedback/contextual_memory.py",
+      "feedback/adaptive_thresholds.py",
+      "memory.py",
+      "memory.py",
+      "memory.py",
+      "ai_models.py",
+      "memory.py",
+      "memory.py",
+      "memory.py"
+    ],
+    "conversation_context.py": [
+      "memory_router.py",
+      "analytics_memory.py"
+    ],
+    "creando.py": [
+      "forex/market_universe.py",
+      "forex/market_universe.py"
+    ],
+    "dev_log.py": [],
+    "evolution_center.py": [
+      "evolution/proposal_store.py",
+      "evolution/performance_monitor.py",
+      "feedback/evolution_memory.py",
+      "constitution/audit_log.py",
+      "constitution/rollback_manager.py",
+      "constitution/constitution_rules.py",
+      "constitution/constitution_validator.py",
+      "constitution/approval_flow.py",
+      "future_phases_draft/evolutionary_cycle.py",
+      "constitution/audit_log.py"
+    ],
+    "evolutionary_cycle.py": [
+      "evolution/performance_monitor.py",
+      "evolution/improvement_detector.py",
+      "evolution/evolution_proposal.py",
+      "constitution/approval_flow.py",
+      "feedback/feedback_analyzer.py",
+      "feedback/adaptive_thresholds.py",
+      "feedback/feedback_collector.py",
+      "evolution/performance_monitor.py",
+      "evolution/proposal_store.py",
+      "constitution/audit_log.py"
+    ],
+    "forex_analytics.py": [
+      "forex/market_universe.py",
+      "forex/indicators.py",
+      "forex/forex_report.py",
+      "forex/forex_models.py",
+      "forex/forex_memory.py",
+      "forex/prediction/csv_adapter.py"
+    ],
+    "forex_watcher.py": [
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/integrated_pipeline.py",
+      "project_memory.py",
+      "signal_tracker.py"
+    ],
+    "generate_test_csv.py": [],
+    "intent_router.py": [],
+    "io_files.py": [
+      "ai_models.py"
+    ],
+    "lazy_loader.py": [],
+    "live_thinking.py": [],
+    "main.py": [
+      "memory.py",
+      "project_memory.py",
+      "signal_tracker.py",
+      "forex_watcher.py",
+      "active_engine.py",
+      "news_intelligence.py",
+      "prediction_lab/prompt_analyzer.py",
+      "prediction_lab/dataset_analyzer.py",
+      "prediction_lab/feasibility_engine.py",
+      "prediction_lab/model_planner.py",
+      "prediction_lab/pipeline_generator.py",
+      "prediction_lab/validation_engine.py",
+      "prediction_lab/report_generator.py",
+      "future_phases_draft/evolutionary_cycle.py",
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/hyperparameter_cache.py",
+      "forex/prediction/adaptive_trainer.py",
+      "forex/prediction/model_cache.py",
+      "forex/prediction/model_quality_history.py",
+      "forex/prediction/candlestick_patterns.py",
+      "forex/portfolio/opportunity_score.py",
+      "forex/data/data_router.py",
+      "forex/data/csv_migrator.py",
+      "forex/data/rolling_dataset.py",
+      "forex/data/yahoo_provider.py",
+      "forex/data/binance_provider.py",
+      "forex/scheduler/autonomous_scheduler.py",
+      "forex/scheduler/auto_updater.py",
+      "check_system.py",
+      "astra_doctor.py",
+      "astra_api.py",
+      "astra_api.py",
+      "astra_api.py",
+      "dev_log.py",
+      "io_files.py",
+      "ai_models.py",
+      "web_tools.py",
+      "audio_video.py",
+      "visualization.py",
+      "security.py",
+      "utils.py",
+      "progress_utils.py",
+      "modules_extra.py",
+      "tool_registry.py",
+      "intent_router.py",
+      "astra_agent.py",
+      "forex/market_universe.py",
+      "forex_analytics.py",
+      "forex/forex_memory.py",
+      "forex/forex_report.py",
+      "forex/business/business_pipeline.py",
+      "forex/prediction/circuit_breaker.py",
+      "forex/prediction/position_sizing.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/multi_pair_scanner.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/integrated_pipeline.py",
+      "sme_consultant.py",
+      "forex/data/csv_bulk_generator.py",
+      "argument_parser.py",
+      "memory.py",
+      "memory.py",
+      "cognitive_center.py",
+      "cognitive_center.py",
+      "io_files.py",
+      "forex/scheduler/auto_updater.py"
+    ],
+    "memory.py": [
+      "project_memory.py"
+    ],
+    "memory_router.py": [
+      "memory.py",
+      "modules_extra.py"
+    ],
+    "ml_advanced.py": [],
+    "modules_extra.py": [],
+    "news_intelligence.py": [
+      "ai_models.py",
+      "forex/prediction/integrated_pipeline.py",
+      "signal_tracker.py"
+    ],
+    "nlp_tools.py": [],
+    "notification_center.py": [],
+    "package_registry.py": [],
+    "progress_utils.py": [],
+    "project_memory.py": [],
+    "scheduler_service.py": [
+      "astra_api.py",
+      "forex/scheduler/autonomous_scheduler.py",
+      "forex/scheduler/auto_updater.py",
+      "forex/prediction/outcome_tracker.py",
+      "forex/data/data_router.py",
+      "forex/prediction/retrain_manager.py"
+    ],
+    "security.py": [],
+    "self_analysis.py": [
+      "memory.py",
+      "forex/forex_memory.py",
+      "tool_registry.py"
+    ],
+    "setup_windows.py": [],
+    "signal_tracker.py": [],
+    "sme_consultant.py": [
+      "forex/business/business_csv_adapter.py",
+      "forex/business/kpi_engine.py",
+      "ai_models.py"
+    ],
+    "test_complete_pipeline.py": [
+      "forex_analytics.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/indicators.py"
+    ],
+    "test_forex_pipeline.py": [
+      "forex/prediction/feature_engineering.py",
+      "forex/prediction/dataset_builder.py",
+      "forex/prediction/feature_engineering.py"
+    ],
+    "test_main.py": [
+      "modules_extra.py"
+    ],
+    "tool_executor.py": [
+      "tool_registry.py"
+    ],
+    "tool_registry.py": [
+      "io_files.py",
+      "ai_models.py",
+      "web_tools.py",
+      "audio_video.py",
+      "visualization.py",
+      "security.py",
+      "utils.py",
+      "modules_extra.py",
+      "ai_models.py",
+      "forex_analytics.py",
+      "bi_analytics.py",
+      "self_analysis.py",
+      "sme_consultant.py",
+      "forex/forex_memory.py",
+      "forex/prediction/integrated_pipeline.py",
+      "project_memory.py",
+      "signal_tracker.py",
+      "active_engine.py",
+      "news_intelligence.py",
+      "prediction_lab/prompt_analyzer.py",
+      "prediction_lab/dataset_analyzer.py",
+      "prediction_lab/feasibility_engine.py",
+      "prediction_lab/model_planner.py",
+      "prediction_lab/pipeline_generator.py",
+      "prediction_lab/validation_engine.py",
+      "cognitive_center.py",
+      "forex/prediction/roadmap_v_integration.py"
+    ],
+    "utils.py": [],
+    "visualization.py": [],
+    "web_tools.py": [],
+    "constitution/__init__.py": [
+      "constitution/audit_log.py",
+      "constitution/constitution_rules.py",
+      "constitution/rollback_manager.py",
+      "constitution/constitution_validator.py",
+      "constitution/approval_flow.py"
+    ],
+    "constitution/approval_flow.py": [
+      "evolution/proposal_store.py",
+      "constitution/constitution_validator.py",
+      "constitution/rollback_manager.py",
+      "constitution/audit_log.py",
+      "evolution/evolution_proposal.py"
+    ],
+    "constitution/audit_log.py": [
+      "memory.py"
+    ],
+    "constitution/constitution_rules.py": [
+      "constitution/audit_log.py",
+      "memory.py"
+    ],
+    "constitution/constitution_validator.py": [
+      "evolution/proposal_store.py",
+      "constitution/constitution_rules.py",
+      "constitution/audit_log.py",
+      "evolution/proposal_store.py"
+    ],
+    "constitution/rollback_manager.py": [
+      "constitution/audit_log.py",
+      "memory.py",
+      "feedback/adaptive_thresholds.py",
+      "feedback/adaptive_thresholds.py",
+      "feedback/adaptive_thresholds.py"
+    ],
+    "evolution/__init__.py": [
+      "evolution/proposal_store.py",
+      "evolution/performance_monitor.py",
+      "evolution/improvement_detector.py",
+      "evolution/evolution_proposal.py"
+    ],
+    "evolution/evolution_proposal.py": [
+      "evolution/improvement_detector.py",
+      "evolution/proposal_store.py",
+      "ai_models.py",
+      "feedback/adaptive_thresholds.py",
+      "feedback/feedback_collector.py",
+      "constitution/constitution_rules.py",
+      "constitution/audit_log.py"
+    ],
+    "evolution/improvement_detector.py": [
+      "evolution/performance_monitor.py",
+      "feedback/feedback_analyzer.py",
+      "feedback/adaptive_thresholds.py"
+    ],
+    "evolution/performance_monitor.py": [
+      "feedback/evolution_memory.py",
+      "memory.py"
+    ],
+    "evolution/proposal_store.py": [
+      "feedback/evolution_memory.py",
+      "memory.py"
+    ],
+    "feedback/__init__.py": [
+      "feedback/feedback_collector.py",
+      "feedback/feedback_analyzer.py",
+      "feedback/adaptive_thresholds.py",
+      "feedback/contextual_memory.py",
+      "feedback/feedback_dashboard.py",
+      "feedback/evolution_memory.py"
+    ],
+    "feedback/adaptive_thresholds.py": [
+      "feedback/evolution_memory.py",
+      "memory.py"
+    ],
+    "feedback/contextual_memory.py": [
+      "feedback/evolution_memory.py",
+      "memory.py"
+    ],
+    "feedback/evolution_memory.py": [
+      "memory.py"
+    ],
+    "feedback/feedback_analyzer.py": [
+      "feedback/feedback_collector.py"
+    ],
+    "feedback/feedback_collector.py": [
+      "feedback/evolution_memory.py",
+      "memory.py"
+    ],
+    "feedback/feedback_dashboard.py": [
+      "feedback/feedback_analyzer.py",
+      "feedback/adaptive_thresholds.py",
+      "feedback/evolution_memory.py",
+      "feedback/contextual_memory.py"
+    ],
+    "forex/__init__ (1).py": [
+      "forex/csv_adapter.py",
+      "forex/feature_engineering.py",
+      "forex/prediction/dataset_builder.py",
+      "forex/predictor.py"
+    ],
+    "forex/__init__ (3).py": [],
+    "forex/__init__.py": [],
+    "forex/backtester.py": [],
+    "forex/business_dataset_builder.py": [],
+    "forex/business_feature_engineering.py": [],
+    "forex/business_pipeline.py": [],
+    "forex/business_predictor.py": [
+      "forex/business/business_csv_adapter.py",
+      "forex/business/kpi_engine.py",
+      "forex/business/business_predictor.py",
+      "sme_consultant.py"
+    ],
+    "forex/csv_adapter.py": [],
+    "forex/feature_engineering.py": [
+      "forex/predictor.py"
+    ],
+    "forex/forex_memory.py": [
+      "forex/forex_report.py"
+    ],
+    "forex/forex_models.py": [],
+    "forex/forex_prediction_bridge.py": [],
+    "forex/forex_report.py": [],
+    "forex/hyperparameter_tuner.py": [],
+    "forex/indicators.py": [],
+    "forex/integrated_pipeline.py": [],
+    "forex/kpi_engine.py": [
+      "forex/business/kpi_engine.py"
+    ],
+    "forex/market_sentinel.py": [],
+    "forex/market_universe.py": [],
+    "forex/model_storage.py": [
+      "forex/feature_engineering.py",
+      "forex/prediction/dataset_builder.py",
+      "forex/predictor.py",
+      "forex/csv_adapter.py"
+    ],
+    "forex/multi_pair_scanner.py": [],
+    "forex/predictor.py": [
+      "forex/feature_engineering.py",
+      "forex/prediction/dataset_builder.py",
+      "forex/backtester.py",
+      "forex/xgb_trainer.py",
+      "forex/hyperparameter_tuner.py",
+      "forex/csv_adapter.py",
+      "forex/model_storage.py",
+      "forex/model_storage.py"
+    ],
+    "forex/xgb_trainer.py": [],
+    "forex/business/__init__.py": [],
+    "forex/business/business_csv_adapter.py": [],
+    "forex/business/business_dataset_builder.py": [],
+    "forex/business/business_feature_engineering.py": [],
+    "forex/business/business_pipeline.py": [
+      "forex/business/business_csv_adapter.py",
+      "forex/business/kpi_engine.py",
+      "forex/business/business_predictor.py",
+      "sme_consultant.py"
+    ],
+    "forex/business/business_predictor.py": [
+      "forex/business/kpi_engine.py"
+    ],
+    "forex/business/kpi_engine.py": [],
+    "forex/data/__init__.py": [
+      "forex/data/rolling_dataset.py",
+      "forex/data/indicator_delta.py",
+      "forex/data/csv_migrator.py",
+      "forex/data/data_router.py",
+      "forex/data/yahoo_provider.py",
+      "forex/data/binance_provider.py",
+      "forex/data/mt5_provider.py"
+    ],
+    "forex/data/binance_provider.py": [],
+    "forex/data/csv_bulk_generator.py": [
+      "generate_test_csv.py",
+      "forex/data/yahoo_provider.py"
+    ],
+    "forex/data/csv_migrator.py": [],
+    "forex/data/data_router.py": [
+      "forex/data/binance_provider.py",
+      "forex/data/mt5_provider.py",
+      "forex/data/yahoo_provider.py",
+      "forex/data/binance_provider.py",
+      "forex/data/yahoo_provider.py"
+    ],
+    "forex/data/dataset_updater.py": [],
+    "forex/data/indicator_delta.py": [],
+    "forex/data/mt5_provider.py": [
+      "forex/data/yahoo_provider.py"
+    ],
+    "forex/data/rolling_dataset.py": [
+      "forex/data/indicator_delta.py"
+    ],
+    "forex/data/yahoo_provider.py": [],
+    "forex/portfolio/__init__.py": [
+      "forex/portfolio/opportunity_score.py"
+    ],
+    "forex/portfolio/opportunity_score.py": [],
+    "forex/portfolio/portfolio_ranker.py": [],
+    "forex/prediction/__init__.py": [
+      "forex/prediction/dataset_builder.py",
+      "forex/prediction/xgb_trainer.py",
+      "forex/prediction/predictor.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/hyperparameter_tuner.py",
+      "forex/prediction/csv_adapter.py",
+      "forex/prediction/multi_pair_scanner.py",
+      "forex/prediction/model_storage.py",
+      "forex/prediction/feature_engineering.py",
+      "forex/prediction/decision_engine.py",
+      "forex/prediction/risk_engine.py",
+      "forex/prediction/regime_detector.py",
+      "forex/prediction/mtf_coherence.py",
+      "forex/prediction/reliability_score.py",
+      "forex/prediction/quality_analyzer.py",
+      "forex/prediction/backtest_protocol.py",
+      "forex/prediction/feature_importance.py",
+      "forex/prediction/model_selector.py",
+      "forex/prediction/outcome_tracker.py",
+      "forex/prediction/retrain_manager.py"
+    ],
+    "forex/prediction/adaptive_trainer.py": [],
+    "forex/prediction/backtest_protocol.py": [],
+    "forex/prediction/backtester.py": [
+      "forex/prediction/predictor.py"
+    ],
+    "forex/prediction/candlestick_patterns.py": [],
+    "forex/prediction/circuit_breaker.py": [],
+    "forex/prediction/csv_adapter.py": [],
+    "forex/prediction/dataset_builder.py": [],
+    "forex/prediction/decision_engine.py": [
+      "forex/prediction/reliability_score.py",
+      "forex/prediction/regime_detector.py",
+      "forex/prediction/mtf_coherence.py",
+      "forex/prediction/decision_explainer.py",
+      "forex/prediction/regime_detector.py",
+      "forex/prediction/mtf_coherence.py"
+    ],
+    "forex/prediction/decision_explainer.py": [
+      "forex/prediction/reliability_score.py",
+      "forex/prediction/regime_detector.py",
+      "forex/prediction/mtf_coherence.py"
+    ],
+    "forex/prediction/feature_engineering.py": [],
+    "forex/prediction/feature_importance.py": [],
+    "forex/prediction/forex_prediction_bridge.py": [
+      "forex/prediction/feature_engineering.py",
+      "forex/prediction/dataset_builder.py",
+      "forex/prediction/predictor.py",
+      "forex/prediction/csv_adapter.py"
+    ],
+    "forex/prediction/hyperparameter_cache.py": [],
+    "forex/prediction/hyperparameter_tuner.py": [
+      "forex/prediction/hyperparameter_cache.py",
+      "forex/prediction/hyperparameter_cache.py"
+    ],
+    "forex/prediction/integrated_pipeline.py": [
+      "forex/prediction/feature_engineering.py",
+      "forex/prediction/dataset_builder.py",
+      "forex/prediction/predictor.py",
+      "forex/prediction/backtester.py",
+      "forex/prediction/xgb_trainer.py",
+      "forex/prediction/hyperparameter_tuner.py",
+      "forex/prediction/csv_adapter.py",
+      "forex/prediction/model_storage.py",
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/candlestick_patterns.py",
+      "forex/prediction/circuit_breaker.py",
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/outcome_tracker.py",
+      "forex/prediction/model_storage.py"
+    ],
+    "forex/prediction/model_cache.py": [],
+    "forex/prediction/model_quality_history.py": [],
+    "forex/prediction/model_selector.py": [
+      "forex/prediction/backtest_protocol.py"
+    ],
+    "forex/prediction/model_storage.py": [],
+    "forex/prediction/mtf_coherence.py": [],
+    "forex/prediction/multi_pair_scanner.py": [
+      "forex/prediction/csv_adapter.py",
+      "forex/prediction/feature_engineering.py",
+      "forex/prediction/dataset_builder.py",
+      "forex/prediction/predictor.py",
+      "signal_tracker.py"
+    ],
+    "forex/prediction/outcome_tracker.py": [],
+    "forex/prediction/position_sizing.py": [],
+    "forex/prediction/predictor.py": [
+      "forex/prediction/model_storage.py"
+    ],
+    "forex/prediction/quality_analyzer.py": [
+      "forex/prediction/quality_report.py"
+    ],
+    "forex/prediction/quality_report.py": [],
+    "forex/prediction/regime_detector.py": [],
+    "forex/prediction/reliability_score.py": [],
+    "forex/prediction/retrain_manager.py": [],
+    "forex/prediction/risk_engine.py": [],
+    "forex/prediction/roadmap_v_integration.py": [
+      "forex/prediction/quality_analyzer.py",
+      "forex/prediction/quality_report.py",
+      "forex/prediction/backtest_protocol.py",
+      "forex/prediction/feature_importance.py",
+      "forex/prediction/regime_detector.py",
+      "forex/prediction/mtf_coherence.py",
+      "forex/prediction/reliability_score.py",
+      "forex/prediction/model_selector.py",
+      "forex/prediction/decision_engine.py",
+      "forex/prediction/risk_engine.py",
+      "forex/data/dataset_updater.py",
+      "forex/scheduler/task_manager.py",
+      "forex/prediction/retrain_manager.py",
+      "forex/market_sentinel.py",
+      "forex/prediction/outcome_tracker.py",
+      "notifications/notifier.py",
+      "forex/portfolio/portfolio_ranker.py"
+    ],
+    "forex/prediction/xgb_trainer.py": [
+      "forex/prediction/model_storage.py",
+      "forex/prediction/model_storage.py"
+    ],
+    "forex/scheduler/__init__.py": [
+      "forex/scheduler/autonomous_scheduler.py",
+      "forex/scheduler/auto_updater.py"
+    ],
+    "forex/scheduler/auto_updater.py": [
+      "forex/data/data_router.py",
+      "forex/data/rolling_dataset.py"
+    ],
+    "forex/scheduler/autonomous_scheduler.py": [],
+    "forex/scheduler/task_manager.py": [],
+    "future_phases_draft/evolutionary_cycle.py": [
+      "evolution/performance_monitor.py",
+      "evolution/improvement_detector.py",
+      "evolution/evolution_proposal.py",
+      "constitution/approval_flow.py",
+      "feedback/feedback_analyzer.py",
+      "feedback/adaptive_thresholds.py",
+      "feedback/feedback_collector.py",
+      "evolution/performance_monitor.py",
+      "evolution/proposal_store.py",
+      "constitution/audit_log.py"
+    ],
+    "future_phases_draft/constitution/__init__.py": [
+      "future_phases_draft/constitution/audit_log.py",
+      "future_phases_draft/constitution/constitution_rules.py",
+      "future_phases_draft/constitution/rollback_manager.py",
+      "future_phases_draft/constitution/constitution_validator.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "future_phases_draft/constitution/approval_flow.py": [
+      "evolution/proposal_store.py",
+      "future_phases_draft/constitution/constitution_validator.py",
+      "future_phases_draft/constitution/rollback_manager.py",
+      "future_phases_draft/constitution/audit_log.py",
+      "evolution/evolution_proposal.py"
+    ],
+    "future_phases_draft/constitution/audit_log.py": [],
+    "future_phases_draft/constitution/constitution_rules.py": [
+      "future_phases_draft/constitution/audit_log.py"
+    ],
+    "future_phases_draft/constitution/constitution_validator.py": [
+      "evolution/proposal_store.py",
+      "future_phases_draft/constitution/constitution_rules.py",
+      "future_phases_draft/constitution/audit_log.py",
+      "evolution/proposal_store.py"
+    ],
+    "future_phases_draft/constitution/rollback_manager.py": [
+      "future_phases_draft/constitution/audit_log.py",
+      "feedback/adaptive_thresholds.py",
+      "feedback/adaptive_thresholds.py"
+    ],
+    "future_phases_draft/evolution/__init__.py": [
+      "future_phases_draft/evolution/proposal_store.py",
+      "future_phases_draft/evolution/performance_monitor.py",
+      "future_phases_draft/evolution/improvement_detector.py",
+      "future_phases_draft/evolution/evolution_proposal.py"
+    ],
+    "future_phases_draft/evolution/evolution_proposal.py": [
+      "future_phases_draft/evolution/improvement_detector.py",
+      "future_phases_draft/evolution/proposal_store.py",
+      "ai_models.py",
+      "feedback/adaptive_thresholds.py",
+      "feedback/feedback_collector.py"
+    ],
+    "future_phases_draft/evolution/improvement_detector.py": [
+      "future_phases_draft/evolution/performance_monitor.py",
+      "feedback/feedback_analyzer.py",
+      "feedback/adaptive_thresholds.py"
+    ],
+    "future_phases_draft/evolution/performance_monitor.py": [
+      "feedback/evolution_memory.py"
+    ],
+    "future_phases_draft/evolution/proposal_store.py": [
+      "feedback/evolution_memory.py"
+    ],
+    "future_phases_draft/feedback/__init__.py": [
+      "future_phases_draft/feedback/feedback_collector.py",
+      "future_phases_draft/feedback/feedback_analyzer.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py",
+      "future_phases_draft/feedback/contextual_memory.py",
+      "future_phases_draft/feedback/feedback_dashboard.py",
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "future_phases_draft/feedback/adaptive_thresholds.py": [
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "future_phases_draft/feedback/contextual_memory.py": [
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "future_phases_draft/feedback/evolution_memory.py": [],
+    "future_phases_draft/feedback/feedback_analyzer.py": [
+      "future_phases_draft/feedback/feedback_collector.py"
+    ],
+    "future_phases_draft/feedback/feedback_collector.py": [
+      "future_phases_draft/feedback/evolution_memory.py"
+    ],
+    "future_phases_draft/feedback/feedback_dashboard.py": [
+      "future_phases_draft/feedback/feedback_analyzer.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py",
+      "future_phases_draft/feedback/evolution_memory.py",
+      "future_phases_draft/feedback/contextual_memory.py"
+    ],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/dataset_analyzer_bolt_variant.py": [],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/feasibility_engine_bolt_variant.py": [
+      "prediction_lab/dataset_analyzer.py",
+      "prediction_lab/prompt_analyzer.py",
+      "prediction_lab/prompt_analyzer.py"
+    ],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py": [
+      "prediction_lab/feasibility_engine.py",
+      "prediction_lab/prompt_analyzer.py",
+      "prediction_lab/prompt_analyzer.py",
+      "prediction_lab/feasibility_engine.py"
+    ],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/pipeline_generator.py": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py"
+    ],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/prompt_analyzer_bolt_variant.py": [],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py": [
+      "prediction_lab/feasibility_engine.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/pipeline_generator.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py",
+      "ai_models.py",
+      "prediction_lab/prompt_analyzer.py",
+      "prediction_lab/dataset_analyzer.py",
+      "prediction_lab/feasibility_engine.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/pipeline_generator.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py"
+    ],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/pipeline_generator.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py"
+    ],
+    "legacy/astra_legacy_v1.py": [],
+    "notifications/__init__.py": [],
+    "notifications/notifier.py": [],
+    "prediction_lab/__init__.py": [],
+    "prediction_lab/dataset_analyzer.py": [],
+    "prediction_lab/feasibility_engine.py": [
+      "prediction_lab/prompt_analyzer.py",
+      "prediction_lab/dataset_analyzer.py"
+    ],
+    "prediction_lab/model_planner.py": [
+      "prediction_lab/prompt_analyzer.py",
+      "prediction_lab/dataset_analyzer.py",
+      "prediction_lab/feasibility_engine.py"
+    ],
+    "prediction_lab/pipeline_generator.py": [
+      "prediction_lab/model_planner.py"
+    ],
+    "prediction_lab/prompt_analyzer.py": [
+      "ai_models.py"
+    ],
+    "prediction_lab/report_generator.py": [
+      "prediction_lab/prompt_analyzer.py",
+      "prediction_lab/dataset_analyzer.py",
+      "prediction_lab/feasibility_engine.py",
+      "prediction_lab/model_planner.py",
+      "prediction_lab/pipeline_generator.py",
+      "prediction_lab/validation_engine.py",
+      "prediction_lab/model_planner.py"
+    ],
+    "prediction_lab/validation_engine.py": [
+      "prediction_lab/pipeline_generator.py",
+      "prediction_lab/model_planner.py",
+      "prediction_lab/model_planner.py",
+      "prediction_lab/pipeline_generator.py"
+    ],
+    "workspace/server.py": [
+      "memory.py",
+      "project_memory.py",
+      "ai_models.py",
+      "astra_agent.py",
+      "intent_router.py",
+      "tool_registry.py",
+      "main.py",
+      "forex/market_universe.py",
+      "cognitive_center.py",
+      "activity_center.py",
+      "notification_center.py",
+      "live_thinking.py",
+      "forex_watcher.py",
+      "active_engine.py",
+      "feedback/evolution_memory.py",
+      "evolution/proposal_store.py",
+      "forex/forex_memory.py",
+      "forex/forex_memory.py",
+      "forex/prediction/circuit_breaker.py",
+      "prediction_lab/report_generator.py",
+      "forex/business/business_csv_adapter.py",
+      "forex/business/kpi_engine.py",
+      "forex/business/business_predictor.py",
+      "evolution_center.py",
+      "active_engine.py",
+      "memory.py",
+      "forex/prediction/hyperparameter_cache.py",
+      "forex/prediction/model_cache.py",
+      "forex/data/rolling_dataset.py"
+    ]
+  },
+  "imported_by": {
+    "active_engine.py": [
+      "workspace/server.py",
+      "main.py",
+      "tool_registry.py"
+    ],
+    "activity_center.py": [
+      "workspace/server.py"
+    ],
+    "ai_models.py": [
+      "sme_consultant.py",
+      "workspace/server.py",
+      "prediction_lab/prompt_analyzer.py",
+      "cognitive_center.py",
+      "io_files.py",
+      "main.py",
+      "astra_agent.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+      "tool_registry.py",
+      "future_phases_draft/evolution/evolution_proposal.py",
+      "evolution/evolution_proposal.py",
+      "news_intelligence.py"
+    ],
+    "analytics_memory.py": [
+      "conversation_context.py"
+    ],
+    "argument_parser.py": [
+      "astra_agent.py",
+      "main.py"
+    ],
+    "astra.py": [],
+    "astra_agent.py": [
+      "workspace/server.py",
+      "main.py"
+    ],
+    "astra_api.py": [
+      "scheduler_service.py",
+      "main.py"
+    ],
+    "astra_doctor.py": [
+      "astra_api.py",
+      "main.py"
+    ],
+    "astra_lazy_loader.py": [],
+    "astra_lazy_loader_custom.py": [],
+    "audio_video.py": [
+      "main.py",
+      "tool_registry.py"
+    ],
+    "bi_analytics.py": [
+      "tool_registry.py"
+    ],
+    "check_functionality.py": [],
+    "check_skeleton.py": [],
+    "check_startup.py": [],
+    "check_system.py": [
+      "main.py"
+    ],
+    "cloud_tools.py": [],
+    "cognitive_center.py": [
+      "workspace/server.py",
+      "main.py",
+      "tool_registry.py"
+    ],
+    "conversation_context.py": [],
+    "creando.py": [
+      "check_startup.py"
+    ],
+    "dev_log.py": [
+      "main.py"
+    ],
+    "evolution_center.py": [
+      "workspace/server.py"
+    ],
+    "evolutionary_cycle.py": [],
+    "forex_analytics.py": [
+      "tool_registry.py",
+      "main.py",
+      "test_complete_pipeline.py"
+    ],
+    "forex_watcher.py": [
+      "workspace/server.py",
+      "main.py"
+    ],
+    "generate_test_csv.py": [
+      "forex/data/csv_bulk_generator.py"
+    ],
+    "intent_router.py": [
+      "astra_agent.py",
+      "workspace/server.py",
+      "main.py"
+    ],
+    "io_files.py": [
+      "main.py",
+      "tool_registry.py"
+    ],
+    "lazy_loader.py": [],
+    "live_thinking.py": [
+      "workspace/server.py"
+    ],
+    "main.py": [
+      "workspace/server.py"
+    ],
+    "memory.py": [
+      "evolution/proposal_store.py",
+      "workspace/server.py",
+      "ai_models.py",
+      "self_analysis.py",
+      "evolution/performance_monitor.py",
+      "activity_center.py",
+      "cognitive_center.py",
+      "feedback/adaptive_thresholds.py",
+      "main.py",
+      "feedback/contextual_memory.py",
+      "feedback/feedback_collector.py",
+      "constitution/rollback_manager.py",
+      "memory_router.py",
+      "constitution/audit_log.py",
+      "constitution/constitution_rules.py",
+      "feedback/evolution_memory.py"
+    ],
+    "memory_router.py": [
+      "astra_agent.py",
+      "conversation_context.py",
+      "analytics_memory.py"
+    ],
+    "ml_advanced.py": [],
+    "modules_extra.py": [
+      "check_startup.py",
+      "main.py",
+      "memory_router.py",
+      "tool_registry.py",
+      "test_main.py"
+    ],
+    "news_intelligence.py": [
+      "main.py",
+      "tool_registry.py"
+    ],
+    "nlp_tools.py": [],
+    "notification_center.py": [
+      "workspace/server.py"
+    ],
+    "package_registry.py": [],
+    "progress_utils.py": [
+      "main.py"
+    ],
+    "project_memory.py": [
+      "workspace/server.py",
+      "cognitive_center.py",
+      "main.py",
+      "forex_watcher.py",
+      "tool_registry.py",
+      "memory.py"
+    ],
+    "scheduler_service.py": [],
+    "security.py": [
+      "main.py",
+      "tool_registry.py"
+    ],
+    "self_analysis.py": [
+      "tool_registry.py"
+    ],
+    "setup_windows.py": [],
+    "signal_tracker.py": [
+      "forex/prediction/multi_pair_scanner.py",
+      "activity_center.py",
+      "main.py",
+      "forex_watcher.py",
+      "active_engine.py",
+      "tool_registry.py",
+      "news_intelligence.py"
+    ],
+    "sme_consultant.py": [
+      "forex/business/business_pipeline.py",
+      "forex/business_predictor.py",
+      "main.py",
+      "tool_registry.py"
+    ],
+    "test_complete_pipeline.py": [],
+    "test_forex_pipeline.py": [],
+    "test_main.py": [],
+    "tool_executor.py": [
+      "astra_agent.py"
+    ],
+    "tool_registry.py": [
+      "workspace/server.py",
+      "tool_executor.py",
+      "self_analysis.py",
+      "main.py",
+      "astra_agent.py"
+    ],
+    "utils.py": [
+      "main.py",
+      "tool_registry.py"
+    ],
+    "visualization.py": [
+      "main.py",
+      "tool_registry.py"
+    ],
+    "web_tools.py": [
+      "main.py",
+      "tool_registry.py"
+    ],
+    "constitution/__init__.py": [],
+    "constitution/approval_flow.py": [
+      "evolutionary_cycle.py",
+      "future_phases_draft/evolutionary_cycle.py",
+      "constitution/__init__.py",
+      "evolution_center.py"
+    ],
+    "constitution/audit_log.py": [
+      "future_phases_draft/evolutionary_cycle.py",
+      "evolutionary_cycle.py",
+      "constitution/rollback_manager.py",
+      "constitution/__init__.py",
+      "evolution_center.py",
+      "evolution/evolution_proposal.py",
+      "constitution/constitution_validator.py",
+      "constitution/constitution_rules.py",
+      "constitution/approval_flow.py"
+    ],
+    "constitution/constitution_rules.py": [
+      "constitution/constitution_validator.py",
+      "evolution/evolution_proposal.py",
+      "constitution/__init__.py",
+      "evolution_center.py"
+    ],
+    "constitution/constitution_validator.py": [
+      "constitution/__init__.py",
+      "evolution_center.py",
+      "constitution/approval_flow.py"
+    ],
+    "constitution/rollback_manager.py": [
+      "constitution/__init__.py",
+      "evolution_center.py",
+      "constitution/approval_flow.py"
+    ],
+    "evolution/__init__.py": [],
+    "evolution/evolution_proposal.py": [
+      "future_phases_draft/evolutionary_cycle.py",
+      "evolutionary_cycle.py",
+      "evolution/__init__.py",
+      "future_phases_draft/constitution/approval_flow.py",
+      "constitution/approval_flow.py"
+    ],
+    "evolution/improvement_detector.py": [
+      "evolutionary_cycle.py",
+      "evolution/__init__.py",
+      "evolution/evolution_proposal.py",
+      "future_phases_draft/evolutionary_cycle.py"
+    ],
+    "evolution/performance_monitor.py": [
+      "future_phases_draft/evolutionary_cycle.py",
+      "evolution/improvement_detector.py",
+      "evolutionary_cycle.py",
+      "evolution/__init__.py",
+      "evolution_center.py"
+    ],
+    "evolution/proposal_store.py": [
+      "future_phases_draft/evolutionary_cycle.py",
+      "workspace/server.py",
+      "future_phases_draft/constitution/constitution_validator.py",
+      "evolutionary_cycle.py",
+      "evolution/__init__.py",
+      "evolution_center.py",
+      "future_phases_draft/constitution/approval_flow.py",
+      "evolution/evolution_proposal.py",
+      "constitution/constitution_validator.py",
+      "constitution/approval_flow.py"
+    ],
+    "feedback/__init__.py": [],
+    "feedback/adaptive_thresholds.py": [
+      "future_phases_draft/evolutionary_cycle.py",
+      "cognitive_center.py",
+      "future_phases_draft/evolution/improvement_detector.py",
+      "evolution/improvement_detector.py",
+      "evolutionary_cycle.py",
+      "future_phases_draft/constitution/rollback_manager.py",
+      "constitution/rollback_manager.py",
+      "feedback/__init__.py",
+      "future_phases_draft/evolution/evolution_proposal.py",
+      "feedback/feedback_dashboard.py",
+      "evolution/evolution_proposal.py"
+    ],
+    "feedback/contextual_memory.py": [
+      "feedback/feedback_dashboard.py",
+      "cognitive_center.py",
+      "feedback/__init__.py"
+    ],
+    "feedback/evolution_memory.py": [
+      "evolution/proposal_store.py",
+      "workspace/server.py",
+      "feedback/adaptive_thresholds.py",
+      "evolution/performance_monitor.py",
+      "activity_center.py",
+      "future_phases_draft/evolution/proposal_store.py",
+      "feedback/contextual_memory.py",
+      "feedback/feedback_collector.py",
+      "feedback/__init__.py",
+      "evolution_center.py",
+      "feedback/feedback_dashboard.py",
+      "future_phases_draft/evolution/performance_monitor.py"
+    ],
+    "feedback/feedback_analyzer.py": [
+      "future_phases_draft/evolutionary_cycle.py",
+      "future_phases_draft/evolution/improvement_detector.py",
+      "evolution/improvement_detector.py",
+      "evolutionary_cycle.py",
+      "feedback/__init__.py",
+      "feedback/feedback_dashboard.py"
+    ],
+    "feedback/feedback_collector.py": [
+      "future_phases_draft/evolutionary_cycle.py",
+      "evolutionary_cycle.py",
+      "feedback/__init__.py",
+      "feedback/feedback_analyzer.py",
+      "future_phases_draft/evolution/evolution_proposal.py",
+      "evolution/evolution_proposal.py"
+    ],
+    "feedback/feedback_dashboard.py": [
+      "feedback/__init__.py"
+    ],
+    "forex/__init__ (1).py": [],
+    "forex/__init__ (3).py": [],
+    "forex/__init__.py": [],
+    "forex/backtester.py": [
+      "forex/predictor.py"
+    ],
+    "forex/business_dataset_builder.py": [],
+    "forex/business_feature_engineering.py": [],
+    "forex/business_pipeline.py": [],
+    "forex/business_predictor.py": [],
+    "forex/csv_adapter.py": [
+      "forex/predictor.py",
+      "forex/__init__ (1).py",
+      "forex/model_storage.py"
+    ],
+    "forex/feature_engineering.py": [
+      "forex/predictor.py",
+      "forex/__init__ (1).py",
+      "forex/model_storage.py"
+    ],
+    "forex/forex_memory.py": [
+      "forex_analytics.py",
+      "workspace/server.py",
+      "self_analysis.py",
+      "main.py",
+      "tool_registry.py"
+    ],
+    "forex/forex_models.py": [
+      "forex_analytics.py"
+    ],
+    "forex/forex_prediction_bridge.py": [],
+    "forex/forex_report.py": [
+      "forex_analytics.py",
+      "main.py",
+      "forex/forex_memory.py"
+    ],
+    "forex/hyperparameter_tuner.py": [
+      "forex/predictor.py"
+    ],
+    "forex/indicators.py": [
+      "forex_analytics.py",
+      "test_complete_pipeline.py"
+    ],
+    "forex/integrated_pipeline.py": [],
+    "forex/kpi_engine.py": [],
+    "forex/market_sentinel.py": [
+      "forex/prediction/roadmap_v_integration.py"
+    ],
+    "forex/market_universe.py": [
+      "forex_analytics.py",
+      "check_startup.py",
+      "workspace/server.py",
+      "main.py",
+      "argument_parser.py",
+      "creando.py"
+    ],
+    "forex/model_storage.py": [
+      "forex/predictor.py"
+    ],
+    "forex/multi_pair_scanner.py": [],
+    "forex/predictor.py": [
+      "forex/__init__ (1).py",
+      "forex/feature_engineering.py",
+      "forex/model_storage.py"
+    ],
+    "forex/xgb_trainer.py": [
+      "forex/predictor.py"
+    ],
+    "forex/business/__init__.py": [],
+    "forex/business/business_csv_adapter.py": [
+      "sme_consultant.py",
+      "workspace/server.py",
+      "bi_analytics.py",
+      "forex/business/business_pipeline.py",
+      "forex/business_predictor.py"
+    ],
+    "forex/business/business_dataset_builder.py": [],
+    "forex/business/business_feature_engineering.py": [],
+    "forex/business/business_pipeline.py": [
+      "bi_analytics.py",
+      "main.py"
+    ],
+    "forex/business/business_predictor.py": [
+      "forex/business/business_pipeline.py",
+      "forex/business_predictor.py",
+      "workspace/server.py"
+    ],
+    "forex/business/kpi_engine.py": [
+      "sme_consultant.py",
+      "check_startup.py",
+      "workspace/server.py",
+      "forex/kpi_engine.py",
+      "bi_analytics.py",
+      "forex/business/business_pipeline.py",
+      "forex/business/business_predictor.py",
+      "forex/business_predictor.py"
+    ],
+    "forex/data/__init__.py": [],
+    "forex/data/binance_provider.py": [
+      "forex/data/data_router.py",
+      "forex/data/__init__.py",
+      "main.py"
+    ],
+    "forex/data/csv_bulk_generator.py": [
+      "main.py"
+    ],
+    "forex/data/csv_migrator.py": [
+      "astra_api.py",
+      "forex/data/__init__.py",
+      "main.py"
+    ],
+    "forex/data/data_router.py": [
+      "scheduler_service.py",
+      "forex/data/__init__.py",
+      "forex/scheduler/auto_updater.py",
+      "main.py"
+    ],
+    "forex/data/dataset_updater.py": [
+      "forex/prediction/roadmap_v_integration.py"
+    ],
+    "forex/data/indicator_delta.py": [
+      "forex/data/rolling_dataset.py",
+      "forex/data/__init__.py"
+    ],
+    "forex/data/mt5_provider.py": [
+      "forex/data/data_router.py",
+      "forex/data/__init__.py"
+    ],
+    "forex/data/rolling_dataset.py": [
+      "forex/scheduler/auto_updater.py",
+      "forex/data/__init__.py",
+      "workspace/server.py",
+      "main.py"
+    ],
+    "forex/data/yahoo_provider.py": [
+      "forex/data/data_router.py",
+      "main.py",
+      "forex/data/csv_bulk_generator.py",
+      "forex/data/__init__.py",
+      "forex/data/mt5_provider.py"
+    ],
+    "forex/portfolio/__init__.py": [],
+    "forex/portfolio/opportunity_score.py": [
+      "forex/portfolio/__init__.py",
+      "astra_api.py",
+      "main.py"
+    ],
+    "forex/portfolio/portfolio_ranker.py": [
+      "forex/prediction/roadmap_v_integration.py"
+    ],
+    "forex/prediction/__init__.py": [],
+    "forex/prediction/adaptive_trainer.py": [
+      "main.py"
+    ],
+    "forex/prediction/backtest_protocol.py": [
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/__init__.py",
+      "forex/prediction/model_selector.py"
+    ],
+    "forex/prediction/backtester.py": [
+      "forex/prediction/integrated_pipeline.py",
+      "check_startup.py"
+    ],
+    "forex/prediction/candlestick_patterns.py": [
+      "forex/prediction/integrated_pipeline.py",
+      "main.py"
+    ],
+    "forex/prediction/circuit_breaker.py": [
+      "main.py",
+      "forex/prediction/integrated_pipeline.py",
+      "workspace/server.py",
+      "active_engine.py"
+    ],
+    "forex/prediction/csv_adapter.py": [
+      "forex/prediction/multi_pair_scanner.py",
+      "forex_analytics.py",
+      "check_startup.py",
+      "forex/prediction/__init__.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/forex_prediction_bridge.py"
+    ],
+    "forex/prediction/dataset_builder.py": [
+      "forex/prediction/multi_pair_scanner.py",
+      "check_startup.py",
+      "forex/model_storage.py",
+      "forex/prediction/__init__.py",
+      "forex/predictor.py",
+      "test_forex_pipeline.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/__init__ (1).py",
+      "forex/prediction/forex_prediction_bridge.py"
+    ],
+    "forex/prediction/decision_engine.py": [
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/__init__.py"
+    ],
+    "forex/prediction/decision_explainer.py": [
+      "forex/prediction/decision_engine.py"
+    ],
+    "forex/prediction/feature_engineering.py": [
+      "forex/prediction/multi_pair_scanner.py",
+      "check_startup.py",
+      "forex/prediction/__init__.py",
+      "test_forex_pipeline.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/forex_prediction_bridge.py"
+    ],
+    "forex/prediction/feature_importance.py": [
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/__init__.py"
+    ],
+    "forex/prediction/forex_prediction_bridge.py": [],
+    "forex/prediction/hyperparameter_cache.py": [
+      "forex/prediction/hyperparameter_tuner.py",
+      "workspace/server.py",
+      "main.py"
+    ],
+    "forex/prediction/hyperparameter_tuner.py": [
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/__init__.py"
+    ],
+    "forex/prediction/integrated_pipeline.py": [
+      "check_startup.py",
+      "test_complete_pipeline.py",
+      "forex/prediction/__init__.py",
+      "main.py",
+      "forex_watcher.py",
+      "active_engine.py",
+      "tool_registry.py",
+      "news_intelligence.py"
+    ],
+    "forex/prediction/model_cache.py": [
+      "astra_doctor.py",
+      "workspace/server.py",
+      "main.py"
+    ],
+    "forex/prediction/model_quality_history.py": [
+      "astra_api.py",
+      "main.py"
+    ],
+    "forex/prediction/model_selector.py": [
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/__init__.py"
+    ],
+    "forex/prediction/model_storage.py": [
+      "forex/prediction/xgb_trainer.py",
+      "check_startup.py",
+      "forex/prediction/__init__.py",
+      "forex/prediction/predictor.py",
+      "forex/prediction/integrated_pipeline.py"
+    ],
+    "forex/prediction/mtf_coherence.py": [
+      "forex/prediction/decision_explainer.py",
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/__init__.py",
+      "forex/prediction/decision_engine.py"
+    ],
+    "forex/prediction/multi_pair_scanner.py": [
+      "forex/prediction/__init__.py",
+      "main.py"
+    ],
+    "forex/prediction/outcome_tracker.py": [
+      "scheduler_service.py",
+      "forex/prediction/roadmap_v_integration.py",
+      "astra_api.py",
+      "forex/prediction/__init__.py",
+      "forex/prediction/integrated_pipeline.py"
+    ],
+    "forex/prediction/position_sizing.py": [
+      "main.py",
+      "active_engine.py"
+    ],
+    "forex/prediction/predictor.py": [
+      "forex/prediction/multi_pair_scanner.py",
+      "check_startup.py",
+      "forex/prediction/backtester.py",
+      "forex/prediction/__init__.py",
+      "forex/prediction/integrated_pipeline.py",
+      "forex/prediction/forex_prediction_bridge.py"
+    ],
+    "forex/prediction/quality_analyzer.py": [
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/__init__.py"
+    ],
+    "forex/prediction/quality_report.py": [
+      "forex/prediction/quality_analyzer.py",
+      "forex/prediction/roadmap_v_integration.py"
+    ],
+    "forex/prediction/regime_detector.py": [
+      "forex/prediction/decision_explainer.py",
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/__init__.py",
+      "forex/prediction/decision_engine.py"
+    ],
+    "forex/prediction/reliability_score.py": [
+      "forex/prediction/decision_explainer.py",
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/__init__.py",
+      "forex/prediction/decision_engine.py"
+    ],
+    "forex/prediction/retrain_manager.py": [
+      "scheduler_service.py",
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/__init__.py"
+    ],
+    "forex/prediction/risk_engine.py": [
+      "forex/prediction/roadmap_v_integration.py",
+      "forex/prediction/__init__.py"
+    ],
+    "forex/prediction/roadmap_v_integration.py": [
+      "forex/prediction/integrated_pipeline.py",
+      "main.py",
+      "tool_registry.py"
+    ],
+    "forex/prediction/xgb_trainer.py": [
+      "forex/prediction/integrated_pipeline.py",
+      "check_startup.py",
+      "forex/prediction/__init__.py"
+    ],
+    "forex/scheduler/__init__.py": [],
+    "forex/scheduler/auto_updater.py": [
+      "astra_doctor.py",
+      "forex/scheduler/__init__.py",
+      "main.py",
+      "scheduler_service.py"
+    ],
+    "forex/scheduler/autonomous_scheduler.py": [
+      "scheduler_service.py",
+      "check_system.py",
+      "forex/scheduler/__init__.py",
+      "astra_api.py",
+      "main.py",
+      "astra_doctor.py"
+    ],
+    "forex/scheduler/task_manager.py": [
+      "forex/prediction/roadmap_v_integration.py"
+    ],
+    "future_phases_draft/evolutionary_cycle.py": [
+      "main.py",
+      "evolution_center.py"
+    ],
+    "future_phases_draft/constitution/__init__.py": [],
+    "future_phases_draft/constitution/approval_flow.py": [
+      "future_phases_draft/constitution/__init__.py"
+    ],
+    "future_phases_draft/constitution/audit_log.py": [
+      "future_phases_draft/constitution/constitution_validator.py",
+      "future_phases_draft/constitution/constitution_rules.py",
+      "future_phases_draft/constitution/rollback_manager.py",
+      "future_phases_draft/constitution/__init__.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "future_phases_draft/constitution/constitution_rules.py": [
+      "future_phases_draft/constitution/__init__.py",
+      "future_phases_draft/constitution/constitution_validator.py"
+    ],
+    "future_phases_draft/constitution/constitution_validator.py": [
+      "future_phases_draft/constitution/__init__.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "future_phases_draft/constitution/rollback_manager.py": [
+      "future_phases_draft/constitution/__init__.py",
+      "future_phases_draft/constitution/approval_flow.py"
+    ],
+    "future_phases_draft/evolution/__init__.py": [],
+    "future_phases_draft/evolution/evolution_proposal.py": [
+      "future_phases_draft/evolution/__init__.py"
+    ],
+    "future_phases_draft/evolution/improvement_detector.py": [
+      "future_phases_draft/evolution/evolution_proposal.py",
+      "future_phases_draft/evolution/__init__.py"
+    ],
+    "future_phases_draft/evolution/performance_monitor.py": [
+      "future_phases_draft/evolution/improvement_detector.py",
+      "future_phases_draft/evolution/__init__.py"
+    ],
+    "future_phases_draft/evolution/proposal_store.py": [
+      "future_phases_draft/evolution/evolution_proposal.py",
+      "future_phases_draft/evolution/__init__.py"
+    ],
+    "future_phases_draft/feedback/__init__.py": [],
+    "future_phases_draft/feedback/adaptive_thresholds.py": [
+      "future_phases_draft/feedback/__init__.py",
+      "future_phases_draft/feedback/feedback_dashboard.py"
+    ],
+    "future_phases_draft/feedback/contextual_memory.py": [
+      "future_phases_draft/feedback/__init__.py",
+      "future_phases_draft/feedback/feedback_dashboard.py"
+    ],
+    "future_phases_draft/feedback/evolution_memory.py": [
+      "future_phases_draft/feedback/feedback_collector.py",
+      "future_phases_draft/feedback/adaptive_thresholds.py",
+      "future_phases_draft/feedback/contextual_memory.py",
+      "future_phases_draft/feedback/__init__.py",
+      "future_phases_draft/feedback/feedback_dashboard.py"
+    ],
+    "future_phases_draft/feedback/feedback_analyzer.py": [
+      "future_phases_draft/feedback/__init__.py",
+      "future_phases_draft/feedback/feedback_dashboard.py"
+    ],
+    "future_phases_draft/feedback/feedback_collector.py": [
+      "future_phases_draft/feedback/__init__.py",
+      "future_phases_draft/feedback/feedback_analyzer.py"
+    ],
+    "future_phases_draft/feedback/feedback_dashboard.py": [
+      "future_phases_draft/feedback/__init__.py"
+    ],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/dataset_analyzer_bolt_variant.py": [],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/feasibility_engine_bolt_variant.py": [],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/pipeline_generator.py"
+    ],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/pipeline_generator.py": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py"
+    ],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/prompt_analyzer_bolt_variant.py": [],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py": [],
+    "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/validation_engine.py": [
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py"
+    ],
+    "legacy/astra_legacy_v1.py": [],
+    "notifications/__init__.py": [],
+    "notifications/notifier.py": [
+      "forex/prediction/roadmap_v_integration.py"
+    ],
+    "prediction_lab/__init__.py": [],
+    "prediction_lab/dataset_analyzer.py": [
+      "prediction_lab/model_planner.py",
+      "main.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/feasibility_engine_bolt_variant.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+      "prediction_lab/feasibility_engine.py",
+      "tool_registry.py",
+      "prediction_lab/report_generator.py"
+    ],
+    "prediction_lab/feasibility_engine.py": [
+      "prediction_lab/model_planner.py",
+      "main.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+      "tool_registry.py",
+      "prediction_lab/report_generator.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py"
+    ],
+    "prediction_lab/model_planner.py": [
+      "prediction_lab/pipeline_generator.py",
+      "main.py",
+      "prediction_lab/validation_engine.py",
+      "tool_registry.py",
+      "prediction_lab/report_generator.py"
+    ],
+    "prediction_lab/pipeline_generator.py": [
+      "prediction_lab/validation_engine.py",
+      "prediction_lab/report_generator.py",
+      "main.py",
+      "tool_registry.py"
+    ],
+    "prediction_lab/prompt_analyzer.py": [
+      "prediction_lab/model_planner.py",
+      "main.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/feasibility_engine_bolt_variant.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/report_generator.py",
+      "prediction_lab/feasibility_engine.py",
+      "tool_registry.py",
+      "prediction_lab/report_generator.py",
+      "future_phases_draft/prediction_lab_5.4_to_5.7_bolt_draft/model_planner.py"
+    ],
+    "prediction_lab/report_generator.py": [
+      "workspace/server.py",
+      "main.py"
+    ],
+    "prediction_lab/validation_engine.py": [
+      "prediction_lab/report_generator.py",
+      "main.py",
+      "tool_registry.py"
+    ],
+    "workspace/server.py": [
+      "astra_api.py"
+    ]
+  },
+  "external_imports": [
+    "h5py",
+    "aiohttp",
+    "fastapi",
+    "psutil",
+    "skimage",
+    "tabulate",
+    "torchvision",
+    "imageio",
+    "dearpygui",
+    "torchaudio",
+    "cryptography",
+    "PyQt5",
+    "keyring",
+    "llama_index",
+    "librosa",
+    "faiss",
+    "bcrypt",
+    "pydantic",
+    "optuna",
+    "mss",
+    "azure",
+    "openai",
+    "numpy",
+    "bs4",
+    "mouse",
+    "passlib",
+    "xgboost",
+    "yfinance",
+    "pytest",
+    "seaborn",
+    "pydub",
+    "flask",
+    "pyautogui",
+    "torch",
+    "regex",
+    "boto3",
+    "PIL",
+    "websockets",
+    "PyPDF2",
+    "keras",
+    "evolution",
+    "imblearn",
+    "scipy",
+    "keyboard",
+    "colorama",
+    "feedback",
+    "sounddevice",
+    "tensorflow",
+    "httpx",
+    "websocket",
+    "pdfplumber",
+    "requests",
+    "google",
+    "sqlalchemy",
+    "socketio",
+    "pyttsx3",
+    "yaml",
+    "matplotlib",
+    "__future__",
+    "paramiko",
+    "constitution",
+    "lightgbm",
+    "docx",
+    "pytube",
+    "schedule",
+    "nltk",
+    "joblib",
+    "speech_recognition",
+    "sklearn",
+    "kivy",
+    "sympy",
+    "orjson",
+    "pygetwindow",
+    "filelock",
+    "grpc",
+    "shap",
+    "redis",
+    "reportlab",
+    "tqdm",
+    "rich",
+    "dataclasses",
+    "pytesseract",
+    "uvicorn",
+    "arrow",
+    "deep_translator",
+    "pandas",
+    "openpyxl",
+    "jwt",
+    "MetaTrader5",
+    "watchdog"
+  ],
+  "unused_requirements": [
+    "multipart",
+    "lxml",
+    "deep-translator",
+    "lazy_loader"
+  ],
+  "requirements_registered": [
+    "openai",
+    "fastapi",
+    "uvicorn",
+    "multipart",
+    "pydantic",
+    "numpy",
+    "pandas",
+    "openpyxl",
+    "pypdf2",
+    "docx",
+    "pdfplumber",
+    "requests",
+    "bs4",
+    "lxml",
+    "deep-translator",
+    "matplotlib",
+    "seaborn",
+    "pil",
+    "reportlab",
+    "rich",
+    "tabulate",
+    "colorama",
+    "sklearn",
+    "scipy",
+    "xgboost",
+    "lightgbm",
+    "optuna",
+    "faiss",
+    "joblib",
+    "yfinance",
+    "sqlalchemy",
+    "cryptography",
+    "bcrypt",
+    "jwt",
+    "paramiko",
+    "passlib",
+    "psutil",
+    "tqdm",
+    "schedule",
+    "arrow",
+    "orjson",
+    "filelock",
+    "watchdog",
+    "lazy_loader",
+    "sympy"
+  ]
+}

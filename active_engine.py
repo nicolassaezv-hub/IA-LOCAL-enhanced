@@ -174,15 +174,17 @@ class ActiveEngine:
                             trade_hist = [{"pnl": h.get("pnl", 0)} for h in hist if "pnl" in h]
                             sizing = PositionSizer(account_balance=10_000).calculate(result, trade_hist)
                             sizing_info = f"  Risk={sizing['risk_pct']:.2f}%  ${sizing['risk_usd']:.0f}  [{sizing['method']}]"
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            import logging as _l
+                            _l.getLogger("astra.engine").debug("PositionSizer error: %s", _e)
 
                     # Guardar en historial
                     try:
                         from signal_tracker import save_signal
                         save_signal(result, csv_path)
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        import logging as _l
+                        _l.getLogger("astra.engine").debug("Signal save error: %s", _e)
                     # Notificar solo si BUY o SELL
                     COLOR = {"BUY": Fore.GREEN, "SELL": Fore.RED, "HOLD": Fore.YELLOW}
                     ICON  = {"BUY": "▲", "SELL": "▼", "HOLD": "─"}

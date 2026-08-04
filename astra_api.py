@@ -43,8 +43,9 @@ def _save_state(data: dict):
         current["ts"] = datetime.now().isoformat()
         with open(_state_path(), "w") as f:
             json.dump(current, f, indent=2)
-    except Exception:
-        pass
+    except Exception as _e:
+        import logging as _l
+        _l.getLogger("astra.api").debug("State write skipped: %s", _e)
 
 
 # ── Route handlers ────────────────────────────────────────────────────────────

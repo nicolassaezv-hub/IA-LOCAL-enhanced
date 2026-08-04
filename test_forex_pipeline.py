@@ -43,7 +43,7 @@ def create_synthetic_forex_csv(
     dates = pd.date_range(
         start=datetime(2023, 1, 1),
         periods=n_candles,
-        freq='1H'
+        freq='1h'
     )
     
     # Generate price movements using random walk
@@ -141,7 +141,10 @@ def test_rsi_calculation():
     
     # Check: RSI should not be all NaN
     assert not rsi.isna().all(), "❌ RSI is completely NaN"
-    assert (rsi >= 0).all() or (rsi <= 100).all(), "❌ RSI out of [0, 100] range"
+    valid_rsi = rsi.dropna()
+    assert not valid_rsi.empty, "❌ RSI has no valid values"
+    assert (valid_rsi >= 0).all() and (valid_rsi <= 100).all(), \
+        f"❌ RSI out of [0, 100] range: min={valid_rsi.min():.2f}, max={valid_rsi.max():.2f}"
     assert rsi.dropna().shape[0] > 0, "❌ No valid RSI values"
     
     print(f"  ✅ RSI calculated successfully ({rsi.dropna().shape[0]} valid values)")
@@ -199,8 +202,16 @@ def test_feature_engineering_compatibility():
     
     try:
         from forex.prediction.feature_engineering import FeatureEngineering, build_features
+        from forex.prediction.csv_adapter import adapt_csv
+        import tempfile, os as _os
         
         df = create_synthetic_forex_csv(n_candles=200)
+        
+        # adapt_csv normalises the raw OHLCV before feature engineering
+        _tmp = tempfile.mktemp(suffix='.csv')
+        df.to_csv(_tmp, index=False)
+        df = adapt_csv(_tmp, pair='EURUSD')
+        _os.unlink(_tmp)
         
         # Try to run feature engineering
         df_engineered = build_features(df)
@@ -223,7 +234,13 @@ def test_target_creation():
         from forex.prediction.dataset_builder import DatasetBuilder
         from forex.prediction.feature_engineering import build_features
         
-        df = create_synthetic_forex_csv(n_candles=300)
+        from forex.prediction.csv_adapter import adapt_csv
+        import tempfile, os as _os
+        df_raw = create_synthetic_forex_csv(n_candles=300)
+        _tmp2 = tempfile.mktemp(suffix='.csv')
+        df_raw.to_csv(_tmp2, index=False)
+        df = adapt_csv(_tmp2, pair='EURUSD')
+        _os.unlink(_tmp2)
         df = build_features(df)
         
         builder = DatasetBuilder(df)
