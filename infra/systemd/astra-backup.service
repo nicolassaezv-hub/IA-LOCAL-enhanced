@@ -1,0 +1,12 @@
+[Unit]
+Description=ASTRA Automated Backup Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/astra
+EnvironmentFile=-/opt/astra/infra/config/astra.env
+ExecStart=/bin/bash infra/backup/backup.sh
+StandardOutput=append:/var/log/astra/backup.log
+StandardError=append:/var/log/astra/backup.log

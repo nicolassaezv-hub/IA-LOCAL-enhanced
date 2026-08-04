@@ -307,6 +307,13 @@ def _run_sentinel_scans() -> None:
 #  SECCIÓN 1 — Workspace Principal
 # ══════════════════════════════════════════════════════════════════
 
+
+@app.get("/health")
+@app.get("/api/health")
+def get_health() -> JSONResponse:
+    return JSONResponse({"status": "ok", "astra_status": "online", "timestamp": datetime.datetime.now().isoformat()})
+
+
 @app.get("/api/status")
 def get_status() -> JSONResponse:
     connected = _has_api_key()
@@ -1998,6 +2005,31 @@ def roadmap6_csvs_activos() -> JSONResponse:
 
 
 # Monta la SPA al final para que /api/* tenga prioridad sobre el catch-all estático.
+
+# ─── Command Palette endpoint (Ctrl+Shift+P) ────────────────────────────────
+
+class _CommandBody(BaseModel):
+    command: str
+
+@app.post("/api/command")
+def run_command(req: _CommandBody) -> JSONResponse:
+    """Ejecuta un comando desde el Command Palette (Ctrl+Shift+P)."""
+    try:
+        cmd = req.command.strip()
+        if not cmd:
+            return JSONResponse({"ok": False, "error": "empty command"}, status_code=400)
+        # Route through main dispatcher first, then process_request as fallback
+        try:
+            result = dispatch_command(cmd)
+            if result is not None:
+                return JSONResponse({"ok": True, "result": str(result), "module": "dispatcher"})
+        except Exception:
+            pass
+        result = process_request(cmd)
+        return JSONResponse({"ok": True, "result": str(result), "module": "astra_agent"})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
 app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
 
 

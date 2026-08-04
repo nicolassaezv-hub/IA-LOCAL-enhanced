@@ -1,0 +1,17 @@
+[Unit]
+Description=ASTRA Supervisor Process Monitor
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/astra
+EnvironmentFile=-/opt/astra/infra/config/astra.env
+ExecStart=/opt/astra/venv/bin/python infra/monitor/supervisor.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/astra/monitor.log
+StandardError=append:/var/log/astra/monitor.log
+
+[Install]
+WantedBy=multi-user.target

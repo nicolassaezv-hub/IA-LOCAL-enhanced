@@ -1,0 +1,10 @@
+[Unit]
+Description=ASTRA H1 Scheduler Timer (Fires hourly at :02)
+
+[Timer]
+OnCalendar=*-*-* *:02:00
+Persistent=true
+Unit=astra-scheduler@H1.service
+
+[Install]
+WantedBy=timers.target
