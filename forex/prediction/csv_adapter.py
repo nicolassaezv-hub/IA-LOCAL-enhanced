@@ -140,7 +140,8 @@ def merge_mtf_context(df_h1: pd.DataFrame,
                       path_d1: str = None) -> pd.DataFrame:
     """
     Enriquece df_h1 con features de H4 y D1 usando merge_asof (sin lookahead).
-    Para cada vela H1, usa la última vela H4/D1 disponible ANTES de ella.
+    Los timestamps H4/D1 representan la apertura de la vela. Para cada H1 solo
+    usa velas cuyo instante de cierre (apertura + duración) ya fue alcanzado.
 
     Agrega columnas: h4_rsi, h4_ema20, h4_ema50, h4_ema200, h4_trend,
                      h4_macd, h4_atr, h4_return5, h4_close,
@@ -155,6 +156,11 @@ def merge_mtf_context(df_h1: pd.DataFrame,
         raw = pd.read_csv(path)
         raw["timestamp"] = pd.to_datetime(raw["timestamp"])
         raw = raw.sort_values("timestamp").reset_index(drop=True)
+        duration = {"h4": pd.Timedelta(hours=4),
+                    "d1": pd.Timedelta(days=1)}[prefix]
+        # merge_asof debe comparar contra el instante de disponibilidad, no
+        # contra la apertura de una vela que todavía contiene datos futuros.
+        raw["timestamp"] = raw["timestamp"] + duration
         # Calcular indicadores si no existen en el CSV
         if "RSI_14" not in raw.columns and "close" in raw.columns:
             import numpy as np
@@ -299,8 +305,9 @@ def adapt_csv(filepath: str, pair: str = None,
     if path_h4 or path_d1:
         df = merge_mtf_context(df, path_h4=path_h4, path_d1=path_d1)
 
-    # Fill remaining NaN
-    df = df.ffill().bfill()
+    # Solo propagar información ya observada. bfill usaría filas futuras para
+    # completar el inicio de la serie (incluidas las features MTF).
+    df = df.ffill()
 
     print(f"[CSV ADAPTER] Loaded {filepath}")
     print(f"[CSV ADAPTER] Rows: {len(df)} | Pair: {df['pair'].iloc[0]} | Columns: {len(df.columns)}")

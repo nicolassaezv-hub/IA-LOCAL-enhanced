@@ -64,17 +64,41 @@ def _normalize_df(df: pd.DataFrame, pair: str) -> pd.DataFrame:
     return df[[c for c in keep if c in df.columns]].reset_index(drop=True)
 
 
-def _resample_h4(df: pd.DataFrame) -> pd.DataFrame:
-    """Yahoo no ofrece intervalo 4h: se agregan velas 1h en bloques de 4h."""
+def _closed_before(df: pd.DataFrame, duration: pd.Timedelta,
+                   now: Optional[pd.Timestamp] = None) -> pd.DataFrame:
+    """Conserva velas cuyo timestamp de apertura más duración ya cerró."""
+    if df.empty or "timestamp" not in df.columns:
+        return df
+    cutoff = pd.Timestamp.now(tz="UTC").tz_localize(None) if now is None else pd.Timestamp(now)
+    if cutoff.tzinfo is not None:
+        cutoff = cutoff.tz_convert("UTC").tz_localize(None)
+    timestamps = pd.to_datetime(df["timestamp"], utc=True).dt.tz_localize(None)
+    return df.loc[timestamps + duration <= cutoff].reset_index(drop=True)
+
+
+def _resample_h4(df: pd.DataFrame,
+                 now: Optional[pd.Timestamp] = None) -> pd.DataFrame:
+    """Agrega H1 en H4 y conserva únicamente bloques completos y cerrados."""
     if df.empty or "timestamp" not in df.columns:
         return df
     pair = df["pair"].iloc[-1] if "pair" in df.columns else ""
-    out = (df.set_index("timestamp")
+    indexed = df.copy()
+    indexed["timestamp"] = pd.to_datetime(indexed["timestamp"], utc=True).dt.tz_localize(None)
+    indexed = indexed.sort_values("timestamp").set_index("timestamp")
+    out = (indexed
              .resample("4h")
              .agg({"open": "first", "high": "max", "low": "min",
                    "close": "last", "volume": "sum"})
              .dropna()
              .reset_index())
+    complete_starts = [
+        start
+        for start, values in indexed["close"].resample("4h")
+        if values.notna().all()
+        and values.index.equals(pd.date_range(start, periods=4, freq="h"))
+    ]
+    out = out[out["timestamp"].isin(complete_starts)].reset_index(drop=True)
+    out = _closed_before(out, pd.Timedelta(hours=4), now=now)
     out["pair"] = pair
     return out
 
@@ -136,6 +160,8 @@ class YahooProvider:
             df = _normalize_df(df_raw, pair)
             if tf.upper() == "H4":
                 df = _resample_h4(df)
+            elif tf.upper() == "D1":
+                df = _closed_before(df, pd.Timedelta(days=1))
             return df.tail(bars).reset_index(drop=True)
         except Exception as e:
             print(f"[YahooProvider] Error descargando {pair}/{tf}: {e}")
