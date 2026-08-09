@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ASTRA Workspace</title>
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/ui_customization.css" />
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- ═══════════ 1.1 — Barra superior de estado general ═══════════ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="astra-logo">ASTRA</span>
+      <span class="status-dot" id="astra-status-dot"></span>
+      <span class="topbar-label" id="astra-status-label">conectando…</span>
+    </div>
+    <div class="topbar-right">
+      <span class="topbar-chip" id="chip-project">Proyecto: —</span>
+      <span class="topbar-chip" id="chip-model">Modelo: —</span>
+      <span class="topbar-chip" id="chip-tools">Tools: —</span>
+      <span class="topbar-chip" id="chip-clock">--:--:--</span>
+      <div class="notif-wrap">
+        <button class="notif-bell" id="notif-bell-btn" title="Notificaciones">
+          🔔<span class="notif-badge" id="notif-unread-badge" style="display:none;">0</span>
+        </button>
+        <div class="notif-dropdown" id="notif-dropdown" style="display:none;">
+          <div class="notif-dropdown-header">
+            <span>Notificaciones</span>
+            <button class="notif-markall-btn" id="notif-markall-btn">Marcar todas leídas</button>
+          </div>
+          <div class="notif-dropdown-list" id="notif-dropdown-list"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════ Live Thinking (Roadmap IV, Sección 11) — franja transversal ═══════
+       Visible desde CUALQUIER panel mientras hay una tarea larga corriendo
+       (Prediction Lab o Forex full pipeline). Oculta cuando no hay nada activo. -->
+  <div class="thinking-strip" id="thinking-strip" style="display:none;">
+    <span class="thinking-strip-label" id="thinking-strip-label">Pensando…</span>
+    <div class="thinking-strip-steps" id="thinking-strip-steps"></div>
+  </div>
+
+  <div class="workspace-body">
+
+    <!-- ═══════════ 1.2 — Navegación entre ramas principales ═══════════ -->
+    <nav class="sidenav">
+      <button class="nav-item active" data-section="chat">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg> Chat
+      </button>
+      <button class="nav-item" data-section="forex">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg> Forex Lab
+      </button>
+      <button class="nav-item" data-section="prediction">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v5.5L5.5 17a2 2 0 0 0 1.8 3h9.4a2 2 0 0 0 1.8-3L14 8.5V3"></path></svg> Prediction Lab
+      </button>
+      <button class="nav-item" data-section="business">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg> Business Lab
+      </button>
+      <button class="nav-item" data-section="cognitive">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg> Cognitive Core
+      </button>
+      <button class="nav-item" data-section="evolution">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> Evolution Engine
+      </button>
+      <button class="nav-item" data-section="activity">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> Activity Center
+      </button>
+      <button class="nav-item" data-section="sentinel">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg> Dashboard Activo
+      </button>
+      <button class="nav-item" data-section="deployment">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path><path d="M2 12l5 5L12 12"></path><path d="M12 2l5 5L12 12"></path></svg> Deployment
+      </button>
+      <button class="nav-item" data-section="robustness">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9 12l2 2 4-4"></path></svg> Robustness
+      </button>
+      <button class="nav-item" data-section="config">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> Configuración
+      </button>
+    </nav>
+
+    <!-- ═══════════ Área de contenido por sección ═══════════ -->
+    <main class="content">
+
+      <!-- CHAT CENTER -->
+      <section class="panel active" id="panel-chat">
+        <div class="panel-header">
+          <h2>Chat</h2>
+          <span class="panel-sub">Conversación libre con ASTRA — motor real, sin simulación</span>
+          <button class="export-btn" id="export-btn" title="Exportar conversación">⭳ Exportar</button>
+        </div>
+
+        <div class="chat-window" id="chat-window">
+          <div class="drop-hint" id="drop-hint">Suelta un archivo aquí para adjuntarlo</div>
+        </div>
+
+        <div class="attach-preview" id="attach-preview" style="display:none;"></div>
+
+        <form class="chat-input-row" id="chat-form">
+          <input type="file" id="file-input" style="display:none" />
+          <input type="file" id="folder-input" style="display:none" webkitdirectory directory multiple />
+          <button type="button" class="icon-btn" id="attach-file-btn" title="Abrir archivo">📎</button>
+          <button type="button" class="icon-btn" id="attach-folder-btn" title="Abrir carpeta">📁</button>
+          <input type="text" id="chat-input" placeholder="Escribe un mensaje o comando…" autocomplete="off" />
+          <button type="submit">Enviar</button>
+        </form>
+      </section>
+
+      <!-- ═══════════ FOREX LAB WORKSPACE (Sección 4) ═══════════ -->
+      <section class="panel" id="panel-forex">
+        <div class="panel-header">
+          <h2>Forex Lab Workspace</h2>
+          <span class="panel-sub">Dashboard multi-timeframe, gráfico de velas, CSVs, entrenamiento y Circuit Breaker — todo con datos reales</span>
+        </div>
+
+        <div class="forex-toolbar">
+          <label>Par:
+            <select id="forex-pair-select"></select>
+          </label>
+          <label>Timeframe:
+            <select id="forex-tf-select">
+              <option value="H1">H1</option>
+              <option value="H4">H4</option>
+              <option value="D1">D1</option>
+            </select>
+          </label>
+          <label class="checkbox-label"><input type="checkbox" id="forex-sma-toggle" checked /> SMA 20</label>
+          <button class="icon-btn wide" id="forex-add-line-btn" title="Dibujar línea de precio">＋ Línea</button>
+          <button class="icon-btn wide" id="forex-refresh-btn" title="Refrescar">⟳ Refrescar</button>
+        </div>
+
+        <!-- Dashboard por timeframe -->
+        <div class="tf-cards" id="tf-cards">
+          <div class="tf-card" id="tf-card-H1"><h4>H1</h4><p class="tf-loading">—</p></div>
+          <div class="tf-card" id="tf-card-H4"><h4>H4</h4><p class="tf-loading">—</p></div>
+          <div class="tf-card" id="tf-card-D1"><h4>D1</h4><p class="tf-loading">—</p></div>
+        </div>
+
+        <div class="model-summary-card" id="model-summary-card">Sin datos de modelo aún.</div>
+
+        <!-- Gráfico principal -->
+        <div class="chart-card">
+          <div id="forex-chart" class="forex-chart"></div>
+        </div>
+
+        <div class="forex-lower-grid">
+
+          <!-- Gestión de CSV -->
+          <div class="lab-card">
+            <h3>Gestión de CSV</h3>
+            <div id="csv-file-list" class="csv-file-list"></div>
+            <div id="csv-validation" class="csv-validation"></div>
+          </div>
+
+          <!-- Entrenamiento -->
+          <div class="lab-card">
+            <h3>Entrenamiento</h3>
+            <button id="train-start-btn" class="train-btn">▶ Full Forex (tune→train→predict→backtest)</button>
+            <div class="progress-bar-outer"><div class="progress-bar-inner" id="train-progress-bar"></div></div>
+            <div id="train-stage-label" class="train-stage-label">Sin entrenamiento en curso.</div>
+            <div class="train-metrics" id="train-metrics"></div>
+          </div>
+
+          <!-- Circuit Breaker -->
+          <div class="lab-card">
+            <h3>Circuit Breaker</h3>
+            <div id="circuit-status" class="circuit-status">—</div>
+          </div>
+
+          <!-- Alertas -->
+          <div class="lab-card">
+            <h3>Alertas</h3>
+            <div id="alerts-list" class="alerts-list"></div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ═══════════ PREDICTION LAB WORKSPACE (Sección 5) ═══════════ -->
+      <section class="panel" id="panel-prediction">
+        <div class="panel-header">
+          <h2>Prediction Lab Workspace</h2>
+          <span class="panel-sub">Sandbox de ML genérico — prompt + dataset + config, entrenamiento real y comparación de proyectos</span>
+        </div>
+
+        <!-- 5.1 Sandbox unificado -->
+        <div class="lab-card">
+          <h3>Sandbox — nuevo análisis</h3>
+          <div class="lab-sandbox-grid">
+            <label>CSV
+              <select id="lab-csv-select"></select>
+            </label>
+            <label>Variable objetivo (opcional)
+              <input type="text" id="lab-target-input" placeholder="ej. churn, precio, default" />
+            </label>
+          </div>
+          <label class="lab-idea-label">Describe el problema
+            <textarea id="lab-idea-input" rows="2" placeholder="ej. predecir si un cliente va a cancelar su suscripción el próximo mes"></textarea>
+          </label>
+          <button id="lab-run-btn" class="train-btn">▶ Correr Prediction Lab (prompt→dataset→viabilidad→plan→pipeline→validación)</button>
+          <div id="lab-run-status" class="train-stage-label">Sin análisis en curso.</div>
+        </div>
+
+        <!-- 5.2 Comparador de modelos -->
+        <div class="lab-card">
+          <h3>Proyectos guardados (comparador)</h3>
+          <table class="lab-table" id="lab-projects-table">
+            <thead>
+              <tr>
+                <th data-key="index">#</th>
+                <th data-key="name">Proyecto</th>
+                <th data-key="viability_index">Viabilidad</th>
+                <th data-key="mean_score">Score</th>
+                <th data-key="passes">Veredicto</th>
+                <th data-key="timestamp">Fecha</th>
+              </tr>
+            </thead>
+            <tbody id="lab-projects-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- 5.3 / 5.4 Detalle: visualizaciones + antes/después -->
+        <div class="lab-card" id="lab-detail-card" style="display:none;">
+          <h3>Detalle del proyecto — <span id="lab-detail-name"></span></h3>
+
+          <div class="model-summary-card" id="lab-detail-summary"></div>
+
+          <div class="lab-detail-grid">
+            <div>
+              <h4 class="lab-subtitle">Matriz de confusión</h4>
+              <div id="lab-confusion-matrix" class="confusion-matrix"></div>
+            </div>
+            <div>
+              <h4 class="lab-subtitle">Baseline vs Modelo entrenado</h4>
+              <div id="lab-before-after" class="before-after-bars"></div>
+            </div>
+          </div>
+
+          <div class="lab-detail-grid">
+            <div>
+              <h4 class="lab-subtitle">Curva ROC</h4>
+              <canvas id="lab-roc-canvas" height="180"></canvas>
+            </div>
+            <div>
+              <h4 class="lab-subtitle">Curva Precision-Recall</h4>
+              <canvas id="lab-pr-canvas" height="180"></canvas>
+            </div>
+          </div>
+
+          <h4 class="lab-subtitle">Feature Importance</h4>
+          <canvas id="lab-fi-canvas" height="200"></canvas>
+
+          <h4 class="lab-subtitle">Rendimiento por fold</h4>
+          <canvas id="lab-fold-canvas" height="160"></canvas>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-business">
+        <div class="panel-header">
+          <h2>Business Lab Workspace</h2>
+          <span class="panel-sub">Dashboard empresarial dinámico — KPIs, tendencia, forecast y señal ML sobre <code>business/</code> (kpi_engine + business_predictor)</span>
+        </div>
+
+        <!-- 6.1 Selector + correr análisis -->
+        <div class="lab-card">
+          <h3>Análisis de negocio</h3>
+          <div class="lab-sandbox-grid">
+            <label>Archivo (CSV/Excel)
+              <select id="biz-file-select"></select>
+            </label>
+            <label>Meses de proyección
+              <input type="number" id="biz-months-input" value="6" min="1" max="24" />
+            </label>
+          </div>
+          <button id="biz-run-btn" class="train-btn">▶ Correr análisis (KPIs + entrenamiento + predicción + forecast)</button>
+          <div id="biz-run-status" class="train-stage-label">Sin análisis en curso.</div>
+        </div>
+
+        <!-- 6.1 KPI tiles -->
+        <div class="lab-card" id="biz-kpi-card" style="display:none;">
+          <h3>KPIs <span class="tag" id="biz-type-tag"></span></h3>
+          <div class="dashboard-cards" id="biz-kpi-tiles"></div>
+          <div id="biz-anomalies" class="biz-anomalies"></div>
+        </div>
+
+        <!-- Señal ML + salud -->
+        <div class="lab-card" id="biz-signal-card" style="display:none;">
+          <h3>Señal ML del próximo período</h3>
+          <div class="biz-signal-row">
+            <div class="biz-signal-action" id="biz-signal-action">—</div>
+            <div class="biz-signal-meta" id="biz-signal-meta"></div>
+          </div>
+          <div id="biz-train-meta" class="train-stage-label"></div>
+        </div>
+
+        <!-- Forecast chart -->
+        <div class="lab-card" id="biz-forecast-card" style="display:none;">
+          <h3>Proyección de ingresos (optimista / esperado / conservador)</h3>
+          <canvas id="biz-forecast-canvas" height="160"></canvas>
+          <div id="biz-forecast-summary" class="train-stage-label"></div>
+        </div>
+
+        <!-- Vista previa de datos -->
+        <div class="lab-card" id="biz-preview-card" style="display:none;">
+          <h3>Vista previa de datos normalizados</h3>
+          <table class="lab-table" id="biz-preview-table"><thead></thead><tbody></tbody></table>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-cognitive">
+        <div class="panel-header">
+          <h2>Cognitive Center</h2>
+          <span class="panel-sub">Sección 7 del Roadmap IV — ventana exclusiva para la memoria</span>
+        </div>
+
+        <!-- 7.2 Búsqueda en lenguaje natural -->
+        <div class="lab-card">
+          <h3>Búsqueda en lenguaje natural</h3>
+          <div class="lab-sandbox-grid">
+            <label style="grid-column: 1 / -1;">Pregúntale a la memoria de ASTRA
+              <input type="text" id="cog-search-input" placeholder='Ej: "qué modelos he entrenado de forex" o "tareas pendientes"' />
+            </label>
+          </div>
+          <button id="cog-search-btn" class="train-btn">🔎 Buscar en memoria</button>
+          <div id="cog-search-meta" class="train-stage-label">Escribe una consulta y presiona Buscar.</div>
+        </div>
+
+        <!-- Resultados de búsqueda -->
+        <div class="lab-card" id="cog-search-results" style="display:none;"></div>
+
+        <!-- 7.1 Resumen agregado -->
+        <div class="lab-card">
+          <h3>Resumen de memoria</h3>
+          <div class="dashboard-cards" id="cog-overview-tiles"></div>
+        </div>
+
+        <div class="lab-detail-grid">
+          <!-- Timeline unificado -->
+          <div class="lab-card">
+            <h3>Línea de tiempo <span class="tag">real, fusionada de todas las fuentes</span></h3>
+            <div id="cog-timeline" class="cog-timeline"></div>
+          </div>
+
+          <!-- Knowledge Graph -->
+          <div class="lab-card">
+            <h3>Knowledge Graph <span class="tag">vista relacional</span></h3>
+            <svg id="cog-graph-svg" width="100%" height="320" viewBox="0 0 420 320"></svg>
+            <div id="cog-graph-empty" class="train-stage-label" style="display:none;">
+              Sin relaciones suficientes todavía — entrena modelos y ejecuta comandos para poblar el grafo.
+            </div>
+          </div>
+        </div>
+
+        <div class="lab-detail-grid">
+          <!-- Herramientas usadas -->
+          <div class="lab-card">
+            <h3>Herramientas más usadas</h3>
+            <table class="lab-table" id="cog-tools-table">
+              <thead><tr><th>Comando</th><th>Usos</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <!-- Preferencias aprendidas -->
+          <div class="lab-card">
+            <h3>Preferencias aprendidas <span class="tag">umbrales adaptativos por par</span></h3>
+            <table class="lab-table" id="cog-prefs-table">
+              <thead><tr><th>Par</th><th>Confianza</th><th>ADX</th><th>Ajustes</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <div id="cog-prefs-empty" class="train-stage-label" style="display:none;">
+              Sin umbrales personalizados aún — todos los pares usan el default (confidence=0.65, ADX=22.0).
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-evolution">
+        <div class="panel-header">
+          <h2>Evolution Center</h2>
+          <span class="panel-sub">Sección 8 del Roadmap IV — cómo evoluciona ASTRA, visualmente</span>
+        </div>
+
+        <!-- 8.1 Panel del ciclo evolutivo -->
+        <div class="lab-card">
+          <h3>Ciclo evolutivo</h3>
+          <div class="dashboard-cards" id="evo-overview-tiles"></div>
+          <button id="evo-run-cycle-btn" class="train-btn">⚙ Ejecutar ciclo evolutivo ahora</button>
+          <div id="evo-cycle-result" class="train-stage-label"></div>
+        </div>
+
+        <div class="lab-detail-grid">
+          <!-- Historial de eventos -->
+          <div class="lab-card">
+            <h3>Historial de eventos <span class="tag">evolution_events</span></h3>
+            <div id="evo-timeline" class="cog-timeline"></div>
+          </div>
+
+          <!-- Historial de snapshots -->
+          <div class="lab-card">
+            <h3>Rendimiento del sistema <span class="tag">snapshots</span></h3>
+            <table class="lab-table" id="evo-perf-table">
+              <thead><tr><th>Fecha</th><th>Señales</th><th>Aprob. FB</th><th>Modelos</th><th>Pares</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 8.2 Revisión de propuestas -->
+        <div class="lab-card">
+          <h3>Propuestas <span class="tag">revisar antes de aprobar</span></h3>
+          <div class="lab-sandbox-grid">
+            <label>Filtrar por estado
+              <select id="evo-proposals-filter">
+                <option value="">Todas</option>
+                <option value="pending">Pendientes</option>
+                <option value="approved">Aprobadas</option>
+                <option value="applied">Aplicadas</option>
+                <option value="rejected">Rechazadas</option>
+                <option value="rolled_back">Revertidas</option>
+              </select>
+            </label>
+          </div>
+          <table class="lab-table" id="evo-proposals-table">
+            <thead><tr><th>#</th><th>Tipo</th><th>Componente</th><th>Descripción</th><th>Prioridad</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <!-- Detalle de propuesta seleccionada -->
+        <div class="lab-card" id="evo-proposal-detail" style="display:none;"></div>
+
+        <div class="lab-detail-grid">
+          <!-- Reglas constitucionales -->
+          <div class="lab-card">
+            <h3>Reglas constitucionales</h3>
+            <table class="lab-table" id="evo-rules-table">
+              <thead><tr><th>Regla</th><th>Tipo</th><th>Restricción</th><th>Estado</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <!-- Rollback points -->
+          <div class="lab-card">
+            <h3>Rollback points</h3>
+            <table class="lab-table" id="evo-rollback-table">
+              <thead><tr><th>#</th><th>Componente</th><th>Descripción</th><th>Fecha</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Audit log -->
+        <div class="lab-card">
+          <h3>Audit log <span class="tag">registro inmutable</span></h3>
+          <table class="lab-table" id="evo-audit-table">
+            <thead><tr><th>Fecha</th><th>Acción</th><th>Actor</th><th>Target</th><th>Resultado</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-activity">
+        <div class="panel-header">
+          <h2>Activity Center</h2>
+          <span class="panel-sub">Sección 9 del Roadmap IV — qué está pasando ahora mismo en ASTRA</span>
+        </div>
+
+        <div class="lab-card">
+          <h3>Resumen</h3>
+          <div class="dashboard-cards" id="act-stats-tiles"></div>
+        </div>
+
+        <div class="lab-card">
+          <h3>Feed en vivo <span class="tag">se actualiza cada 5s</span></h3>
+          <div class="lab-sandbox-grid">
+            <label>Filtrar por fuente
+              <select id="act-source-filter">
+                <option value="">Todas</option>
+                <option value="alert">Alertas</option>
+                <option value="command">Comandos</option>
+                <option value="signal">Señales Forex</option>
+                <option value="evolution">Evolución</option>
+              </select>
+            </label>
+            <label style="display:flex; flex-direction:row; align-items:center; gap:0.4rem;">
+              <input type="checkbox" id="act-autorefresh-toggle" checked style="width:auto;" />
+              <span>Auto-actualizar</span>
+            </label>
+          </div>
+          <div id="act-feed" class="cog-timeline"></div>
+        </div>
+      </section>
+
+      <!-- ═══ V.16 — Dashboard Activo (Roadmap V, Sección 13) ═══ -->
+      <section class="panel" id="panel-sentinel">
+        <div class="panel-header">
+          <h2>Dashboard Activo</h2>
+          <span class="panel-sub">Sistema Autónomo — Roadmap V + VI: Sentinel · Scheduler · Data Intelligence</span>
+        </div>
+        <div id="active-dashboard"></div>
+      </section>
+
+      <section class="panel" id="panel-deployment">
+        <div class="panel-header">
+          <h2>Deployment Reports</h2>
+          <span class="panel-sub">First Deployment Experience — validacion automatica del sistema completo</span>
+          <button class="icon-btn wide" id="deploy-refresh-btn" title="Refrescar">⟳ Refrescar</button>
+        </div>
+
+        <!-- Botones de accion -->
+        <div class="lab-card" style="margin-bottom: 1rem;">
+          <div style="display:flex; gap:0.8rem; flex-wrap:wrap; align-items:center;">
+            <button class="train-btn" id="deploy-run-full" style="background:var(--accent-color,#4a90d9); color:#fff;">Ejecutar Validacion Completa</button>
+            <button class="train-btn" id="deploy-run-readiness">Solo Readiness Check</button>
+            <span id="deploy-run-status" class="train-stage-label" style="margin-left:0.5rem;"></span>
+          </div>
+        </div>
+
+        <!-- Estado global -->
+        <div class="dashboard-cards" id="deploy-global-status" style="margin-bottom: 1rem;"></div>
+
+        <!-- Informes recientes -->
+        <div class="lab-card" style="margin-bottom: 1rem;">
+          <h3>Informes recientes</h3>
+          <table class="lab-table" id="deploy-reports-table">
+            <thead><tr>
+              <th>Tipo</th><th>Simbolo</th><th>Estado</th><th>Detalle</th><th>Fecha</th><th>Descargar</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <!-- Contenido del informe seleccionado -->
+        <div class="lab-card">
+          <h3 id="deploy-report-title">Seleccione un informe para ver su contenido</h3>
+          <div style="display:flex; gap:0.5rem; margin-bottom:0.8rem;">
+            <button class="train-btn" id="deploy-show-deployment">Deployment</button>
+            <button class="train-btn" id="deploy-show-readiness">Readiness</button>
+          </div>
+          <div id="deploy-report-content" class="train-stage-label" style="white-space:pre-wrap; font-family:monospace; font-size:0.82rem; line-height:1.7; max-height:600px; overflow-y:auto;"></div>
+        </div>
+      </section>
+      <section class="panel" id="panel-robustness">
+        <div class="panel-header">
+          <h2>Robustness Center</h2>
+          <span class="panel-sub">Validacion de dependencias, integridad de datos y modelos, recuperacion y benchmark</span>
+          <button class="icon-btn wide" id="robust-refresh-btn" title="Refrescar todo">Refrescar</button>
+        </div>
+
+        <div class="lab-card" style="margin-bottom: 1rem;">
+          <div style="display:flex; gap:0.8rem; flex-wrap:wrap; align-items:center;">
+            <button class="train-btn" id="robust-run-all" style="background:var(--accent-color,#4a90d9); color:#fff;">Ejecutar Full Robustness Check</button>
+            <span id="robust-run-status" class="train-stage-label" style="margin-left:0.5rem;"></span>
+          </div>
+        </div>
+
+        <div class="dashboard-cards" id="robust-summary-cards" style="margin-bottom: 1rem;"></div>
+
+        <div class="lab-card" style="margin-bottom: 1rem;">
+          <h3>Dependency Validation</h3>
+          <table class="lab-table" id="robust-dep-table">
+            <thead><tr><th>Categoria</th><th>Check</th><th>Estado</th><th>Detalle</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="lab-card" style="margin-bottom: 1rem;">
+          <h3>Data Integrity</h3>
+          <table class="lab-table" id="robust-data-table">
+            <thead><tr><th>Par</th><th>TF</th><th>Rows</th><th>Estado</th><th>Issues</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="lab-card" style="margin-bottom: 1rem;">
+          <h3>Model Integrity</h3>
+          <table class="lab-table" id="robust-models-table">
+            <thead><tr><th>Simbolo</th><th>Estado</th><th>Issues</th><th>Recovery</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+          <div class="lab-card">
+            <h3>Recovery History</h3>
+            <table class="lab-table" id="robust-recovery-table">
+              <thead><tr><th>Timestamp</th><th>Componente</th><th>Tipo</th><th>Estado</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="lab-card">
+            <h3>Pipeline Benchmark</h3>
+            <table class="lab-table" id="robust-benchmark-table">
+              <thead><tr><th>Stage</th><th>Avg (s)</th><th>Max (s)</th><th>Count</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+
+      <section class="panel" id="panel-config">
+        <div class="panel-header">
+          <h2>Configuración</h2>
+          <span class="panel-sub">Estado del sistema, versión y API key — datos reales</span>
+          <button class="icon-btn wide" id="config-refresh-btn" title="Refrescar">⟳ Refrescar</button>
+        </div>
+
+        <!-- Estado general -->
+        <div class="lab-card">
+          <h3>Estado del sistema</h3>
+          <div class="dashboard-cards" id="config-status-tiles"></div>
+        </div>
+
+        <!-- API Keys -->
+        <div class="lab-detail-grid">
+          <div class="lab-card">
+            <h3>API Keys</h3>
+            <table class="lab-table" id="config-keys-table">
+              <thead><tr><th>Proveedor</th><th>Estado</th><th>Modelo activo</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <!-- Entorno técnico -->
+          <div class="lab-card">
+            <h3>Entorno técnico</h3>
+            <table class="lab-table" id="config-env-table">
+              <thead><tr><th>Parámetro</th><th>Valor</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Rutas del sistema -->
+        <div class="lab-card">
+          <h3>Rutas del workspace</h3>
+          <div id="config-paths" class="train-stage-label" style="font-family:monospace; font-size:0.78rem; line-height:1.8;"></div>
+        </div>
+
+        <!-- Diagnóstico rápido -->
+        <div class="lab-card">
+          <h3>Diagnóstico rápido</h3>
+          <button id="config-doctor-btn" class="train-btn">🔬 Ejecutar diagnóstico (astra doctor)</button>
+          <div id="config-doctor-result" class="train-stage-label" style="white-space:pre-wrap;"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══════════ 2.1 — Barra de estado permanente (telemetría) ═══════════ -->
+  <footer class="statusbar">
+    <span class="stat-item" id="stat-cpu">CPU —</span>
+    <span class="stat-item" id="stat-ram">RAM —</span>
+    <span class="stat-item" id="stat-gpu">GPU —</span>
+    <span class="stat-sep">|</span>
+    <span class="stat-item" id="stat-engine">Active Engine —</span>
+    <span class="stat-item" id="stat-cognitive">Cognitive Core —</span>
+    <span class="stat-item" id="stat-evolution">Evolution —</span>
+    <span class="stat-sep">|</span>
+    <span class="stat-item" id="stat-requests">Peticiones —</span>
+    <span class="stat-item" id="stat-avgtime">Prom. —</span>
+  </footer>
+
+  <script src="/js/app.js"></script>
+  <script src="/js/forex_lab.js"></script>
+  <script src="/js/prediction_lab.js"></script>
+  <script src="/js/business_lab.js"></script>
+  <script src="/js/cognitive_center.js"></script>
+  <script src="/js/evolution_center.js"></script>
+  <script src="/js/activity_center.js"></script>
+  <script src="/js/notification_center.js"></script>
+  <script src="/js/live_thinking.js"></script>
+  <script src="/js/active_dashboard.js"></script>
+  <script src="/js/deployment_reports.js"></script>
+  <script src="/js/robustness.js"></script>
+  <script src="/js/ui_customization.js"></script>
+</body>
+</html>

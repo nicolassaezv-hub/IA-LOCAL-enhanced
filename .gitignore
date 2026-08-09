@@ -1,0 +1,292 @@
+# =============================================================================
+# ASTRA v7.1.0 — .gitignore
+# Production target: Ubuntu 24.04 / ARM64 / Oracle Ampere A1 / Python 3.12
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. SECRETS / CREDENTIALS
+# -----------------------------------------------------------------------------
+# IMPORTANT:
+# In the current v7.1.0 baseline, the *.example environment files must also be
+# treated as sensitive until they are sanitized. Do NOT whitelist them yet.
+
+.env
+.env.*
+*.env
+*.env.*
+astra.env
+**/astra.env
+**/astra.env.*
+
+# SSH / TLS / cloud credentials
+*.key
+*.pem
+*.ppk
+*.p12
+*.pfx
+*.jks
+*.keystore
+ssh-key-*
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+# Common credential exports
+credentials.json
+credentials*.json
+service-account*.json
+service_account*.json
+secrets.json
+secrets*.json
+
+# -----------------------------------------------------------------------------
+# 2. PYTHON CACHE / BUILD / PACKAGING
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.pyre/
+.hypothesis/
+.pytest_cache/
+
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+build/
+dist/
+sdist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+wheels/
+
+# -----------------------------------------------------------------------------
+# 3. PYTHON VIRTUAL ENVIRONMENTS
+# -----------------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# -----------------------------------------------------------------------------
+# 4. JUPYTER / NOTEBOOK CACHE
+# -----------------------------------------------------------------------------
+.ipynb_checkpoints/
+
+# -----------------------------------------------------------------------------
+# 5. NODE / FRONTEND GENERATED FILES
+# -----------------------------------------------------------------------------
+node_modules/
+.npm/
+.yarn/
+.pnpm-store/
+.vite/
+.next/
+.nuxt/
+dist-client/
+dist-server/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Keep package-lock.json tracked.
+
+# -----------------------------------------------------------------------------
+# 6. IDE / EDITOR / OS FILES
+# -----------------------------------------------------------------------------
+.vscode/
+.idea/
+.history/
+*.code-workspace
+
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+ehthumbs.db
+
+*.swp
+*.swo
+*~
+*.tmp
+*.temp
+*.bak
+
+# -----------------------------------------------------------------------------
+# 7. LOGS
+# -----------------------------------------------------------------------------
+logs/
+*.log
+*.log.*
+*.out
+
+# -----------------------------------------------------------------------------
+# 8. RUNTIME DATABASES / SQLITE STATE
+# -----------------------------------------------------------------------------
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+
+# -----------------------------------------------------------------------------
+# 9. ASTRA GENERATED RUNTIME STATE
+# -----------------------------------------------------------------------------
+/astra_doctor_report.json
+/audit_results_output.json
+/circuit_breaker_state.json
+/astra_csv_index.json
+
+*.pid
+*.lock
+
+# -----------------------------------------------------------------------------
+# 10. FOREX GENERATED DATASETS
+# -----------------------------------------------------------------------------
+# Production rolling datasets are runtime data, not source code.
+# Root test fixtures such as test_EURUSD_H1.csv remain trackable because they
+# are outside these directories.
+
+/CSVs/**/*.csv
+/data/forex_analytics/
+/attached_assets/
+
+# Preserve directory placeholders/documentation if added later.
+!/CSVs/**/.gitkeep
+!/CSVs/**/README.md
+!/data/forex_analytics/.gitkeep
+!/data/forex_analytics/README.md
+
+# -----------------------------------------------------------------------------
+# 11. GENERATED ML MODEL ARTIFACTS
+# -----------------------------------------------------------------------------
+# Keep model metadata / hyperparameter JSON files trackable.
+# Binary trained models should be regenerated under the target environment.
+
+/models/**/*.pkl
+/models/**/*.pickle
+/models/**/*.joblib
+/models/**/*.bin
+/models/**/*.onnx
+/models/**/*.h5
+/models/**/*.keras
+
+# -----------------------------------------------------------------------------
+# 12. GENERATED DEPLOYMENT / READINESS REPORTS
+# -----------------------------------------------------------------------------
+# The report generators themselves remain tracked. Timestamped generated
+# deployment evidence stays local unless explicitly selected for a release.
+
+/reports/deployment/deployment_*.md
+/reports/deployment/pipeline_*.md
+/reports/deployment/readiness_*.md
+/reports/deployment/*.json
+
+!/reports/deployment/README.md
+!/reports/deployment/.gitkeep
+
+# -----------------------------------------------------------------------------
+# 13. BACKUPS / TEMPORARY RUNTIME DIRECTORIES
+# -----------------------------------------------------------------------------
+/backups/
+/backup/
+/tmp/
+/temp/
+/cache/
+/.cache/
+
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# Do not ignore all ZIP files globally: release archives may be intentionally
+# versioned outside the source repository. Local ASTRA build archives are ignored.
+IA-LOCAL-*.zip
+ASTRA-*.zip
+ASTRA_*.zip
+
+# -----------------------------------------------------------------------------
+# 14. USER-GENERATED / EXPORT OUTPUTS
+# -----------------------------------------------------------------------------
+/grafico.png
+
+# Common generated exports. Do not ignore all CSV/JSON/PNG globally because
+# ASTRA contains legitimate fixtures, configuration, documentation and UI assets.
+/exports/
+/output/
+/outputs/
+
+# -----------------------------------------------------------------------------
+# 15. WINDOWS BINARY ARTIFACTS
+# -----------------------------------------------------------------------------
+# .bat/.ps1 source launchers may remain tracked for local Windows compatibility.
+# Binary executables and shortcuts should not be committed.
+*.exe
+*.lnk
+
+# -----------------------------------------------------------------------------
+# 16. LOCAL CLOUD / TOOLING STATE
+# -----------------------------------------------------------------------------
+.terraform/
+*.tfstate
+*.tfstate.*
+.oci/
+.oracle/
+.codex/
+.claude/
+
+# -----------------------------------------------------------------------------
+# 17. SECURITY REMINDER
+# -----------------------------------------------------------------------------
+# .gitignore only prevents NEW untracked files from being added.
+# If a secret was already committed, remove it from Git history and ROTATE it.
+#
+# Before first production commit:
+#   1) sanitize .env.example / infra/config/astra.env.example
+#   2) add safe placeholder-only examples back with explicit ! exceptions
+#   3) run: git status --ignored
+#   4) verify no credentials, SSH keys, runtime DBs, datasets or models are staged
+
+# =============================================================================
+
+# =============================================================================
+# ASTRA v7.1.0 — PRE-CODEX FINAL RULES
+# =============================================================================
+
+# Templates de entorno saneados que SÍ deben versionarse
+!.env.example
+!infra/config/astra.env.example
+
+# Datasets Forex generados/runtime
+/forex/data/*.csv
+
+# Uploads del Workplace: datos de usuario/runtime
+/workspace/uploads/*
+!/workspace/uploads/.gitkeep
+!/workspace/uploads/README.md
+
+# Artefactos accidentales encontrados en el baseline
+/download
+/Nuevo Documento de texto.txt
+
+# Legacy/accidental environment template
+/env.example
