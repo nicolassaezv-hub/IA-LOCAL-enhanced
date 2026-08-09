@@ -189,6 +189,11 @@ class ForexIntegratedPipeline:
     # ─────────────────────────────────────────────────────────
     def predict(self, filepath: str, pair: str = None,
                 path_h4: str = None, path_d1: str = None) -> dict:
+        """Return a prediction whose ``action`` is the final ASTRA decision.
+
+        ``signal`` is a compatibility alias for ``action`` and ``raw_action``
+        retains the predictor decision for diagnostics only.
+        """
         path_h4, path_d1 = _autoresolve_mtf(filepath, path_h4, path_d1)
         df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
         pair = _infer_pair(df, pair, filepath=filepath)
@@ -219,7 +224,8 @@ class ForexIntegratedPipeline:
         except Exception as exc:
             logger.warning("Candlestick patterns no evaluados: %s", exc)
 
-        _sig  = signal.get("signal", signal.get("action", "HOLD"))
+        raw_action = signal.get("action") or signal.get("signal") or "HOLD"
+        _sig  = raw_action
         _conf = float(signal.get("confidence", 0.65))
         _, _rr = self._pair_params(pair)
 
@@ -247,7 +253,6 @@ class ForexIntegratedPipeline:
         cb_active = bool(getattr(ctx, "circuit_breaker_active", False))
         if cb_active:
             signal["circuit_breaker"] = {"open": True}
-            signal["signal"] = "HOLD"
             _sig = "HOLD"
 
         # ── Roadmap V: Decision Engine (V.1) con contexto completo ───
@@ -287,10 +292,15 @@ class ForexIntegratedPipeline:
                     "Decision Engine vetó %s en %s: %s", _sig, pair, _dec.explanation
                 )
                 signal["ensemble_signal_raw"] = _sig
-                signal["signal"] = _dec.decision
-                _sig = _dec.decision
+            _sig = _dec.decision
         except Exception as exc:
             logger.warning("V.1 Decision Engine no ejecutado: %s", exc)
+
+        # Canonical A-03 contract: action is the only executable decision.
+        # signal remains a compatible alias; the predictor output is diagnostic.
+        signal["raw_action"] = raw_action
+        signal["action"] = _sig
+        signal["signal"] = _sig
 
         if ctx is not None:
             signal["roadmap_v_context"] = ctx.to_dict()
