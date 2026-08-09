@@ -7,9 +7,9 @@ Runs via systemd timers or cron — NO Base44 dependency.
 
 Usage:
     python scheduler/autonomous_scheduler.py --init           # First-run: generate all datasets
-    python scheduler/autonomous_scheduler.py --timeframe H1    # Run one H1 cycle
-    python scheduler/autonomous_scheduler.py --timeframe H4    # Run one H4 cycle
-    python scheduler/autonomous_scheduler.py --timeframe D1    # Run one D1 cycle
+    python scheduler/autonomous_scheduler.py --timeframe H1    # Update H1 + predict
+    python scheduler/autonomous_scheduler.py --timeframe H4    # Update H4 context only
+    python scheduler/autonomous_scheduler.py --timeframe D1    # Update D1 context only
     python scheduler/autonomous_scheduler.py --status          # System health JSON
     python scheduler/autonomous_scheduler.py --add-symbol NZDUSD  # Add new symbol
 """
@@ -36,6 +36,7 @@ logger = logging.getLogger("astra.scheduler")
 
 ROLLING_WINDOW = int(os.environ.get("ASTRA_ROLLING_WINDOW_SIZE", "2000"))
 TIMEFRAMES = ["H1", "H4", "D1"]
+PREDICTION_TIMEFRAME = "H1"
 DEFAULT_SYMBOLS = [
     ("EURUSD", "EUR/USD", 0.0001),
     ("GBPUSD", "GBP/USD", 0.0001),
@@ -237,24 +238,113 @@ def run_rolling_update(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict
         return {"action": "generated", "candles": len(df_new)}
 
 
+def _resolve_prediction_dataset(
+    db: DatabaseAdapter,
+    symbol: str,
+    timeframe: str,
+    *,
+    required: bool,
+) -> str | None:
+    """Resolve and validate one scheduler dataset path."""
+    registry = db.get_dataset_registry(symbol, timeframe)
+    entry = registry[0] if registry else None
+
+    raw_path = None
+    if entry and entry.get("status") == "ready":
+        raw_path = entry.get("blob_path")
+
+    if not raw_path:
+        canonical = PROJECT_ROOT / "forex" / "data" / f"{symbol}_{timeframe}.csv"
+        if canonical.is_file():
+            raw_path = canonical
+
+    if raw_path:
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        if path.is_file():
+            return str(path)
+
+    message = f"Dataset CSV not found for {symbol} {timeframe}"
+    if raw_path:
+        message += f": {raw_path}"
+    if required:
+        raise FileNotFoundError(message)
+
+    logger.info("  Optional MTF dataset unavailable: %s", message)
+    return None
+
+
 def run_prediction(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict:
-    """Run the prediction pipeline for a symbol+timeframe."""
+    """Run the H1 prediction pipeline for a symbol.
+
+    H4 and D1 scheduler cycles maintain context datasets only.  The integrated
+    predictor uses an H1 primary dataset enriched with those higher timeframes.
+    """
+    if timeframe != PREDICTION_TIMEFRAME:
+        logger.info(
+            "  PREDICT SKIPPED %s %s — executable predictions are %s-only",
+            symbol,
+            timeframe,
+            PREDICTION_TIMEFRAME,
+        )
+        return {
+            "action": "skip",
+            "reason": "prediction_timeframe_not_supported",
+            "timeframe": timeframe,
+            "supported_timeframe": PREDICTION_TIMEFRAME,
+        }
+
     try:
+        filepath = _resolve_prediction_dataset(db, symbol, timeframe, required=True)
+        path_h4 = _resolve_prediction_dataset(db, symbol, "H4", required=False)
+        path_d1 = _resolve_prediction_dataset(db, symbol, "D1", required=False)
+
         from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
         pipeline = ForexIntegratedPipeline()
-        result = pipeline.predict(symbol=symbol, timeframe=timeframe)
+        result = pipeline.predict(
+            filepath=filepath,
+            pair=symbol,
+            path_h4=path_h4,
+            path_d1=path_d1,
+        )
         if result is None:
             return {"action": "skip", "reason": "pipeline_returned_none"}
+        if not isinstance(result, dict):
+            raise TypeError(
+                "ForexIntegratedPipeline.predict() must return a dict, "
+                f"got {type(result).__name__}"
+            )
+        if result.get("error"):
+            raise RuntimeError(str(result["error"]))
+
+        final_action = result.get("action")
+        if not final_action:
+            raise ValueError(
+                "ForexIntegratedPipeline.predict() result is missing canonical 'action'"
+            )
+        final_action = str(final_action).upper()
+
+        confidence = result.get("confidence")
+        if confidence is None:
+            confidence = float(result.get("signal_strength", 50.0)) / 100.0
+        else:
+            confidence = float(confidence)
+            if confidence > 1.0:
+                confidence /= 100.0
 
         pred = {
             "symbol": symbol,
+            "pair": symbol,
             "timeframe": timeframe,
-            "direction": getattr(result, "signal", getattr(result, "direction", "hold")),
-            "confidence": float(getattr(result, "confidence", getattr(result, "signal_strength", 50)) / 100.0),
-            "entry_price": float(getattr(result, "entry_price", 0)),
-            "stop_loss": float(getattr(result, "stop_loss", 0)),
-            "take_profit": float(getattr(result, "take_profit", 0)),
-            "features_snapshot": getattr(result, "features", {}),
+            "action": final_action,
+            "direction": final_action,
+            "confidence": confidence,
+            "reliability_score": result.get("reliability_score"),
+            "entry_price": float(result.get("entry_price", 0)),
+            "stop_loss": float(result.get("stop_loss", 0)),
+            "take_profit": float(result.get("take_profit", 0)),
+            "features_snapshot": result.get("features", {}),
             "pipeline_version": "v6.0.1",
             "predicted_at": datetime.now().isoformat()
         }
@@ -293,7 +383,7 @@ def detect_new_symbols(db: DatabaseAdapter) -> list:
 
 
 def run_cycle(db: DatabaseAdapter, timeframe: str):
-    """Execute one full scheduler cycle for a given timeframe."""
+    """Update one timeframe and run a prediction only for the H1 cycle."""
     run = db.create_scheduler_run({
         "timeframe": timeframe,
         "started_at": datetime.now().isoformat(),
@@ -305,20 +395,21 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
     symbols = db.get_supported_symbols()
     symbols_processed = 0
 
-    # ── Model integrity check before cycle ──
-    try:
-        from robustness.model_integrity_checker import check_model_before_cycle
-        blocked_symbols = []
-        for sym in symbols:
-            code = sym["symbol_code"]
-            if not check_model_before_cycle(code, timeframe):
-                blocked_symbols.append(code)
-                logger.warning(f"Model for {code} {timeframe} failed integrity check — BLOCKED for this cycle")
-        if blocked_symbols:
-            symbols = [s for s in symbols if s["symbol_code"] not in blocked_symbols]
-            logger.info(f"Blocked {len(blocked_symbols)} symbols due to model issues: {blocked_symbols}")
-    except Exception as e:
-        logger.warning(f"Model integrity check skipped: {e}")
+    # ── Model integrity check before executable prediction cycles ──
+    if timeframe == PREDICTION_TIMEFRAME:
+        try:
+            from robustness.model_integrity_checker import check_model_before_cycle
+            blocked_symbols = []
+            for sym in symbols:
+                code = sym["symbol_code"]
+                if not check_model_before_cycle(code, timeframe):
+                    blocked_symbols.append(code)
+                    logger.warning(f"Model for {code} {timeframe} failed integrity check — BLOCKED for this cycle")
+            if blocked_symbols:
+                symbols = [s for s in symbols if s["symbol_code"] not in blocked_symbols]
+                logger.info(f"Blocked {len(blocked_symbols)} symbols due to model issues: {blocked_symbols}")
+        except Exception as e:
+            logger.warning(f"Model integrity check skipped: {e}")
     predictions_generated = 0
     errors_count = 0
     results = []
@@ -337,7 +428,10 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
         update_result = run_rolling_update(db, code, timeframe)
         results.append({"symbol": code, "update": update_result})
 
-        if update_result.get("action") in ("updated", "generated"):
+        if (
+            timeframe == PREDICTION_TIMEFRAME
+            and update_result.get("action") in ("updated", "generated")
+        ):
             pred_result = run_prediction(db, code, timeframe)
             results.append({"symbol": code, "predict": pred_result})
             if pred_result.get("action") == "predicted":

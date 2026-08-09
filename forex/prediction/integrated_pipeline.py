@@ -28,6 +28,8 @@ from .csv_adapter          import adapt_csv
 
 logger = logging.getLogger("forex.prediction.pipeline")
 
+PREDICTION_TIMEFRAME = "H1"
+
 
 def _autoresolve_mtf(filepath: str, path_h4: str = None, path_d1: str = None):
     """Si filepath contiene _H1, deriva _H4 y _D1 automáticamente cuando existen."""
@@ -124,7 +126,12 @@ class ForexIntegratedPipeline:
         # ── Roadmap V: Quality Gate (V.5) ───────────────────────────
         try:
             from forex.prediction.roadmap_v_integration import run_quality_gate
-            _approved, _qr = run_quality_gate(df, pair=pair or "?", timeframe="H1", verbose=False)
+            _approved, _qr = run_quality_gate(
+                df,
+                pair=pair or "?",
+                timeframe=PREDICTION_TIMEFRAME,
+                verbose=False,
+            )
             if not _approved:
                 return {
                     "error": f"Quality gate rechazado (score={_qr.global_score:.0f}/100). "
@@ -189,7 +196,10 @@ class ForexIntegratedPipeline:
     # ─────────────────────────────────────────────────────────
     def predict(self, filepath: str, pair: str = None,
                 path_h4: str = None, path_d1: str = None) -> dict:
-        """Return a prediction whose ``action`` is the final ASTRA decision.
+        """Return an H1 prediction whose ``action`` is the final ASTRA decision.
+
+        The primary dataset is H1. ``path_h4`` and ``path_d1`` are optional
+        higher-timeframe context; they are not alternative primary timeframes.
 
         ``signal`` is a compatibility alias for ``action`` and ``raw_action``
         retains the predictor decision for diagnostics only.
@@ -238,7 +248,7 @@ class ForexIntegratedPipeline:
             ctx = build_context(
                 df,
                 pair=pair,
-                timeframe="H1",
+                timeframe=PREDICTION_TIMEFRAME,
                 signal=_sig,
                 model_confidence=_conf,
                 ensemble_predictions=signal.get("ensemble_predictions"),
@@ -275,7 +285,7 @@ class ForexIntegratedPipeline:
                     ctx.risk.to_dict() if getattr(ctx, "risk", None) is not None else None
                 ),
                 pair=pair,
-                timeframe="H1",
+                timeframe=PREDICTION_TIMEFRAME,
                 verbose=False,
             )
             signal["roadmap_v_decision"]     = _dec.decision
@@ -317,7 +327,7 @@ class ForexIntegratedPipeline:
             if _sig in ("BUY", "SELL"):
                 _price = float(df["close"].iloc[-1])
                 OutcomeTracker().record_prediction(
-                    pair=pair, timeframe="H1", signal=_sig,
+                    pair=pair, timeframe=PREDICTION_TIMEFRAME, signal=_sig,
                     entry_price=_price,
                     reliability_score=float(
                         signal.get("reliability_score", _conf * 100.0)
