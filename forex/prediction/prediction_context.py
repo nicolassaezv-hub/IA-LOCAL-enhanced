@@ -17,6 +17,7 @@ Todo fallo se registra con `logger.warning` — nunca se silencia.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -52,6 +53,31 @@ class PredictionContext:
     model_recent_predictions: int = 0
 
     degraded: list[str] = field(default_factory=list)
+    circuit_breaker_state: dict = field(default_factory=dict)
+    protection_errors: list[dict[str, Any]] = field(default_factory=list)
+
+    def record_protection_error(
+        self,
+        component: str,
+        code: str,
+        reason: str,
+        *,
+        critical: bool,
+        exc: Optional[Exception] = None,
+    ) -> None:
+        """Record a protection failure without discarding its original cause."""
+        if component not in self.degraded:
+            self.degraded.append(component)
+        failure: dict[str, Any] = {
+            "component": component,
+            "code": code,
+            "critical": critical,
+            "reason": reason,
+        }
+        if exc is not None:
+            failure["error_type"] = type(exc).__name__
+            failure["error"] = str(exc)
+        self.protection_errors.append(failure)
 
     def to_dict(self) -> dict:
         out: dict[str, Any] = {
@@ -66,6 +92,8 @@ class PredictionContext:
             "model_win_rate": self.model_win_rate,
             "model_recent_predictions": self.model_recent_predictions,
             "degraded_components": self.degraded,
+            "circuit_breaker_state": self.circuit_breaker_state,
+            "protection_errors": self.protection_errors,
         }
         for key, obj in (
             ("regime", self.regime),
@@ -119,14 +147,14 @@ def _atr_stats(df: pd.DataFrame) -> tuple[float, float, str]:
 
 
 def _circuit_breaker_state() -> tuple[bool, dict]:
-    try:
-        from forex.prediction.circuit_breaker import CircuitBreaker
+    from forex.prediction.circuit_breaker import CircuitBreaker
 
-        state = CircuitBreaker().check() or {}
-        return bool(state.get("open")), state
-    except Exception as exc:
-        logger.warning("Circuit Breaker no disponible (%s) — se asume cerrado.", exc)
-        return False, {}
+    state = CircuitBreaker().check()
+    if not isinstance(state, dict) or not isinstance(state.get("open"), bool):
+        raise ValueError("Circuit Breaker devolvió un estado inválido sin 'open' booleano")
+    # CircuitBreaker.check(): open=True means trading is allowed.  The context
+    # field expresses the inverse: whether the capital protection is active.
+    return not state["open"], state
 
 
 def _model_performance(pair: str, timeframe: str) -> tuple[Optional[float], int]:
@@ -162,26 +190,59 @@ def _model_performance(pair: str, timeframe: str) -> tuple[Optional[float], int]
 
 
 def _news_state(pair: str) -> tuple[bool, str]:
-    """Estado de noticias de alto impacto. Degrada a (False, '') con aviso."""
-    try:
-        from forex.news_filter import is_news_active  # type: ignore
+    """Estado de noticias de alto impacto cuando la integración está disponible."""
+    from forex.news_filter import is_news_active  # type: ignore
 
-        active, sentiment = is_news_active(pair)
-        return bool(active), str(sentiment or "")
-    except Exception:
-        return False, ""
+    active, sentiment = is_news_active(pair)
+    return bool(active), str(sentiment or "")
 
 
 def _load_tf(path: Optional[str], pair: str) -> Optional[pd.DataFrame]:
     if not path:
         return None
-    try:
-        from forex.prediction.csv_adapter import adapt_csv
+    from forex.prediction.csv_adapter import adapt_csv
 
-        return adapt_csv(path, pair=pair)
-    except Exception as exc:
-        logger.warning("No se pudo cargar el timeframe %s: %s", path, exc)
-        return None
+    return adapt_csv(path, pair=pair)
+
+
+def _valid_mtf_result(mtf: Any) -> bool:
+    try:
+        score = float(mtf.coherence_score)
+        return (
+            math.isfinite(score)
+            and 0.0 <= score <= 100.0
+            and isinstance(mtf.coherent, bool)
+            and isinstance(mtf.forced_hold, bool)
+        )
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def _valid_risk_result(risk: Any, signal: str) -> bool:
+    try:
+        values = {
+            "entry_price": float(risk.entry_price),
+            "stop_loss": float(risk.stop_loss),
+            "take_profit": float(risk.take_profit),
+            "position_size": float(risk.position_size),
+            "rr_ratio": float(risk.rr_ratio),
+        }
+    except (AttributeError, TypeError, ValueError):
+        return False
+    if not all(math.isfinite(value) for value in values.values()):
+        return False
+    if (
+        getattr(risk, "decision", signal) != signal
+        or values["entry_price"] <= 0.0
+        or values["stop_loss"] <= 0.0
+        or values["take_profit"] <= 0.0
+        or values["position_size"] <= 0.0
+        or values["rr_ratio"] <= 0.0
+    ):
+        return False
+    if signal == "BUY":
+        return values["stop_loss"] < values["entry_price"] < values["take_profit"]
+    return values["take_profit"] < values["entry_price"] < values["stop_loss"]
 
 
 # ──────────────────────────────────────────────────────────────
@@ -206,14 +267,36 @@ def build_context(
     Ejecuta V.4 (regime), V.3 (MTF), V.8 (reliability) y V.2 (risk) sobre el
     dataframe ya enriquecido con features y devuelve el contexto completo.
 
-    Ningún fallo interrumpe la predicción: cada componente que no pueda
-    ejecutarse queda registrado en `ctx.degraded` y se avisa por logger.
+    Los fallos se registran en ``protection_errors``. El pipeline usa la marca
+    ``critical`` para bloquear señales direccionales sin impedir que el
+    contexto informe fallos de componentes opcionales.
     """
     ctx = PredictionContext(pair=pair, timeframe=timeframe)
 
     ctx.atr_value, ctx.atr_percentile, ctx.volatility_level = _atr_stats(df)
-    ctx.circuit_breaker_active, _cb = _circuit_breaker_state()
-    ctx.news_active, ctx.news_sentiment = _news_state(pair)
+    try:
+        ctx.circuit_breaker_active, ctx.circuit_breaker_state = _circuit_breaker_state()
+    except Exception as exc:
+        ctx.record_protection_error(
+            "circuit_breaker",
+            "circuit_breaker_unavailable",
+            "No se pudo verificar el estado del Circuit Breaker.",
+            critical=True,
+            exc=exc,
+        )
+        logger.warning("Circuit Breaker no disponible: %s", exc, exc_info=True)
+
+    try:
+        ctx.news_active, ctx.news_sentiment = _news_state(pair)
+    except Exception as exc:
+        ctx.record_protection_error(
+            "news_filter",
+            "news_filter_unavailable",
+            "El filtro de noticias informativo no está disponible.",
+            critical=False,
+            exc=exc,
+        )
+        logger.warning("Filtro de noticias no disponible: %s", exc)
     ctx.model_win_rate, ctx.model_recent_predictions = _model_performance(pair, timeframe)
 
     # ── V.4 Regime Detection ──────────────────────────────────
@@ -233,8 +316,11 @@ def build_context(
         if getattr(ctx.regime, "atr_percentile", 0.0):
             ctx.atr_percentile = float(ctx.regime.atr_percentile)
     except Exception as exc:
-        ctx.degraded.append("regime")
-        logger.warning("V.4 Regime Detection no ejecutado: %s", exc)
+        ctx.record_protection_error(
+            "regime", "regime_detection_failed",
+            "V.4 Regime Detection no pudo calcularse.", critical=False, exc=exc,
+        )
+        logger.warning("V.4 Regime Detection no ejecutado: %s", exc, exc_info=True)
 
     # ── V.3 MTF Coherence ─────────────────────────────────────
     try:
@@ -242,18 +328,36 @@ def build_context(
 
         h4 = h4_df if h4_df is not None else _load_tf(path_h4, pair)
         d1 = d1_df if d1_df is not None else _load_tf(path_d1, pair)
-        if h4 is not None or d1 is not None:
+        if h4 is not None and d1 is not None:
             ctx.mtf = run_mtf_coherence(
                 d1_df=d1, h4_df=h4, h1_df=df, pair=pair, verbose=False
             )
+            if not _valid_mtf_result(ctx.mtf):
+                ctx.mtf = None
+                ctx.record_protection_error(
+                    "mtf",
+                    "mtf_invalid",
+                    "V.3 MTF devolvió un resultado inválido.",
+                    critical=True,
+                )
         else:
-            ctx.degraded.append("mtf(sin H4/D1)")
+            missing = [name for name, value in (("H4", h4), ("D1", d1)) if value is None]
+            ctx.record_protection_error(
+                "mtf",
+                "mtf_context_unavailable",
+                f"Falta contexto MTF obligatorio: {', '.join(missing)}.",
+                critical=True,
+            )
             logger.warning(
-                "V.3 MTF omitido para %s: no hay CSV de H4 ni D1 disponible.", pair or "?"
+                "V.3 MTF bloqueado para %s: falta %s.", pair or "?", ", ".join(missing)
             )
     except Exception as exc:
-        ctx.degraded.append("mtf")
-        logger.warning("V.3 MTF Coherence no ejecutado: %s", exc)
+        ctx.mtf = None
+        ctx.record_protection_error(
+            "mtf", "mtf_evaluation_failed",
+            "V.3 MTF Coherence no pudo calcularse.", critical=True, exc=exc,
+        )
+        logger.warning("V.3 MTF Coherence no ejecutado: %s", exc, exc_info=True)
 
     # ── V.8 Reliability Score ─────────────────────────────────
     try:
@@ -276,8 +380,12 @@ def build_context(
             verbose=False,
         )
     except Exception as exc:
-        ctx.degraded.append("reliability")
-        logger.warning("V.8 Reliability Score no ejecutado: %s", exc)
+        ctx.record_protection_error(
+            "reliability", "reliability_context_failed",
+            "El cálculo auxiliar V.8 del contexto no pudo ejecutarse.",
+            critical=False, exc=exc,
+        )
+        logger.warning("V.8 Reliability Score no ejecutado: %s", exc, exc_info=True)
 
     # ── V.2 Risk Engine (sólo para señales operables) ─────────
     if signal in ("BUY", "SELL"):
@@ -302,9 +410,22 @@ def build_context(
                 rr_ratio=rr_ratio,
                 verbose=False,
             )
+            if not _valid_risk_result(ctx.risk, signal):
+                ctx.risk = None
+                ctx.record_protection_error(
+                    "risk_engine",
+                    "risk_result_invalid",
+                    "V.2 Risk Engine devolvió datos de riesgo inválidos.",
+                    critical=True,
+                )
         except Exception as exc:
-            ctx.degraded.append("risk")
-            logger.warning("V.2 Risk Engine no ejecutado: %s", exc)
+            ctx.risk = None
+            ctx.record_protection_error(
+                "risk_engine", "risk_engine_failed",
+                "V.2 Risk Engine no pudo autorizar la operación.",
+                critical=True, exc=exc,
+            )
+            logger.warning("V.2 Risk Engine no ejecutado: %s", exc, exc_info=True)
 
     if ctx.degraded:
         logger.warning(

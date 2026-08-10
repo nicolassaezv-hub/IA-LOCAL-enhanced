@@ -14,6 +14,7 @@ Modos:
 """
 
 import logging
+import math
 
 import numpy as np
 import pandas as pd
@@ -29,6 +30,67 @@ from .csv_adapter          import adapt_csv
 logger = logging.getLogger("forex.prediction.pipeline")
 
 PREDICTION_TIMEFRAME = "H1"
+_TRADE_ACTIONS = ("BUY", "SELL")
+
+
+def _protection_failure(
+    component: str,
+    code: str,
+    reason: str,
+    *,
+    critical: bool,
+    exc: Exception = None,
+) -> dict:
+    failure = {
+        "component": component,
+        "code": code,
+        "critical": critical,
+        "reason": reason,
+    }
+    if exc is not None:
+        failure["error_type"] = type(exc).__name__
+        failure["error"] = str(exc)
+    return failure
+
+
+def _valid_mtf_result(mtf) -> bool:
+    try:
+        score = float(mtf.coherence_score)
+        return (
+            math.isfinite(score)
+            and 0.0 <= score <= 100.0
+            and isinstance(mtf.coherent, bool)
+            and isinstance(mtf.forced_hold, bool)
+        )
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def _valid_risk_result(risk, action: str) -> bool:
+    try:
+        values = {
+            "entry_price": float(risk.entry_price),
+            "stop_loss": float(risk.stop_loss),
+            "take_profit": float(risk.take_profit),
+            "position_size": float(risk.position_size),
+            "rr_ratio": float(risk.rr_ratio),
+        }
+    except (AttributeError, TypeError, ValueError):
+        return False
+    if not all(math.isfinite(value) for value in values.values()):
+        return False
+    if (
+        getattr(risk, "decision", action) != action
+        or values["entry_price"] <= 0.0
+        or values["stop_loss"] <= 0.0
+        or values["take_profit"] <= 0.0
+        or values["position_size"] <= 0.0
+        or values["rr_ratio"] <= 0.0
+    ):
+        return False
+    if action == "BUY":
+        return values["stop_loss"] < values["entry_price"] < values["take_profit"]
+    return values["take_profit"] < values["entry_price"] < values["stop_loss"]
 
 
 def _autoresolve_mtf(filepath: str, path_h4: str = None, path_d1: str = None):
@@ -138,10 +200,26 @@ class ForexIntegratedPipeline:
                              f"Críticos: {_qr.critical_count}. {_qr.recommendation}"
                 }
         except Exception as exc:
-            logger.warning(
-                "V.5 Quality Gate NO ejecutado para %s (%s) — se entrena sin "
-                "validación de calidad de datos.", pair, exc
+            logger.error(
+                "V.5 Quality Gate no pudo verificar %s: %s. Entrenamiento bloqueado.",
+                pair,
+                exc,
+                exc_info=True,
             )
+            return {
+                "error": "Quality gate no disponible; entrenamiento bloqueado.",
+                "safeguard_status": "blocked",
+                "blocked_by": ["quality_gate"],
+                "safeguard_failures": [
+                    _protection_failure(
+                        "quality_gate",
+                        "quality_gate_failed",
+                        "V.5 Quality Gate no pudo autorizar el entrenamiento.",
+                        critical=True,
+                        exc=exc,
+                    )
+                ],
+            }
 
         horizon, rr_ratio = self._pair_params(pair)
 
@@ -192,14 +270,15 @@ class ForexIntegratedPipeline:
             }
 
     # ─────────────────────────────────────────────────────────
-    # PREDICT — última vela real + MTF opcional
+    # PREDICT — última vela real + MTF de autorización
     # ─────────────────────────────────────────────────────────
     def predict(self, filepath: str, pair: str = None,
                 path_h4: str = None, path_d1: str = None) -> dict:
         """Return an H1 prediction whose ``action`` is the final ASTRA decision.
 
-        The primary dataset is H1. ``path_h4`` and ``path_d1`` are optional
-        higher-timeframe context; they are not alternative primary timeframes.
+        The primary dataset is H1. ``path_h4`` and ``path_d1`` remain context,
+        not alternative predictions; both must be valid before a directional
+        H1 signal can become executable.
 
         ``signal`` is a compatibility alias for ``action`` and ``raw_action``
         retains the predictor decision for diagnostics only.
@@ -224,6 +303,8 @@ class ForexIntegratedPipeline:
             return {"error": "Sin filas válidas tras feature engineering."}
 
         signal = self.predictor.signal(X_pred, pair=pair)
+        safeguard_failures: list[dict] = []
+        protection_errors: list[dict] = []
 
         # ── VI.5.D: Candlestick pattern boost ────────────────────────
         try:
@@ -232,7 +313,15 @@ class ForexIntegratedPipeline:
             signal["candlestick_patterns"] = cs.get("pattern_names", [])
             signal["candlestick_bias"]     = cs.get("bias", "neutral")
         except Exception as exc:
-            logger.warning("Candlestick patterns no evaluados: %s", exc)
+            failure = _protection_failure(
+                "candlestick_patterns",
+                "candlestick_patterns_failed",
+                "Los patrones de velas informativos no pudieron evaluarse.",
+                critical=False,
+                exc=exc,
+            )
+            protection_errors.append(failure)
+            logger.warning("Candlestick patterns no evaluados: %s", exc, exc_info=True)
 
         raw_action = signal.get("action") or signal.get("signal") or "HOLD"
         _sig  = raw_action
@@ -257,54 +346,163 @@ class ForexIntegratedPipeline:
                 rr_ratio=_rr,
             )
         except Exception as exc:
-            logger.warning("No se pudo construir el contexto Roadmap V: %s", exc)
+            failure = _protection_failure(
+                "prediction_context",
+                "prediction_context_failed",
+                "No se pudo construir el contexto obligatorio Roadmap V.",
+                critical=True,
+                exc=exc,
+            )
+            protection_errors.append(failure)
+            if raw_action in _TRADE_ACTIONS:
+                safeguard_failures.append(failure)
+            logger.warning(
+                "No se pudo construir el contexto Roadmap V: %s", exc, exc_info=True
+            )
+
+        if ctx is not None:
+            for failure in getattr(ctx, "protection_errors", []) or []:
+                if not isinstance(failure, dict):
+                    continue
+                protection_errors.append(failure)
+                if failure.get("critical") and raw_action in _TRADE_ACTIONS:
+                    safeguard_failures.append(failure)
+
+        if raw_action in _TRADE_ACTIONS and ctx is not None:
+            mtf = getattr(ctx, "mtf", None)
+            if not _valid_mtf_result(mtf) and not any(
+                failure.get("component") == "mtf" for failure in safeguard_failures
+            ):
+                failure = _protection_failure(
+                    "mtf",
+                    "mtf_context_invalid",
+                    "El contexto MTF obligatorio está ausente o es inválido.",
+                    critical=True,
+                )
+                safeguard_failures.append(failure)
+                protection_errors.append(failure)
+
+            risk = getattr(ctx, "risk", None)
+            if not _valid_risk_result(risk, raw_action) and not any(
+                failure.get("component") == "risk_engine"
+                for failure in safeguard_failures
+            ):
+                failure = _protection_failure(
+                    "risk_engine",
+                    "risk_context_invalid",
+                    "La protección de riesgo requerida está ausente o es inválida.",
+                    critical=True,
+                )
+                safeguard_failures.append(failure)
+                protection_errors.append(failure)
 
         # ── Circuit Breaker guard ─────────────────────────────────────
         cb_active = bool(getattr(ctx, "circuit_breaker_active", False))
         if cb_active:
-            signal["circuit_breaker"] = {"open": True}
-            _sig = "HOLD"
+            cb_state = getattr(ctx, "circuit_breaker_state", None) or {"open": False}
+            signal["circuit_breaker"] = cb_state
+            failure = _protection_failure(
+                "circuit_breaker",
+                "circuit_breaker_active",
+                str(cb_state.get("reason") or "Circuit Breaker activo; operación bloqueada."),
+                critical=True,
+            )
+            if raw_action in _TRADE_ACTIONS:
+                safeguard_failures.append(failure)
 
         # ── Roadmap V: Decision Engine (V.1) con contexto completo ───
-        try:
-            from forex.prediction.roadmap_v_integration import run_decision_engine
-            _dec = run_decision_engine(
-                ensemble_signal=_sig,
-                model_confidence=_conf,
-                ensemble_predictions=signal.get("ensemble_predictions"),
-                regime=getattr(ctx, "regime", None),
-                mtf=getattr(ctx, "mtf", None),
-                circuit_breaker_active=cb_active,
-                news_active=bool(getattr(ctx, "news_active", False)),
-                news_sentiment=str(getattr(ctx, "news_sentiment", "")),
-                volatility_level=str(getattr(ctx, "volatility_level", "normal")),
-                atr_percentile=float(getattr(ctx, "atr_percentile", 50.0)),
-                model_win_rate=getattr(ctx, "model_win_rate", None),
-                model_recent_predictions=int(getattr(ctx, "model_recent_predictions", 0)),
-                risk_info=(
-                    ctx.risk.to_dict() if getattr(ctx, "risk", None) is not None else None
-                ),
-                pair=pair,
-                timeframe=PREDICTION_TIMEFRAME,
-                verbose=False,
-            )
-            signal["roadmap_v_decision"]     = _dec.decision
-            signal["roadmap_v_explanation"]  = _dec.explanation
-            signal["roadmap_v_risk_level"]   = getattr(_dec, "risk_level", "medium")
-            signal["roadmap_v_factors_for"]     = getattr(_dec, "factors_for", [])
-            signal["roadmap_v_factors_against"] = getattr(_dec, "factors_against", [])
-            signal["reliability_score"]      = round(float(getattr(_dec, "reliability_score", 0.0)), 2)
-            signal["quality_tier"]           = getattr(_dec, "quality_tier", "hold")
-
-            # El Decision Engine es la autoridad final: puede vetar la señal.
-            if _dec.decision in ("HOLD", "NO_OPERAR") and _sig in ("BUY", "SELL"):
-                logger.warning(
-                    "Decision Engine vetó %s en %s: %s", _sig, pair, _dec.explanation
+        if not safeguard_failures:
+            try:
+                from forex.prediction.roadmap_v_integration import run_decision_engine
+                _dec = run_decision_engine(
+                    ensemble_signal=_sig,
+                    model_confidence=_conf,
+                    ensemble_predictions=signal.get("ensemble_predictions"),
+                    regime=getattr(ctx, "regime", None),
+                    mtf=getattr(ctx, "mtf", None),
+                    circuit_breaker_active=cb_active,
+                    news_active=bool(getattr(ctx, "news_active", False)),
+                    news_sentiment=str(getattr(ctx, "news_sentiment", "")),
+                    volatility_level=str(getattr(ctx, "volatility_level", "normal")),
+                    atr_percentile=float(getattr(ctx, "atr_percentile", 50.0)),
+                    model_win_rate=getattr(ctx, "model_win_rate", None),
+                    model_recent_predictions=int(getattr(ctx, "model_recent_predictions", 0)),
+                    risk_info=(
+                        ctx.risk.to_dict() if getattr(ctx, "risk", None) is not None else None
+                    ),
+                    pair=pair,
+                    timeframe=PREDICTION_TIMEFRAME,
+                    verbose=False,
                 )
-                signal["ensemble_signal_raw"] = _sig
-            _sig = _dec.decision
-        except Exception as exc:
-            logger.warning("V.1 Decision Engine no ejecutado: %s", exc)
+                decision = getattr(_dec, "decision", None)
+                if decision not in ("BUY", "SELL", "HOLD", "NO_OPERAR"):
+                    raise ValueError(f"Decision Engine devolvió decisión inválida: {decision!r}")
+                signal["roadmap_v_decision"]     = decision
+                signal["roadmap_v_explanation"]  = _dec.explanation
+                signal["roadmap_v_risk_level"]   = getattr(_dec, "risk_level", "medium")
+                signal["roadmap_v_factors_for"]     = getattr(_dec, "factors_for", [])
+                signal["roadmap_v_factors_against"] = getattr(_dec, "factors_against", [])
+                signal["reliability_score"]      = round(float(getattr(_dec, "reliability_score", 0.0)), 2)
+                signal["quality_tier"]           = getattr(_dec, "quality_tier", "hold")
+
+                # El Decision Engine es la autoridad final: puede vetar la señal.
+                if decision in ("HOLD", "NO_OPERAR") and _sig in _TRADE_ACTIONS:
+                    logger.warning(
+                        "Decision Engine vetó %s en %s: %s", _sig, pair, _dec.explanation
+                    )
+                    signal["ensemble_signal_raw"] = _sig
+                    safeguard_failures.append(
+                        _protection_failure(
+                            "decision_engine",
+                            "decision_engine_veto",
+                            str(_dec.explanation or "Decision Engine vetó la operación."),
+                            critical=True,
+                        )
+                    )
+                _sig = decision
+            except Exception as exc:
+                failure = _protection_failure(
+                    "decision_engine",
+                    "decision_engine_failed",
+                    "V.1 Decision Engine no pudo autorizar la operación.",
+                    critical=True,
+                    exc=exc,
+                )
+                protection_errors.append(failure)
+                if raw_action in _TRADE_ACTIONS:
+                    safeguard_failures.append(failure)
+                logger.warning("V.1 Decision Engine no ejecutado: %s", exc, exc_info=True)
+
+        if (
+            raw_action in _TRADE_ACTIONS
+            and safeguard_failures
+            and _sig in _TRADE_ACTIONS
+        ):
+            _sig = "HOLD"
+
+        if raw_action not in _TRADE_ACTIONS and _sig in _TRADE_ACTIONS:
+            failure = _protection_failure(
+                "decision_engine",
+                "decision_engine_unsafe_escalation",
+                f"Decision Engine intentó convertir {raw_action} en {_sig}.",
+                critical=True,
+            )
+            safeguard_failures.append(failure)
+            protection_errors.append(failure)
+            _sig = "HOLD"
+
+        if _sig in _TRADE_ACTIONS and not _valid_risk_result(
+            getattr(ctx, "risk", None), _sig
+        ):
+            failure = _protection_failure(
+                "risk_engine",
+                "risk_final_action_invalid",
+                "El riesgo calculado no corresponde a la acción final.",
+                critical=True,
+            )
+            safeguard_failures.append(failure)
+            protection_errors.append(failure)
+            _sig = "HOLD"
 
         # Canonical A-03 contract: action is the only executable decision.
         # signal remains a compatible alias; the predictor output is diagnostic.
@@ -313,7 +511,18 @@ class ForexIntegratedPipeline:
         signal["signal"] = _sig
 
         if ctx is not None:
-            signal["roadmap_v_context"] = ctx.to_dict()
+            try:
+                signal["roadmap_v_context"] = ctx.to_dict()
+            except Exception as exc:
+                failure = _protection_failure(
+                    "prediction_context",
+                    "prediction_context_serialization_failed",
+                    "El contexto no pudo serializarse para diagnóstico.",
+                    critical=False,
+                    exc=exc,
+                )
+                protection_errors.append(failure)
+                logger.warning("No se pudo serializar PredictionContext: %s", exc, exc_info=True)
             if getattr(ctx, "risk", None) is not None and _sig in ("BUY", "SELL"):
                 _r = ctx.risk
                 signal["stop_loss"]     = _r.stop_loss
@@ -334,7 +543,26 @@ class ForexIntegratedPipeline:
                     ),
                 )
         except Exception as exc:
-            logger.warning("OutcomeTracker no registró la predicción: %s", exc)
+            failure = _protection_failure(
+                "outcome_tracker",
+                "outcome_tracker_record_failed",
+                "Outcome Tracker no pudo registrar la predicción autorizada.",
+                critical=False,
+                exc=exc,
+            )
+            protection_errors.append(failure)
+            logger.warning(
+                "OutcomeTracker no registró la predicción: %s", exc, exc_info=True
+            )
+
+        signal["safeguard_status"] = (
+            "blocked" if safeguard_failures else "degraded" if protection_errors else "passed"
+        )
+        signal["safeguard_failures"] = safeguard_failures
+        signal["blocked_by"] = list(dict.fromkeys(
+            failure["component"] for failure in safeguard_failures
+        ))
+        signal["protection_errors"] = protection_errors
 
         return {"type": "prediction", "rows_processed": len(df), **signal}
 

@@ -64,8 +64,13 @@ class CanonicalActionTests(unittest.TestCase):
 
         cls.context = types.SimpleNamespace(
             circuit_breaker_active=False,
+            circuit_breaker_state={"open": True},
             regime=None,
-            mtf=None,
+            mtf=types.SimpleNamespace(
+                coherence_score=80.0,
+                coherent=True,
+                forced_hold=False,
+            ),
             news_active=False,
             news_sentiment="",
             volatility_level="normal",
@@ -73,6 +78,7 @@ class CanonicalActionTests(unittest.TestCase):
             model_win_rate=None,
             model_recent_predictions=0,
             risk=None,
+            protection_errors=[],
             to_dict=lambda: {},
         )
         cls.roadmap_module = _module("forex.prediction.roadmap_v_integration")
@@ -146,6 +152,18 @@ class CanonicalActionTests(unittest.TestCase):
 
         tracker = Mock()
         self.outcome_module.OutcomeTracker = lambda: tracker
+        if raw_action in ("BUY", "SELL"):
+            self.context.risk = types.SimpleNamespace(
+                decision=raw_action,
+                entry_price=1.085,
+                stop_loss=1.080 if raw_action == "BUY" else 1.090,
+                take_profit=1.090 if raw_action == "BUY" else 1.080,
+                position_size=1000.0,
+                rr_ratio=1.0,
+                to_dict=lambda: {"decision": raw_action},
+            )
+        else:
+            self.context.risk = None
         self.roadmap_module.run_decision_engine = lambda **_kwargs: types.SimpleNamespace(
             decision=final_action,
             explanation="test decision",
