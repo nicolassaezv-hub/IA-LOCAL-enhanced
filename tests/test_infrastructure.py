@@ -53,7 +53,10 @@ def test_database():
     tmpdir = tempfile.mkdtemp()
     db = SQLiteDatabase(os.path.join(tmpdir, "t.db"))
     conn = sqlite3.connect(os.path.join(tmpdir, "t.db"))
-    tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+    try:
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+    finally:
+        conn.close()
     for t in ["supported_symbols","dataset_registry","predictions","outcomes","model_quality","scheduler_runs","config"]:
         assert t in tables, f"missing {t}"
     sym = db.add_symbol("TESTUS","TEST/US",0.0001)

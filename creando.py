@@ -50,15 +50,13 @@ except ImportError:
     HAS_YF = False
     yf = None
 
-from forex.market_universe import (
-    FOREX_PAIRS,
-    COMMODITIES,
-    CRYPTO_ASSETS,
-    MT5_SYMBOL_MAP,
-    MT5_SYMBOLS,
-    YFINANCE_TICKER_MAP,
-    to_yfinance_ticker,
+from forex.market_universe import FOREX_PAIRS
+from forex.data.yahoo_provider import (
+    FOREX_TICKER_MAP as YFINANCE_TICKER_MAP,
+    to_yahoo_ticker as to_yfinance_ticker,
 )
+
+MT5_SYMBOLS = sorted(pair.replace("/", "") for pair in FOREX_PAIRS)
 
 OUTPUT_ROOT = "CSVs"
 NOW = datetime.now()

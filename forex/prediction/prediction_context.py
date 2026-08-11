@@ -191,9 +191,14 @@ def _model_performance(pair: str, timeframe: str) -> tuple[Optional[float], int]
 
 def _news_state(pair: str) -> tuple[bool, str]:
     """Estado de noticias de alto impacto cuando la integración está disponible."""
-    from forex.news_filter import is_news_active  # type: ignore
+    import news_intelligence
 
-    active, sentiment = is_news_active(pair)
+    provider = getattr(news_intelligence, "is_news_active", None)
+    if provider is None:
+        raise RuntimeError(
+            "news_intelligence does not expose the optional is_news_active provider"
+        )
+    active, sentiment = provider(pair)
     return bool(active), str(sentiment or "")
 
 

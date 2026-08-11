@@ -57,40 +57,34 @@ from constitution import (
 # aprobacion->feedback->audit en un solo comando ('evolucionar ciclo').
 from evolutionary_cycle import cmd_ciclo_evolutivo, cmd_health_report
 # ── Roadmap V — Forex Lab Avanzado ─────────────────────────────────
-try:
-    from forex.prediction.roadmap_v_integration import (
-        cmd_quality, cmd_backtest, cmd_feature_importance,
-        cmd_regime, cmd_mtf, cmd_reliability, cmd_decision, cmd_risk,
-        cmd_dataset_update, cmd_scheduler_status,
-        cmd_retrain_check, cmd_retrain_history,
-        cmd_sentinel_status, cmd_sentinel_signals,
-        cmd_outcome_stats, cmd_outcome_history,
-        cmd_notify_test, cmd_notify_log,
-        cmd_portfolio_ranking, cmd_portfolio_export,
-    )
-    _HAS_ROADMAP_V = True
-except ImportError as _e_rv:
-    _HAS_ROADMAP_V = False
+from forex.prediction.roadmap_v_integration import (
+    cmd_quality, cmd_backtest, cmd_feature_importance,
+    cmd_regime, cmd_mtf, cmd_reliability, cmd_decision, cmd_risk,
+    cmd_dataset_update, cmd_scheduler_status,
+    cmd_retrain_check, cmd_retrain_history,
+    cmd_sentinel_status, cmd_sentinel_signals,
+    cmd_outcome_stats, cmd_outcome_history,
+    cmd_notify_test, cmd_notify_log,
+    cmd_portfolio_ranking, cmd_portfolio_export,
+)
+_HAS_ROADMAP_V = True
 
 # ── Roadmap VI — Autonomización & Data Intelligence ─────────────────
-try:
-    from forex.prediction.hyperparameter_cache import get_cache as _get_hparam_cache
-    from forex.prediction.adaptive_trainer import get_adaptive_trainer as _get_adaptive_trainer
-    from forex.prediction.model_cache import get_model_cache as _get_model_cache
-    from forex.prediction.model_quality_history import get_quality_history as _get_quality_history
-    from forex.prediction.candlestick_patterns import get_detector as _get_candle_detector, detect_patterns
-    from forex.portfolio.opportunity_score import get_ranker as _get_op_ranker, SignalInput
-    from forex.data.data_router import DataRouter, fetch_data
-    from forex.data.csv_migrator import migrate_csv, list_active_csvs, scan_csv_directory
-    from forex.data.rolling_dataset import get_rolling_dataset
-    from forex.data.yahoo_provider import get_yahoo_provider
-    from forex.data.binance_provider import get_binance_provider
-    from forex.scheduler.autonomous_scheduler import get_scheduler as _get_scheduler
-    from forex.scheduler.auto_updater import get_auto_updater as _get_auto_updater
-    from check_system import run_self_test as _run_self_test
-    _HAS_ROADMAP_VI = True
-except ImportError as _e_rv6:
-    _HAS_ROADMAP_VI = False
+from forex.prediction.hyperparameter_cache import get_cache as _get_hparam_cache
+from forex.prediction.adaptive_trainer import get_adaptive_trainer as _get_adaptive_trainer
+from forex.prediction.model_cache import get_model_cache as _get_model_cache
+from forex.prediction.model_quality_history import get_quality_history as _get_quality_history
+from forex.prediction.candlestick_patterns import get_detector as _get_candle_detector, detect_patterns
+from forex.portfolio.opportunity_score import get_ranker as _get_op_ranker, SignalInput
+from forex.data.data_router import DataRouter, fetch_data
+from forex.data.csv_migrator import migrate_csv, list_active_csvs, scan_csv_directory
+from forex.data.rolling_dataset import get_rolling_dataset
+from forex.data.yahoo_provider import get_yahoo_provider
+from forex.data.binance_provider import get_binance_provider
+from forex.scheduler.autonomous_scheduler import get_scheduler as _get_scheduler
+from forex.scheduler.auto_updater import get_auto_updater as _get_auto_updater
+from check_system import run_self_test as _run_self_test
+_HAS_ROADMAP_VI = True
 
 # ── Doctor, API interna, Dev Log ────────────────────────────────────
 try:

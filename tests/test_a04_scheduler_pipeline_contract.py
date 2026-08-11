@@ -217,7 +217,6 @@ class SchedulerPipelineContractTests(unittest.TestCase):
     def test_sqlite_persistence_maps_final_action_to_current_direction_schema(self):
         h1 = self.make_dataset("EURUSD", "H1")
         db = SQLiteDatabase(str(self.root / "scheduler-test.db"))
-        self.addCleanup(db._conn().close)
         db.upsert_dataset_registry(
             {
                 "symbol": "EURUSD",

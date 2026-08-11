@@ -6,12 +6,12 @@ All business logic uses DatabaseAdapter, never the concrete implementation.
 """
 import os
 import sqlite3
-import threading
 import json
 import logging
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from datetime import datetime
-from typing import Optional
+from typing import Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class DatabaseAdapter(ABC):
 
 
 class SQLiteDatabase(DatabaseAdapter):
-    """SQLite implementation — thread-safe with per-thread connections."""
+    """SQLite implementation with short-lived, operation-owned connections."""
 
     def __init__(self, db_path: str = None):
         self.db_path = db_path or os.environ.get(
@@ -59,20 +59,27 @@ class SQLiteDatabase(DatabaseAdapter):
         db_dir = os.path.dirname(self.db_path)
         if db_dir:
             os.makedirs(db_dir, exist_ok=True)
-        self._local = threading.local()
         self._init_schema()
 
-    def _conn(self) -> sqlite3.Connection:
-        if not hasattr(self._local, "conn") or self._local.conn is None:
-            self._local.conn = sqlite3.connect(self.db_path)
-            self._local.conn.row_factory = sqlite3.Row
-            self._local.conn.execute("PRAGMA journal_mode=WAL")
-            self._local.conn.execute("PRAGMA foreign_keys=ON")
-        return self._local.conn
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        """Own one connection for one operation and always release its handle."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _init_schema(self):
-        c = self._conn()
-        c.executescript("""
+        with self._connection() as c:
+            c.executescript("""
             CREATE TABLE IF NOT EXISTS supported_symbols (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 symbol_code TEXT UNIQUE NOT NULL,
@@ -129,21 +136,20 @@ class SQLiteDatabase(DatabaseAdapter):
                 key TEXT PRIMARY KEY,
                 value TEXT
             );
-        """)
-        c.commit()
+            """)
 
     def get_supported_symbols(self) -> list[dict]:
-        rows = self._conn().execute("SELECT * FROM supported_symbols WHERE status='active'").fetchall()
+        with self._connection() as c:
+            rows = c.execute("SELECT * FROM supported_symbols WHERE status='active'").fetchall()
         return [dict(r) for r in rows]
 
     def add_symbol(self, code: str, name: str = None, pip: float = 0.0001) -> dict:
-        c = self._conn()
-        c.execute(
-            "INSERT OR IGNORE INTO supported_symbols (symbol_code, display_name, pip_value, status, added_at) VALUES (?,?,?,?,?)",
-            (code, name or code, pip, "active", datetime.now().isoformat())
-        )
-        c.commit()
-        row = c.execute("SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)).fetchone()
+        with self._connection() as c:
+            c.execute(
+                "INSERT OR IGNORE INTO supported_symbols (symbol_code, display_name, pip_value, status, added_at) VALUES (?,?,?,?,?)",
+                (code, name or code, pip, "active", datetime.now().isoformat())
+            )
+            row = c.execute("SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)).fetchone()
         return dict(row)
 
     def get_dataset_registry(self, symbol: str = None, tf: str = None) -> list[dict]:
@@ -153,50 +159,49 @@ class SQLiteDatabase(DatabaseAdapter):
             q += " AND symbol=?"; params.append(symbol)
         if tf:
             q += " AND timeframe=?"; params.append(tf)
-        rows = self._conn().execute(q, params).fetchall()
+        with self._connection() as c:
+            rows = c.execute(q, params).fetchall()
         return [dict(r) for r in rows]
 
     def upsert_dataset_registry(self, entry: dict) -> dict:
-        c = self._conn()
-        c.execute("""
-            INSERT INTO dataset_registry (symbol, timeframe, candle_count, rolling_window_size,
-                last_candle_timestamp, blob_path, status, last_error, last_updated)
-            VALUES (?,?,?,?,?,?,?,?,?)
-            ON CONFLICT(symbol, timeframe) DO UPDATE SET
-                candle_count=excluded.candle_count,
-                rolling_window_size=excluded.rolling_window_size,
-                last_candle_timestamp=excluded.last_candle_timestamp,
-                blob_path=excluded.blob_path,
-                status=excluded.status,
-                last_error=excluded.last_error,
-                last_updated=excluded.last_updated
-        """, (
-            entry["symbol"], entry["timeframe"], entry.get("candle_count", 0),
-            entry.get("rolling_window_size", 2000), entry.get("last_candle_timestamp"),
-            entry.get("blob_path"), entry.get("status", "ready"),
-            entry.get("last_error"), datetime.now().isoformat()
-        ))
-        c.commit()
-        row = c.execute("SELECT * FROM dataset_registry WHERE symbol=? AND timeframe=?",
-                        (entry["symbol"], entry["timeframe"])).fetchone()
+        with self._connection() as c:
+            c.execute("""
+                INSERT INTO dataset_registry (symbol, timeframe, candle_count, rolling_window_size,
+                    last_candle_timestamp, blob_path, status, last_error, last_updated)
+                VALUES (?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(symbol, timeframe) DO UPDATE SET
+                    candle_count=excluded.candle_count,
+                    rolling_window_size=excluded.rolling_window_size,
+                    last_candle_timestamp=excluded.last_candle_timestamp,
+                    blob_path=excluded.blob_path,
+                    status=excluded.status,
+                    last_error=excluded.last_error,
+                    last_updated=excluded.last_updated
+            """, (
+                entry["symbol"], entry["timeframe"], entry.get("candle_count", 0),
+                entry.get("rolling_window_size", 2000), entry.get("last_candle_timestamp"),
+                entry.get("blob_path"), entry.get("status", "ready"),
+                entry.get("last_error"), datetime.now().isoformat()
+            ))
+            row = c.execute("SELECT * FROM dataset_registry WHERE symbol=? AND timeframe=?",
+                            (entry["symbol"], entry["timeframe"])).fetchone()
         return dict(row)
 
     def save_prediction(self, pred: dict) -> dict:
-        c = self._conn()
-        c.execute("""
-            INSERT INTO predictions (symbol, timeframe, direction, confidence, entry_price,
-                stop_loss, take_profit, features_snapshot, pipeline_version, predicted_at, resolved)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-            pred.get("symbol"), pred.get("timeframe"), pred.get("direction"),
-            pred.get("confidence", 0), pred.get("entry_price", 0),
-            pred.get("stop_loss", 0), pred.get("take_profit", 0),
-            json.dumps(pred.get("features_snapshot", {})),
-            pred.get("pipeline_version", "v6.0.1"),
-            pred.get("predicted_at", datetime.now().isoformat()), 0
-        ))
-        c.commit()
-        row = c.execute("SELECT * FROM predictions ORDER BY id DESC LIMIT 1").fetchone()
+        with self._connection() as c:
+            c.execute("""
+                INSERT INTO predictions (symbol, timeframe, direction, confidence, entry_price,
+                    stop_loss, take_profit, features_snapshot, pipeline_version, predicted_at, resolved)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                pred.get("symbol"), pred.get("timeframe"), pred.get("direction"),
+                pred.get("confidence", 0), pred.get("entry_price", 0),
+                pred.get("stop_loss", 0), pred.get("take_profit", 0),
+                json.dumps(pred.get("features_snapshot", {})),
+                pred.get("pipeline_version", "v6.0.1"),
+                pred.get("predicted_at", datetime.now().isoformat()), 0
+            ))
+            row = c.execute("SELECT * FROM predictions ORDER BY id DESC LIMIT 1").fetchone()
         return dict(row)
 
     def get_predictions(self, symbol: str = None, tf: str = None, limit: int = 50) -> list[dict]:
@@ -207,23 +212,23 @@ class SQLiteDatabase(DatabaseAdapter):
         if tf:
             q += " AND timeframe=?"; params.append(tf)
         q += f" ORDER BY id DESC LIMIT {limit}"
-        rows = self._conn().execute(q, params).fetchall()
+        with self._connection() as c:
+            rows = c.execute(q, params).fetchall()
         return [dict(r) for r in rows]
 
     def save_outcome(self, outcome: dict) -> dict:
-        c = self._conn()
-        c.execute("""
-            INSERT INTO outcomes (prediction_id, symbol, timeframe, actual_direction,
-                pnl_pips, hit_tp, hit_sl, resolved_at)
-            VALUES (?,?,?,?,?,?,?,?)
-        """, (
-            outcome.get("prediction_id"), outcome.get("symbol"), outcome.get("timeframe"),
-            outcome.get("actual_direction"), outcome.get("pnl_pips", 0),
-            int(outcome.get("hit_tp", False)), int(outcome.get("hit_sl", False)),
-            outcome.get("resolved_at", datetime.now().isoformat())
-        ))
-        c.commit()
-        row = c.execute("SELECT * FROM outcomes ORDER BY id DESC LIMIT 1").fetchone()
+        with self._connection() as c:
+            c.execute("""
+                INSERT INTO outcomes (prediction_id, symbol, timeframe, actual_direction,
+                    pnl_pips, hit_tp, hit_sl, resolved_at)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (
+                outcome.get("prediction_id"), outcome.get("symbol"), outcome.get("timeframe"),
+                outcome.get("actual_direction"), outcome.get("pnl_pips", 0),
+                int(outcome.get("hit_tp", False)), int(outcome.get("hit_sl", False)),
+                outcome.get("resolved_at", datetime.now().isoformat())
+            ))
+            row = c.execute("SELECT * FROM outcomes ORDER BY id DESC LIMIT 1").fetchone()
         return dict(row)
 
     def get_outcomes(self, symbol: str = None, tf: str = None) -> list[dict]:
@@ -233,29 +238,29 @@ class SQLiteDatabase(DatabaseAdapter):
             q += " AND symbol=?"; params.append(symbol)
         if tf:
             q += " AND timeframe=?"; params.append(tf)
-        rows = self._conn().execute(q, params).fetchall()
+        with self._connection() as c:
+            rows = c.execute(q, params).fetchall()
         return [dict(r) for r in rows]
 
     def save_model_quality(self, mq: dict) -> dict:
-        c = self._conn()
-        c.execute("""
-            INSERT INTO model_quality (symbol, timeframe, accuracy, auc, precision, recall,
-                status, retrain_count, last_evaluated)
-            VALUES (?,?,?,?,?,?,?,?,?)
-            ON CONFLICT(symbol, timeframe) DO UPDATE SET
-                accuracy=excluded.accuracy, auc=excluded.auc,
-                precision=excluded.precision, recall=excluded.recall,
-                status=excluded.status, retrain_count=excluded.retrain_count,
-                last_evaluated=excluded.last_evaluated
-        """, (
-            mq["symbol"], mq["timeframe"], mq.get("accuracy", 0), mq.get("auc", 0),
-            mq.get("precision", 0), mq.get("recall", 0),
-            mq.get("status", "active"), mq.get("retrain_count", 0),
-            datetime.now().isoformat()
-        ))
-        c.commit()
-        row = c.execute("SELECT * FROM model_quality WHERE symbol=? AND timeframe=?",
-                        (mq["symbol"], mq["timeframe"])).fetchone()
+        with self._connection() as c:
+            c.execute("""
+                INSERT INTO model_quality (symbol, timeframe, accuracy, auc, precision, recall,
+                    status, retrain_count, last_evaluated)
+                VALUES (?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(symbol, timeframe) DO UPDATE SET
+                    accuracy=excluded.accuracy, auc=excluded.auc,
+                    precision=excluded.precision, recall=excluded.recall,
+                    status=excluded.status, retrain_count=excluded.retrain_count,
+                    last_evaluated=excluded.last_evaluated
+            """, (
+                mq["symbol"], mq["timeframe"], mq.get("accuracy", 0), mq.get("auc", 0),
+                mq.get("precision", 0), mq.get("recall", 0),
+                mq.get("status", "active"), mq.get("retrain_count", 0),
+                datetime.now().isoformat()
+            ))
+            row = c.execute("SELECT * FROM model_quality WHERE symbol=? AND timeframe=?",
+                            (mq["symbol"], mq["timeframe"])).fetchone()
         return dict(row)
 
     def get_model_quality(self, symbol: str = None, tf: str = None) -> list[dict]:
@@ -265,50 +270,50 @@ class SQLiteDatabase(DatabaseAdapter):
             q += " AND symbol=?"; params.append(symbol)
         if tf:
             q += " AND timeframe=?"; params.append(tf)
-        rows = self._conn().execute(q, params).fetchall()
+        with self._connection() as c:
+            rows = c.execute(q, params).fetchall()
         return [dict(r) for r in rows]
 
     def create_scheduler_run(self, run: dict) -> dict:
-        c = self._conn()
-        cur = c.execute("""
-            INSERT INTO scheduler_runs (timeframe, started_at, status, symbols_processed,
-                predictions_generated, errors_count, finished_at, log_blob_path)
-            VALUES (?,?,?,?,?,?,?,?)
-        """, (
-            run.get("timeframe"), run.get("started_at", datetime.now().isoformat()),
-            run.get("status", "running"), 0, 0, 0, None, run.get("log_blob_path")
-        ))
-        c.commit()
-        row = c.execute("SELECT * FROM scheduler_runs WHERE id=?", (cur.lastrowid,)).fetchone()
+        with self._connection() as c:
+            cur = c.execute("""
+                INSERT INTO scheduler_runs (timeframe, started_at, status, symbols_processed,
+                    predictions_generated, errors_count, finished_at, log_blob_path)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (
+                run.get("timeframe"), run.get("started_at", datetime.now().isoformat()),
+                run.get("status", "running"), 0, 0, 0, None, run.get("log_blob_path")
+            ))
+            row = c.execute("SELECT * FROM scheduler_runs WHERE id=?", (cur.lastrowid,)).fetchone()
         return dict(row)
 
     def update_scheduler_run(self, run_id: int, updates: dict) -> dict:
-        c = self._conn()
         fields = []
         values = []
         for k, v in updates.items():
             fields.append(f"{k}=?")
             values.append(v)
         values.append(run_id)
-        c.execute(f"UPDATE scheduler_runs SET {','.join(fields)} WHERE id=?", values)
-        c.commit()
-        row = c.execute("SELECT * FROM scheduler_runs WHERE id=?", (run_id,)).fetchone()
+        with self._connection() as c:
+            c.execute(f"UPDATE scheduler_runs SET {','.join(fields)} WHERE id=?", values)
+            row = c.execute("SELECT * FROM scheduler_runs WHERE id=?", (run_id,)).fetchone()
         return dict(row)
 
     def get_scheduler_runs(self, limit: int = 20) -> list[dict]:
-        rows = self._conn().execute(
-            f"SELECT * FROM scheduler_runs ORDER BY id DESC LIMIT {limit}"
-        ).fetchall()
+        with self._connection() as c:
+            rows = c.execute(
+                f"SELECT * FROM scheduler_runs ORDER BY id DESC LIMIT {limit}"
+            ).fetchall()
         return [dict(r) for r in rows]
 
     def get_system_health(self) -> dict:
-        c = self._conn()
-        symbols = c.execute("SELECT COUNT(*) FROM supported_symbols WHERE status='active'").fetchone()[0]
-        datasets = c.execute("SELECT COUNT(*) FROM dataset_registry WHERE status='ready'").fetchone()[0]
-        errors = c.execute("SELECT COUNT(*) FROM dataset_registry WHERE status='error'").fetchone()[0]
-        preds = c.execute("SELECT COUNT(*) FROM predictions").fetchone()[0]
-        degraded = c.execute("SELECT COUNT(*) FROM model_quality WHERE status IN ('degraded','retrain_blocked')").fetchone()[0]
-        last_run = c.execute("SELECT * FROM scheduler_runs ORDER BY id DESC LIMIT 1").fetchone()
+        with self._connection() as c:
+            symbols = c.execute("SELECT COUNT(*) FROM supported_symbols WHERE status='active'").fetchone()[0]
+            datasets = c.execute("SELECT COUNT(*) FROM dataset_registry WHERE status='ready'").fetchone()[0]
+            errors = c.execute("SELECT COUNT(*) FROM dataset_registry WHERE status='error'").fetchone()[0]
+            preds = c.execute("SELECT COUNT(*) FROM predictions").fetchone()[0]
+            degraded = c.execute("SELECT COUNT(*) FROM model_quality WHERE status IN ('degraded','retrain_blocked')").fetchone()[0]
+            last_run = c.execute("SELECT * FROM scheduler_runs ORDER BY id DESC LIMIT 1").fetchone()
         return {
             "symbols_active": symbols,
             "datasets_ready": datasets,

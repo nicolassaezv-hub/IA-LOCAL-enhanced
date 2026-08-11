@@ -20,6 +20,7 @@ _FOREX_TICKER_MAP = {
     "USOUSD": "CL=F",     "UKOUSD": "BZ=F",
     "SPX500": "^GSPC",    "NAS100": "^NDX",     "GER40": "^GDAXI",
 }
+FOREX_TICKER_MAP = _FOREX_TICKER_MAP
 
 _TF_MAP = {
     "M1": "1m",   "M5": "5m",   "M15": "15m",  "M30": "30m",
@@ -30,6 +31,9 @@ _TF_MAP = {
 def _to_yahoo_ticker(pair: str) -> str:
     p = pair.upper().replace("_", "")
     return _FOREX_TICKER_MAP.get(p, p)
+
+
+to_yahoo_ticker = _to_yahoo_ticker
 
 
 def _to_yf_interval(tf: str) -> str:

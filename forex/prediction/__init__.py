@@ -21,30 +21,25 @@ from .csv_adapter            import adapt_csv, check_compatibility
 from .multi_pair_scanner     import MultiPairScanner
 from .model_storage          import ModelStorage
 
-try:
-    from .feature_engineering import build_features
-except ImportError:
-    build_features = None
+from .feature_engineering import build_features
 
-# Roadmap V modules (lazy — graceful degradation if deps unavailable)
-try:
-    from .decision_engine    import DecisionEngine, DecisionResult
-    from .risk_engine        import RiskEngine, RiskAssessment
-    from .regime_detector    import RegimeDetector, RegimeAssessment, Regime
-    from .mtf_coherence      import MTFIntelligence, MTFCoherenceResult
-    from .reliability_score  import ReliabilityScorer, ReliabilityReport
-    from .quality_analyzer   import QualityAnalyzer
-    from .backtest_protocol  import BacktestProtocol
-    from .feature_importance import FeatureImportanceAnalyzer
-    from .model_selector     import ModelSelector
-    from .outcome_tracker    import OutcomeTracker
-    from .retrain_manager    import RetrainManager
-    _HAS_ROADMAP_V = True
-except ImportError:
-    _HAS_ROADMAP_V = False
-    DecisionEngine = RiskEngine = RegimeDetector = MTFIntelligence = None
-    ReliabilityScorer = QualityAnalyzer = BacktestProtocol = None
-    FeatureImportanceAnalyzer = ModelSelector = OutcomeTracker = RetrainManager = None
+# Roadmap V is part of the production pipeline. Import failures here must remain
+# visible instead of silently disabling every Roadmap V export.
+from .decision_engine    import DecisionEngine, DecisionResult
+from .risk_engine        import RiskEngine, RiskAssessment
+from .regime_detector    import RegimeDetector, RegimeAssessment, Regime
+from .mtf_coherence      import MTFIntelligence, MTFCoherenceResult
+from .reliability_score  import ReliabilityScorer, ReliabilityReport
+from .quality_analyzer   import QualityAnalyzer
+from .backtest_protocol  import BacktestProtocol
+from .feature_importance import FeatureImportanceAnalyzer
+from .model_selector     import ModelSelectionEngine
+from .outcome_tracker    import OutcomeTracker
+from .retrain_manager    import RetrainManager
+
+# Backward compatibility for the name previously advertised by this package.
+ModelSelector = ModelSelectionEngine
+_HAS_ROADMAP_V = True
 
 
 __all__ = [
@@ -77,6 +72,7 @@ __all__ = [
     "QualityAnalyzer",
     "BacktestProtocol",
     "FeatureImportanceAnalyzer",
+    "ModelSelectionEngine",
     "ModelSelector",
     "OutcomeTracker",
     "RetrainManager",
