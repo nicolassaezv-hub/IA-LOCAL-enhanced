@@ -12,6 +12,8 @@ Usage:
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 # ============================================================
 # SYNTHETIC DATA GENERATOR
@@ -37,7 +39,7 @@ def create_synthetic_forex_csv(
     Returns:
         DataFrame ready for feature engineering
     """
-    np.random.seed(seed)
+    rng = np.random.default_rng(seed)
     
     # Generate timestamps (hourly)
     dates = pd.date_range(
@@ -47,25 +49,25 @@ def create_synthetic_forex_csv(
     )
     
     # Generate price movements using random walk
-    returns = np.random.randn(n_candles) * volatility
+    returns = rng.standard_normal(n_candles) * volatility
     close_prices = start_price * np.exp(np.cumsum(returns))
     
     # Generate OHLCV
     data = {
         'timestamp': dates,
-        'open': close_prices + np.random.randn(n_candles) * volatility * start_price / 2,
+        'open': close_prices + rng.standard_normal(n_candles) * volatility * start_price / 2,
         'close': close_prices,
-        'volume': np.random.randint(5000, 50000, n_candles),
+        'volume': rng.integers(5000, 50000, n_candles),
     }
     
     df = pd.DataFrame(data)
     
     # High = max(open, close) + some randomness
-    intra_high = np.random.rand(n_candles) * volatility * start_price
+    intra_high = rng.random(n_candles) * volatility * start_price
     df['high'] = np.maximum(df['open'], df['close']) + intra_high
     
     # Low = min(open, close) - some randomness
-    intra_low = np.random.rand(n_candles) * volatility * start_price
+    intra_low = rng.random(n_candles) * volatility * start_price
     df['low'] = np.minimum(df['open'], df['close']) - intra_low
     
     # Ensure High >= Low >= min(Open, Close) and High >= max(Open, Close)
@@ -203,15 +205,14 @@ def test_feature_engineering_compatibility():
     try:
         from forex.prediction.feature_engineering import FeatureEngineering, build_features
         from forex.prediction.csv_adapter import adapt_csv
-        import tempfile, os as _os
         
         df = create_synthetic_forex_csv(n_candles=200)
         
         # adapt_csv normalises the raw OHLCV before feature engineering
-        _tmp = tempfile.mktemp(suffix='.csv')
-        df.to_csv(_tmp, index=False)
-        df = adapt_csv(_tmp, pair='EURUSD')
-        _os.unlink(_tmp)
+        with TemporaryDirectory() as tmpdir:
+            csv_path = Path(tmpdir) / "feature-engineering.csv"
+            df.to_csv(csv_path, index=False)
+            df = adapt_csv(csv_path, pair='EURUSD')
         
         # Try to run feature engineering
         df_engineered = build_features(df)
@@ -223,7 +224,7 @@ def test_feature_engineering_compatibility():
         print(f"     Input columns: {df.shape[1]}, Output columns: {df_engineered.shape[1]}")
         
     except Exception as e:
-        print(f"  ⚠️  Feature engineering test skipped: {e}")
+        raise AssertionError("Feature engineering compatibility failed") from e
 
 
 def test_target_creation():
@@ -235,12 +236,11 @@ def test_target_creation():
         from forex.prediction.feature_engineering import build_features
         
         from forex.prediction.csv_adapter import adapt_csv
-        import tempfile, os as _os
         df_raw = create_synthetic_forex_csv(n_candles=300)
-        _tmp2 = tempfile.mktemp(suffix='.csv')
-        df_raw.to_csv(_tmp2, index=False)
-        df = adapt_csv(_tmp2, pair='EURUSD')
-        _os.unlink(_tmp2)
+        with TemporaryDirectory() as tmpdir:
+            csv_path = Path(tmpdir) / "target-creation.csv"
+            df_raw.to_csv(csv_path, index=False)
+            df = adapt_csv(csv_path, pair='EURUSD')
         df = build_features(df)
         
         builder = DatasetBuilder(df)
@@ -260,7 +260,7 @@ def test_target_creation():
         print(f"     Features: {X.shape[1]}")
         
     except Exception as e:
-        print(f"  ⚠️  Target creation test failed: {e}")
+        raise AssertionError("Target creation failed") from e
 
 
 # ============================================================

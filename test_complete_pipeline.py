@@ -19,6 +19,44 @@ Requiere:
 import sys
 import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
+
+try:
+    import pytest
+except ImportError:  # Standalone integration runner does not require pytest.
+    pytest = None
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+CSV_PATH = PROJECT_ROOT / "attached_assets" / "USD_JPY_H1_YTD_2026_(1)_1781885306995.csv"
+if pytest is not None:
+    pytestmark = [
+        pytest.mark.integration,
+        pytest.mark.skipif(
+            os.environ.get("ASTRA_RUN_INTEGRATION_TESTS") != "1",
+            reason=(
+                "repository-dataset integration is opt-in; set "
+                "ASTRA_RUN_INTEGRATION_TESTS=1"
+            ),
+        ),
+    ]
+
+
+def setup_module(module):
+    """Keep model, DB, report, and cache writes out of the project tree."""
+    module._original_cwd = Path.cwd()
+    module._isolated_runtime = TemporaryDirectory()
+    os.chdir(module._isolated_runtime.name)
+
+
+def teardown_module(module):
+    os.chdir(module._original_cwd)
+    module._isolated_runtime.cleanup()
+
+
+def _success_result():
+    """Preserve the standalone runner while pytest tests return ``None``."""
+    return True if __name__ == "__main__" else None
 
 def test_csv_loading():
     """✅ Test 1: Cargar CSV y validar"""
@@ -26,11 +64,10 @@ def test_csv_loading():
     print("TEST 1: CSV Loading")
     print("="*60)
     
-    csv_path = "attached_assets/USD_JPY_H1_YTD_2026_(1)_1781885306995.csv"
+    csv_path = CSV_PATH
     
     if not Path(csv_path).exists():
-        print(f"❌ CSV no encontrado: {csv_path}")
-        return False
+        raise FileNotFoundError(f"CSV no encontrado: {csv_path}")
     
     try:
         import pandas as pd
@@ -52,10 +89,9 @@ def test_csv_loading():
         assert "volume" in df.columns, "Falta columna volume"
         
         print("✅ Test 1 PASSED\n")
-        return True
+        return _success_result()
     except Exception as e:
-        print(f"❌ Error cargando CSV: {e}")
-        return False
+        raise AssertionError("CSV loading failed") from e
 
 
 def test_analysis():
@@ -67,7 +103,7 @@ def test_analysis():
     try:
         from forex_analytics import ForexAnalytics
         
-        csv_path = "attached_assets/USD_JPY_H1_YTD_2026_(1)_1781885306995.csv"
+        csv_path = CSV_PATH
         engine = ForexAnalytics()
         load_result = engine.load_csv(csv_path, pair="USD/JPY")
         
@@ -99,16 +135,12 @@ def test_analysis():
                 print(f"  ❌ {name}: {str(e)}")
                 all_ok = False
         
-        if all_ok:
-            print("✅ Test 2 PASSED\n")
-            return True
-        return False
+        assert all_ok, "One or more technical indicators failed"
+        print("✅ Test 2 PASSED\n")
+        return _success_result()
         
     except Exception as e:
-        print(f"❌ Error en análisis técnico: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        raise AssertionError("Technical analysis failed") from e
 
 
 def test_training():
@@ -120,7 +152,7 @@ def test_training():
     try:
         from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
         
-        csv_path = "attached_assets/USD_JPY_H1_YTD_2026_(1)_1781885306995.csv"
+        csv_path = CSV_PATH
         pipeline = ForexIntegratedPipeline()
         
         print("Training model (this may take a minute)...")
@@ -143,16 +175,12 @@ def test_training():
             # the model self-calibrates via confidence gates to reach usable precision.
             assert acc > 0.35, f"Accuracy too low (pipeline broken, not just weak signal): {acc:.2%}"
             print("✅ Test 3 PASSED\n")
-            return True
+            return _success_result()
         else:
-            print(f"❌ Unexpected training result: {result}")
-            return False
+            raise AssertionError(f"Unexpected training result: {result}")
             
     except Exception as e:
-        print(f"❌ Error training model: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        raise AssertionError("Model training failed") from e
 
 
 def test_prediction():
@@ -164,7 +192,7 @@ def test_prediction():
     try:
         from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
         
-        csv_path = "attached_assets/USD_JPY_H1_YTD_2026_(1)_1781885306995.csv"
+        csv_path = CSV_PATH
         # Use same pipeline with force=True to bypass WFV gate in test environment
         # (WFV correctly rejects weak models in production; this bypasses it for unit test only)
         pipeline = ForexIntegratedPipeline()
@@ -189,16 +217,12 @@ def test_prediction():
             assert 0 <= confidence <= 1, f"Invalid confidence: {confidence}"
             
             print("✅ Test 4 PASSED\n")
-            return True
+            return _success_result()
         else:
-            print(f"❌ Unexpected prediction result: {result}")
-            return False
+            raise AssertionError(f"Unexpected prediction result: {result}")
             
     except Exception as e:
-        print(f"❌ Error generating predictions: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        raise AssertionError("Prediction generation failed") from e
 
 
 def test_adx_calculation():
@@ -211,7 +235,7 @@ def test_adx_calculation():
         import pandas as pd
         from forex.indicators import compute_adx
         
-        csv_path = "attached_assets/USD_JPY_H1_YTD_2026_(1)_1781885306995.csv"
+        csv_path = CSV_PATH
         df = pd.read_csv(csv_path)
         
         print("Calculating ADX...")
@@ -229,13 +253,10 @@ def test_adx_calculation():
         assert adx.max() <= 100, "ADX values should be <= 100"
         
         print("✅ Test 5 PASSED\n")
-        return True
+        return _success_result()
         
     except Exception as e:
-        print(f"❌ Error calculating ADX: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        raise AssertionError("ADX calculation failed") from e
 
 
 def main():
@@ -301,4 +322,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    original_cwd = Path.cwd()
+    with TemporaryDirectory() as isolated_runtime:
+        try:
+            os.chdir(isolated_runtime)
+            main()
+        finally:
+            os.chdir(original_cwd)

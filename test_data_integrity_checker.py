@@ -2,8 +2,7 @@ import unittest
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import tempfile
-import shutil
+from tempfile import TemporaryDirectory
 
 from robustness.data_integrity_checker import (
     DataIssue,
@@ -15,6 +14,7 @@ from robustness.data_integrity_checker import (
 
 
 def create_sample_df(rows=150):
+    rng = np.random.default_rng(42)
     dates = pd.date_range(start="2023-01-01", periods=rows, freq="1h")
     df = pd.DataFrame({
         "timestamp": dates.astype(str),
@@ -22,7 +22,7 @@ def create_sample_df(rows=150):
         "high": np.linspace(1.11, 1.16, rows),
         "low": np.linspace(1.09, 1.14, rows),
         "close": np.linspace(1.10, 1.15, rows),
-        "volume": np.random.randint(100, 1000, size=rows),
+        "volume": rng.integers(100, 1000, size=rows),
         "pair": ["EURUSD"] * rows,
         "RSI_14": np.linspace(30, 70, rows),
     })
@@ -31,10 +31,9 @@ def create_sample_df(rows=150):
 
 class TestDataIntegrityChecker(unittest.TestCase):
     def setUp(self):
-        self.temp_dir = Path(tempfile.mkdtemp())
-
-    def tearDown(self):
-        shutil.rmtree(self.temp_dir)
+        self.temporary_directory = TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.temp_dir = Path(self.temporary_directory.name)
 
     def test_clean_csv(self):
         h1_dir = self.temp_dir / "H1"
