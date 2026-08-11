@@ -3,6 +3,37 @@
 
 ---
 
+## GUÍA RÁPIDA — TUS PRIMEROS 10 MINUTOS
+
+```bash
+# 1. Dependencias (Python 3.11+)
+pip install -r requirements.txt
+
+# 2. API key de Groq para el chat AI
+export GROQ_API_KEY=gsk_tu_key        # Windows: set GROQ_API_KEY=gsk_tu_key
+
+# 3. Verificar que todo está en su sitio
+python astra_doctor.py                # o dentro del CLI: astra doctor
+
+# 4. Datos: genera CSVs reales (Yahoo) para probar
+python main.py
+> generar csvs forex H1 800
+
+# 5. Primer ciclo completo sobre un par
+> full forex CSVs/H1/EURUSD.csv       # entrena + predice + backtest
+> predict forex CSVs/H1/EURUSD.csv    # señal con Decision Engine (Roadmap V)
+
+# 6. Interfaz visual (opcional)
+python workspace/server.py            # http://localhost:8000
+```
+
+Qué esperar de `predict forex`: además de la señal cruda del modelo verás el
+bloque **Roadmap V** con régimen de mercado, coherencia multi-timeframe,
+reliability score, circuit breaker y la **decisión final**, que puede ser
+`NO_OPERAR` aunque el modelo diga BUY. Esa decisión final es la que manda para
+el cálculo de SL/TP y el tamaño de posición.
+
+
 ## PARTE 0 — ASTRA WORKSPACE (interfaz visual)
 
 El Workspace es la interfaz visual completa de ASTRA. Disponible en dos modos:
@@ -112,103 +143,213 @@ Verifica 10 categorías completas y guarda resultado en `astra_doctor_report.jso
 
 ---
 
-## PARTE 2 — COMANDOS DISPONIBLES (CLI)
+## PARTE 2 — REFERENCIA COMPLETA DE COMANDOS (CLI)
 
-### Diagnóstico y Sistema
+Arranque del CLI: `python main.py`. Escribe `ayuda` en cualquier momento para ver
+este mismo listado dentro del programa, y `salir` / `exit` / `quit` para terminar.
+**Cualquier texto que no coincida con un comando se envía al chat libre
+(Llama-3.3-70B vía Groq) con el contexto de la sesión.**
+
+Convenciones: `<obligatorio>`, `[opcional]`, `|` separa alternativas.
+Las rutas de CSV admiten varios archivos separados por comas en los comandos que lo indican.
+
+### 2.1 Sistema y diagnóstico
 
 | Comando | Qué hace |
 |---|---|
-| `astra doctor` | Diagnóstico completo: dependencias, APIs, modelos, DBs, scheduler, datasets |
-| `self-test` | Diagnóstico semáforo rápido del sistema |
-| `analiza astra` | Genera reporte completo del sistema |
-| `ayuda` | Lista todos los comandos disponibles |
+| `ayuda` | Referencia de comandos dentro del CLI |
+| `astra doctor` | Diagnóstico completo (10 categorías) + informe en `reports/` |
+| `self-test` | Diagnóstico semáforo rápido (VI.2) |
+| `analiza astra` | Reporte completo de autoanálisis del sistema |
 | `estado pc` | CPU, RAM, disco y uptime |
+| `fecha` | Fecha y hora actual del sistema |
+| `json` | Demo de serialización JSON |
+| `gui` | Lanza la mini GUI local |
+| `imagen` | Demo de detección de bordes (scikit-image) |
+| `barra progreso` | Demo de barra de progreso |
+| `tabla <datos>` / `rich <texto>` | Salida formateada en tabla / Rich |
+| `simular click` / `simular tecla <k>` | Automatización de escritorio |
+| `monitor archivos <ruta>` | Vigila cambios en archivos |
+| `monitor historial` | Historial de snapshots de rendimiento |
+| `dev log` | Últimas entradas del historial de desarrollo |
+| `dev log add [tipo] título \| detalle` | Añade entrada (`feature`, `bugfix`, `optimization`, `refactor`, `docs`, `release`) |
+| `dev log release <versión>` | Release notes de una versión |
+| `api start` / `api stop` / `api status` | API REST interna legada (`http://localhost:8766`) |
 
-### Forex Lab — Comandos CLI
+### 2.2 Forex Lab — flujo principal
+
+| Comando (alias español) | Qué hace |
+|---|---|
+| `train forex <csv>` (`entrenar forex`) | Entrena el ensemble XGB + LGBM + RF |
+| `tune forex <csv>` (`afinar forex`) | Búsqueda de hiperparámetros con Optuna (5-15 min) y entrena |
+| `predict forex <csv>[,<csv2>...]` (`predecir forex`) | Señal BUY/SELL/HOLD; con varios CSV guarda un `.txt` por par en `reports/` |
+| `multi forex <csv>` (`multihorizonte forex`) | Consenso a 3 horizontes (5/10/20 velas) |
+| `backtest forex <csv>` | Backtest sobre datos retenidos |
+| `full forex <csv>` (`completo forex`) | Train + Predict + Backtest en una pasada |
+| `scan forex <carpeta\|csvs>` (`escanear forex`) | Escanea CSVs y rankea señales por fuerza |
+| `analiza forex <csv> <símbolo>` | Informe técnico completo (RSI/MACD/EMA/ATR…) |
+| `generar csvs forex [tf] [n]` | Genera CSVs en lote (Yahoo real → sintético como respaldo). Alias: `generate forex csvs`, `generar todos los csvs forex` |
+| `lista mercados` | Pares y materias primas soportados |
+| `mercados analizados` | Mercados analizados alguna vez |
+| `historial forex <símbolo>` (`forex history`) | Historial de análisis guardados |
+| `compara forex <símbolo>` | Compara los últimos 5 análisis del par |
+| `mis modelos` / `info modelo <par>` | Modelos entrenados y detalle de uno |
+| `schedule forex <csv> [min]` / `schedule run <par>` / `schedule stop [par]` | Análisis recurrente programado |
+
+### 2.3 Watcher y señales (Fase 2)
 
 | Comando | Qué hace |
 |---|---|
-| `train forex <par> <csv>` | Entrena modelos XGBoost+LightGBM para un par |
-| `entrenar forex <par> <csv>` | Igual que train forex (alias español) |
-| `tune forex <par> <csv>` | Afina hiperparámetros con Optuna |
-| `predict forex <par> <csv>` | Predice dirección del siguiente periodo |
-| `predecir forex <par> <csv>` | Alias español de predict |
-| `multi forex <par> <csv>` | Predicción multi-horizonte |
-| `scan forex <timeframe>` | Escanea múltiples pares y rankea oportunidades |
-| `escanear forex <timeframe>` | Alias español de scan |
-| `backtest forex <par> <csv>` | Backtesting de estrategia sobre datos históricos |
-| `full forex <par> <csv>` | Pipeline completo: train + predict + backtest |
-| `completo forex <par> <csv>` | Alias español de full forex |
-| `analiza forex <par> <csv>` | Análisis técnico completo del par |
-| `compara forex <par1> <par2>` | Compara dos pares |
-| `historial forex <par>` | Historial de análisis guardados |
-| `lista mercados` | Lista pares disponibles |
-| `schedule forex <min> <par>` | Programa análisis recurrente |
-| `watch forex <seg> <par>` | Monitorea par en tiempo real |
+| `watch forex <par> <csv> [seg]` | Monitoreo continuo del par en background |
+| `watch check <par>` | Fuerza una evaluación inmediata |
+| `watch status` | Pares en monitoreo |
+| `watch stop <par>` / `watch stop all` | Detiene uno o todos los watchers |
+| `señales [par]` (`signals`) | Historial de señales BUY/SELL/HOLD |
+| `stats señales [par]` | Ratio y estadísticas de señales |
 
-### Roadmap V — Comandos avanzados (requieren forex/prediction/)
+### 2.4 Roadmap V — motor de decisión avanzado
 
-| Comando | Qué hace |
-|---|---|
-| `quality <par>` | Reporte de calidad del modelo |
-| `regime <par>` | Detección de régimen de mercado |
-| `mtf <par>` | Coherencia multi-timeframe (MTF) |
-| `retrain_check <par>` | Verifica si necesita re-entrenamiento |
-| `retrain_history` | Historial de re-entrenamientos |
-| `sentinel status` | Estado del Market Sentinel |
-| `sentinel_signals` | Señales activas del Sentinel |
-| `portfolio_ranking` | Ranking de oportunidades del portafolio |
-| `backtest <par>` | Backtesting con protocolo Roadmap V |
+Todos estos módulos se ejecutan **también de forma automática** dentro de
+`predict forex` / `full forex`: el pipeline construye el contexto (volatilidad,
+régimen, coherencia MTF, circuit breaker, noticias, histórico real) y el
+Decision Engine puede **vetar** la señal del modelo. Los comandos siguientes
+permiten inspeccionar cada pieza por separado.
 
-### Roadmap VI — Data Intelligence
+| Comando | Fase | Qué hace |
+|---|---|---|
+| `quality <csv> [par] [tf]` | V.5 | Gate de calidad del dataset |
+| `regime <csv> [par] [tf]` | V.4 | Detección de régimen de mercado |
+| `mtf <d1.csv> <h4.csv> <h1.csv>` | V.3 | Coherencia multi-timeframe D1→H4→H1 |
+| `reliability <conf> [signal]` | V.8 | Reliability Score (7 factores, 0-100) |
+| `decision <signal> <conf>` | V.1 | Motor de decisión final (BUY/SELL/HOLD/NO_OPERAR) |
+| `risk <BUY\|SELL> <entry> <atr>` | V.2 | SL/TP + position sizing (Kelly) |
+| `backtest <modelo> <csv> [par]` | V.9 | Backtesting con 20+ métricas y Walk-Forward |
+| `feature_importance <modelo> <csv>` | V.6 | Importancia de features (SHAP) |
+| `dataset_update <par> [tf]` | V.11 | Actualización incremental del CSV |
+| `scheduler_status` | V.12 | Estado del scheduler inteligente |
+| `retrain_check <par>` / `retrain_history` | V.13 | Reentrenamiento adaptativo |
+| `sentinel_status` / `sentinel_signals [par] [n]` | V.10 | Market Sentinel y su historial |
+| `outcome_stats [par]` / `outcome_history` | V.14 | Resultados reales de las predicciones |
+| `notify_test <par> <signal> <r>` / `notify_log` | V.15 | Notificaciones multi-canal |
+| `portfolio_ranking [signal] [min]` / `portfolio_export` | V.18 | Ranking multi-activo y exportación |
+| `news <par>` / `noticias <par>` / `noticias predice <par>` | V.16 | Sentimiento de noticias financieras |
 
-| Comando | Qué hace |
-|---|---|
-| `quality history <par>` | Historial de calidad del modelo |
-| `opportunity <par>` | Score de oportunidad para el par |
-
-### Evolution Engine y Constitution
+### 2.5 Roadmap VI — data intelligence y autonomía
 
 | Comando | Qué hace |
 |---|---|
-| `reglas ver` | Muestra reglas constitucionales activas |
-| `evolucionar` | Genera propuestas de evolución |
-| `evolucionar ciclo` | Ejecuta ciclo evolutivo completo |
-| `evolucionar ciclo auto` | Ciclo evolutivo automático |
-| `salud sistema` | Health report del sistema |
-| `rollback ver` | Ver puntos de rollback disponibles |
-| `mejoras detectar` | Detecta oportunidades de mejora |
-| `monitor snapshot` | Snapshot de rendimiento del sistema |
-| `monitor historial` | Historial de snapshots |
+| `descargar datos <par> [tf] [n]` | Descarga Forex/Cripto (Yahoo / Binance / MT5) |
+| `migrar csv <ruta> [par] [tf]` | Migra un CSV al formato rolling |
+| `escanear csvs` / `csvs activos` | Escanea e indexa los CSVs de `CSVs/` |
+| `rolling info <par> [tf]` | Estado del RollingDataset |
+| `candlestick <csv>` | Patrones de vela japonesa |
+| `hparam cache` / `hparam invalidar <par>` | Caché de hiperparámetros |
+| `model cache` | Estado del Model Cache Manager |
+| `adaptive budget <par>` | Historial de budgets adaptativos |
+| `quality history` | Precisión verificada por modelo |
+| `opportunity ranking [n]` | Top N BUY/SELL por Opportunity Score |
+| `scheduler start` / `scheduler stop` / `scheduler info` | Scheduler autónomo |
+| `auto update` | Actualiza ahora todos los CSVs activos |
 
-### Feedback System
-
-| Comando | Qué hace |
-|---|---|
-| `feedback analisis` | Análisis de feedback de usuario |
-| `feedback dashboard` | Dashboard visual de feedback |
-| `thresholds ver` | Umbrales adaptativos por par |
-| `contextual memoria` | Memoria contextual de condiciones de mercado |
-
-### Development Log
+### 2.6 Gestión de riesgo
 
 | Comando | Qué hace |
 |---|---|
-| `dev log` | Ver las últimas 20 entradas del historial |
-| `dev log add [tipo] título \| detalle` | Añadir entrada al log |
-| `dev log bugfix título` | Registrar una corrección |
-| `dev log feature título` | Registrar una nueva función |
-| `dev log release <versión>` | Ver Release Notes de una versión |
+| `circuit status` / `circuit reset` | Circuit breaker (pérdida diaria/semanal/drawdown) |
+| `position size <par> [balance]` (`sizing`) | Tamaño de posición con criterio Kelly |
 
-**Tipos válidos**: `feature`, `bugfix`, `optimization`, `refactor`, `docs`, `release`
-
-### API REST Interna (legacy CLI)
+### 2.7 Business Intelligence (PYME)
 
 | Comando | Qué hace |
 |---|---|
-| `api start` | Inicia el servidor REST legado en `http://localhost:8766` |
-| `api stop` | Detiene el servidor REST legado |
-| `api status` | Muestra si la API legada está activa |
+| `consulta negocio <csv>` (`consultar negocio`) | Consultoría completa: KPIs + forecast + recomendaciones |
+| `analiza negocio <csv>` (`analizar negocio`) | KPIs + health score + alertas (sin ML) |
+| `predice negocio <csv>` (`predecir negocio`) | Forecast ML: ¿crece o cae el próximo periodo? |
+| `entrena negocio <csv>` (`entrenar negocio`) | Entrena modelo sobre tu dataset de negocio |
+| `forecast negocio <csv> [meses]` | Proyección optimista / esperada / conservadora |
+| `diagnóstico pyme <csv>` | Scorecard financiero + crecimiento + riesgo |
+| `plan de accion <csv>` | 5 recomendaciones priorizadas (Llama) |
+| `que pasa si <escenario> <csv>` | Simulación what-if con tabla antes/después |
+| `si aumento ventas <csv> 20%` / `si reduzco costos <csv> 15%` | Simulaciones rápidas |
+
+### 2.8 Prediction Lab (Fase 5)
+
+| Comando | Qué hace |
+|---|---|
+| `lab analiza "<idea>"` | Extrae el ProblemSpec de una idea en lenguaje natural |
+| `lab dataset <csv> [target]` | Calidad, señal y VIF del dataset |
+| `lab viabilidad <csv> "<idea>"` | Índice de viabilidad 0-100 |
+| `lab planea <csv> "<idea>"` | Plan de modelo: algoritmos, features, validación |
+| `lab genera <csv> "<idea>"` | Genera el `Pipeline` sklearn ejecutable |
+| `lab valida <csv> "<idea>"` | Entrena y valida (holdout / k-fold / WFV) |
+| `lab reporte <csv> "<idea>"` | Corre 5.1→5.6 y guarda el informe |
+| `lab info proyecto <nombre>` | Detalle de un proyecto del lab |
+
+### 2.9 Proyectos y tareas (Fase 1)
+
+| Comando | Qué hace |
+|---|---|
+| `mis proyectos` | Lista los proyectos registrados |
+| `nuevo proyecto <nombre> <desc>` | Crea un proyecto |
+| `cerrar proyecto <nombre>` / `pausar proyecto <nombre>` | Cambia el estado |
+| `tareas [proyecto]` | Tareas pendientes |
+| `nueva tarea <proyecto> \| <desc>` | Crea una tarea |
+| `completar tarea <id>` | Marca la tarea como completada |
+
+### 2.10 Evolution Engine, Constitution y feedback
+
+| Comando | Qué hace |
+|---|---|
+| `reglas ver` | Reglas constitucionales activas |
+| `evolucionar` / `evolucionar ciclo` / `evolucionar ciclo auto` | Genera y ejecuta ciclos evolutivos |
+| `evolucion historial` | Historial de ciclos |
+| `propuestas ver` | Propuestas pendientes |
+| `propuesta validar\|aprobar\|rechazar\|aplicar <id>` | Flujo de aprobación manual |
+| `audit ver` | Auditoría de cambios |
+| `rollback ver` / `rollback aplicar <id>` | Puntos de rollback |
+| `salud sistema` / `mejoras detectar` / `monitor snapshot` | Salud y oportunidades de mejora |
+| `feedback ver <id>` / `feedback votar <id> <voto>` | Feedback sobre resultados |
+| `feedback analisis` / `feedback dashboard` | Análisis y dashboard de feedback |
+| `thresholds ver` / `contextual memoria` | Umbrales adaptativos y memoria contextual |
+
+### 2.11 Despliegue y robustez
+
+| Comando | Qué hace |
+|---|---|
+| `deploy check` | Pipeline + Deployment + Readiness en un paso |
+| `deploy readiness` (`deploy readiness check`) | Solo Production Readiness Report |
+| `deploy verify` / `deploy history` / `deploy reports` | Verificación, historial y listado de informes |
+| `robustness check` (`robustez check`) | Dependencias Python / paquetes / sistema |
+| `robustness data` | Integridad de CSVs (filas, huecos, duplicados) |
+| `robustness models` | Carga, features y antigüedad de los modelos |
+| `robustness recovery` | Historial de eventos de recuperación |
+| `robustness provider` | Proveedor cloud detectado |
+| `robustness benchmark` | Rendimiento del pipeline |
+| `robustness wizard` | Asistente de primera ejecución |
+| `robustness all` | Todos los checks |
+
+> Todos los comandos `robustness *` tienen alias en español `robustez *`.
+
+### 2.12 Documentos, web, audio y utilidades
+
+| Comando | Qué hace |
+|---|---|
+| `lee pdf\|word\|excel\|csv <ruta>` | Lectura de documentos |
+| `analiza csv <ruta>` | Estadísticas completas de un CSV |
+| `escribe pdf\|word\|excel\|csv <ruta> <contenido>` | Creación de documentos |
+| `crear pdf <ruta> <texto>` | PDF vía ReportLab |
+| `grafica csv <ruta>` | Gráfico a partir de un CSV |
+| `extrae web <url>` | Scraping de texto |
+| `traducir <texto>` | Traducción al inglés |
+| `youtube <url>` / `descargar audio youtube <url>` | Descarga de vídeo / audio |
+| `httpx demo`, `aiohttp demo`, `socketio demo`, `fastapi demo`, `flask demo` | Demos de red |
+| `voz a texto` / `texto a voz <texto>` | STT / TTS |
+| `analiza audio <ruta>` / `reproducir audio <ruta>` / `convertir audio <ruta>` | Audio |
+| `crea py <ruta>` / `analiza codigo [archivo…]` | Generación y análisis de código |
+| `torch demo`, `tensorflow demo`, `keras demo`, `sklearn demo`, `integral` | Demos ML / simbólico |
+| `memoria buscar <texto>` / `que hice con <tema>` / `historial <tema>` | Memoria y trazabilidad |
+| `redis set\|get`, `sqlalchemy usuario`, `faiss add\|search`, `llama add\|query` | Demos de memoria/DB |
+| `hash pass`, `verify pass`, `passlib hash\|verify`, `crear jwt`, `verificar jwt`, `cifra archivo`, `bloquear archivo`, `paramiko demo` | Seguridad |
 
 ---
 
@@ -257,12 +398,12 @@ Base de datos SQLite con múltiples bases de datos:
 
 | Archivo | Motor | Contenido |
 |---|---|---|
-| `memory_db/astra_autonomous.db` | SQLite | Scheduler autónomo (8 tablas: predictions, scheduler_runs, supported_symbols, dataset_registry, model_quality, outcomes, config, sqlite_sequence) |
+| `memory_db/astra_autonomous.db` *(se crea en el primer arranque; ruta configurable con `ASTRA_DB_PATH`)* | SQLite | Scheduler autónomo (8 tablas: predictions, scheduler_runs, supported_symbols, dataset_registry, model_quality, outcomes, config, sqlite_sequence) |
 | `memoria.db` | SQLite | Memoria conversacional, proyectos, modelos (gestionada por memory.py) |
 | `dev_log.db` | SQLite | Development log (releases, bugfixes, features) |
 | `analytics_memory.db` | SQLite | Cache de reportes de análisis (forex + business) |
 | `astra_hparam_cache.db` | SQLite | Cache de hiperparámetros optimizados |
-| `forex/models/` | Pickle/Joblib | Modelos XGBoost + LightGBM entrenados (generados en runtime) |
+| `models/forex/` | Pickle/Joblib | Modelos XGBoost + LightGBM entrenados (generados en runtime) |
 | `forex/data/` | CSV | Datasets rolling de velas OHLC |
 
 ---
@@ -282,7 +423,7 @@ VM Linux (Ubuntu / Debian / RHEL / Alpine)
 |   +-- forex/prediction/integrated_pipeline.py  (XGBoost+LightGBM ensemble)
 |   +-- workspace/server.py (FastAPI SPA)
 |   +-- scheduler/autonomous_scheduler.py        (CLI: --init, --timeframe, --status)
-|   +-- memory_db/ (SQLite -- astra_autonomous.db, 8 tablas)
+|   +-- memory_db/ (SQLite -- astra_autonomous.db, 8 tablas; creado en runtime)
 +-- infra/
 |   +-- deploy.sh          (despliegue en 1 comando)
 |   +-- db/database.py     (abstraccion SQLite/PostgreSQL)
@@ -746,7 +887,7 @@ El supervisor (`infra/monitor/supervisor.py`):
 
 El script `infra/backup/backup.sh` (corre diario a 02:00):
 - Crea `astra_backup_YYYYMMDD_HHMMSS.tar.gz`
-- Incluye: memory_db/, forex/data/, forex/models/, config, scheduler
+- Incluye: memory_db/, forex/data/, models/forex/, config, scheduler
 - Guarda en `/var/backups/astra/`
 - Retencion: 7 dias (configurable via `ASTRA_BACKUP_RETENTION_DAYS`)
 
@@ -847,7 +988,7 @@ Laboratorio de ML genérico para cualquier dataset.
 
 ### Reglas Operativas
 
-Las reglas operativas están en `.agents/rules/astra_ops_policy.md`:
+Las reglas operativas viven en el módulo `constitution/` (`constitution_rules.py`, validadas por `constitution_validator.py` y aplicadas vía `approval_flow.py`):
 
 1. **Pipeline Integrity** — Nunca modificar el código Python. Los 175 módulos se ejecutan as-is.
 2. **Error Handling** — Todo ciclo crea SchedulerRun. Errores se capturan con stderr completo.
@@ -1061,8 +1202,8 @@ IA-LOCAL-enhanced-main/
 ├── notifications/                     # Centro de notificaciones
 │   └── notifier.py
 │
-├── memory_db/                         # Bases de datos SQLite
-│   └── astra_autonomous.db            # 8 tablas (autonomous scheduler)
+├── memoria.db / dev_log.db / astra_hparam_cache.db   # Bases SQLite en la raíz
+├── models/forex/                      # Modelos entrenados (.pkl) por par
 │
 ├── tests/                             # Tests de infraestructura
 │   └── test_infrastructure.py         # 10 tests end-to-end
@@ -1084,7 +1225,7 @@ IA-LOCAL-enhanced-main/
 ├── forex_backup/                      # ⚠️ OBSOLETO — safe to delete
 ├── future_phases_draft/                # ⚠️ OBSOLETO — subsistemas ya en producción
 │
-└── .agents/                           # Configuración Base44
+└── constitution/                      # Reglas, validador, aprobación y rollback
     ├── rules/
     │   └── astra_ops_policy.md        # Reglas operativas
     └── skills/
