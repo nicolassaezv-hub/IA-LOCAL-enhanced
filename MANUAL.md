@@ -1252,4 +1252,4 @@ python tests/test_infrastructure.py
 
 ---
 
-*ASTRA v7.0.2-prod · 2026-08-04 · Diego Lopez*
+*ASTRA v7.0.2-prod · 2026-08-04 · Nicolas Saez*
