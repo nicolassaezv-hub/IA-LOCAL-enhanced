@@ -15,6 +15,8 @@ from typing import Iterator
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_SQLITE_DB_PATH = "memory_db/astra_autonomous.db"
+
 
 class DatabaseAdapter(ABC):
     """Abstract database interface — all ASTRA code uses this."""
@@ -54,7 +56,7 @@ class SQLiteDatabase(DatabaseAdapter):
 
     def __init__(self, db_path: str = None):
         self.db_path = db_path or os.environ.get(
-            "ASTRA_DB_PATH", "memory_db/astra_autonomous.db"
+            "ASTRA_DB_PATH", DEFAULT_SQLITE_DB_PATH
         )
         db_dir = os.path.dirname(self.db_path)
         if db_dir:

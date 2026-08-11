@@ -95,22 +95,68 @@ def load_dataset_csv(symbol: str, timeframe: str):
     return df
 
 
-def _registry_entry_is_ready(entry: dict | None) -> bool:
-    """Ready means exactly 2000 persisted candles and matching metadata."""
-    if not entry or entry.get("status") != "ready":
-        return False
+def registry_entry_readiness(
+    entry: dict | None,
+    *,
+    project_root: Path | str | None = None,
+) -> dict:
+    """Return evidence for the canonical production rolling-dataset contract.
+
+    This is deliberately read-only.  ``ready`` requires registry metadata and
+    the persisted CSV to agree, plus the existing :class:`RollingDataset`
+    validation contract, exactly 2000 rows, and only closed candles.
+    """
+    reasons: list[str] = []
+    if not entry:
+        return {
+            "ready": False,
+            "status": "missing",
+            "path": None,
+            "actual_candle_count": 0,
+            "reasons": ["Dataset registry entry is missing"],
+        }
+
+    registry_status = str(entry.get("status") or "pending").lower()
+    if registry_status != "ready":
+        reasons.append(f"Registry status is {registry_status!r}, not 'ready'")
     if entry.get("candle_count") != ROLLING_WINDOW:
-        return False
+        reasons.append(
+            f"Registry candle_count is {entry.get('candle_count')!r}; "
+            f"expected {ROLLING_WINDOW}"
+        )
     if entry.get("rolling_window_size", ROLLING_WINDOW) != ROLLING_WINDOW:
-        return False
+        reasons.append(
+            "Registry rolling_window_size does not match the production "
+            f"window ({ROLLING_WINDOW})"
+        )
+
     raw_path = entry.get("blob_path")
     if not raw_path:
-        return False
+        reasons.append("Registry blob_path is missing")
+        return {
+            "ready": False,
+            "status": "pending" if registry_status == "pending" else "invalid",
+            "path": None,
+            "actual_candle_count": 0,
+            "reasons": reasons,
+        }
+
     path = Path(raw_path)
+    root = Path(project_root) if project_root is not None else PROJECT_ROOT
     if not path.is_absolute():
-        path = PROJECT_ROOT / path
+        path = root / path
+    path = path.resolve()
     if not path.is_file():
-        return False
+        reasons.append(f"Dataset CSV does not exist: {path}")
+        return {
+            "ready": False,
+            "status": "pending" if registry_status == "pending" else "invalid",
+            "path": str(path),
+            "actual_candle_count": 0,
+            "reasons": reasons,
+        }
+
+    actual_count = 0
     try:
         dataset = RollingDataset(
             entry["symbol"],
@@ -118,18 +164,55 @@ def _registry_entry_is_ready(entry: dict | None) -> bool:
             max_rows=ROLLING_WINDOW,
             csv_path=path,
         )
-        if not dataset.load() or not dataset.validate()["ok"]:
-            return False
-        persisted = dataset.get_df()
-        return (
-            len(persisted) == ROLLING_WINDOW
-            and len(exclude_incomplete_candles(persisted, entry["timeframe"]))
-            == ROLLING_WINDOW
-            and str(persisted["timestamp"].iloc[-1])
-            == str(entry.get("last_candle_timestamp"))
-        )
-    except Exception:
-        return False
+        if not dataset.load():
+            reasons.append("Dataset CSV cannot be loaded as canonical OHLCV data")
+        else:
+            validation = dataset.validate()
+            persisted = dataset.get_df()
+            actual_count = len(persisted)
+            if not validation["ok"]:
+                reasons.extend(validation.get("issues") or ["Dataset validation failed"])
+            if actual_count != ROLLING_WINDOW:
+                reasons.append(
+                    f"Persisted candle count is {actual_count}; expected {ROLLING_WINDOW}"
+                )
+            closed_count = len(
+                exclude_incomplete_candles(persisted, entry["timeframe"])
+            )
+            if closed_count != actual_count:
+                reasons.append(
+                    f"Dataset contains {actual_count - closed_count} incomplete candle(s)"
+                )
+            if actual_count != entry.get("candle_count"):
+                reasons.append(
+                    "Registry candle_count does not match the persisted CSV "
+                    f"({entry.get('candle_count')!r} != {actual_count})"
+                )
+            actual_last = str(persisted["timestamp"].iloc[-1]) if actual_count else None
+            if actual_last != str(entry.get("last_candle_timestamp")):
+                reasons.append(
+                    "Registry last_candle_timestamp does not match the persisted CSV "
+                    f"({entry.get('last_candle_timestamp')!r} != {actual_last!r})"
+                )
+    except Exception as exc:
+        reasons.append(f"Dataset verification raised {type(exc).__name__}: {exc}")
+
+    ready = registry_status == "ready" and not reasons
+    return {
+        "ready": ready,
+        "status": "ready" if ready else (
+            "pending" if registry_status == "pending" and actual_count < ROLLING_WINDOW
+            else "invalid"
+        ),
+        "path": str(path),
+        "actual_candle_count": actual_count,
+        "reasons": reasons,
+    }
+
+
+def _registry_entry_is_ready(entry: dict | None) -> bool:
+    """Backward-compatible boolean wrapper for scheduler call sites."""
+    return registry_entry_readiness(entry)["ready"]
 
 
 def _upsert_successful_dataset(
@@ -450,8 +533,34 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
 
 
 def get_status(db: DatabaseAdapter) -> dict:
-    """Return system health as a dict."""
-    return db.get_system_health()
+    """Return scheduler health backed by registry and persisted CSV evidence."""
+    try:
+        health = dict(db.get_system_health())
+        entries = db.get_dataset_registry()
+        declared_ready = [
+            entry for entry in entries if entry.get("status") == "ready"
+        ]
+        verified_ready = [
+            entry for entry in declared_ready if _registry_entry_is_ready(entry)
+        ]
+        inconsistent = len(declared_ready) - len(verified_ready)
+        active_symbols = int(health.get("symbols_active", 0) or 0)
+        expected_datasets = active_symbols * len(TIMEFRAMES)
+        complete = expected_datasets > 0 and len(verified_ready) == expected_datasets
+        health.update({
+            "datasets_verified_ready": len(verified_ready),
+            "datasets_registry_inconsistent": inconsistent,
+            "datasets_expected": expected_datasets,
+            "healthy": bool(health.get("healthy")) and complete and inconsistent == 0,
+            "health_evidence": "registry_and_persisted_csv_verified",
+        })
+        return health
+    except Exception as exc:
+        return {
+            "healthy": False,
+            "health_evidence": "verification_error",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def main():

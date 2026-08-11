@@ -36,7 +36,7 @@ class WizardStep:
     """Dataclass holding status and details for a setup wizard step."""
     name: str
     description: str
-    status: str = "PENDING"  # PASS, FAIL, SKIPPED
+    status: str = "PENDING"  # PASS, PENDING, FAIL, SKIPPED
     detail: str = ""
     recommendation: str = ""
 
@@ -62,7 +62,7 @@ class FirstRunWizard:
         print(f"      Description: {step.description}")
 
     def _print_step_result(self, step: WizardStep):
-        status_icon = "PASS" if step.status == "PASS" else ("FAIL" if step.status == "FAIL" else "SKIPPED")
+        status_icon = step.status
         print(f"      Result     : {status_icon}")
         if step.detail:
             print(f"      Detail     : {step.detail}")
@@ -141,7 +141,7 @@ class FirstRunWizard:
             description="Create or verify astra.env environment file",
         )
         astra_env = self.root / "astra.env"
-        env_example = self.root / ".env.example"
+        env_example = self.root / "infra" / "config" / "astra.env.example"
         dot_env = self.root / ".env"
 
         try:
@@ -159,7 +159,6 @@ class FirstRunWizard:
                     "# ASTRA Environment Configuration\n"
                     "ASTRA_ENV=development\n"
                     "ASTRA_PORT=8000\n"
-                    "ASTRA_DB_PATH=memory_db/memoria.db\n"
                 )
                 astra_env.write_text(default_env, encoding="utf-8")
                 step.status = "PASS"
@@ -176,9 +175,9 @@ class FirstRunWizard:
             description="Create tables and seed default symbols",
         )
         try:
-            from infra.db.database import SQLiteDatabase
-            db_path = str(self.root / "memory_db" / "memoria.db")
-            db = SQLiteDatabase(db_path=db_path)
+            from infra.db.database import get_database
+
+            db = get_database()
 
             default_symbols = [
                 "EURUSD", "GBPUSD", "USDJPY", "USDCHF",
@@ -190,7 +189,11 @@ class FirstRunWizard:
                 db.add_symbol(code=sym, name=f"{sym} Pair", pip=pip_val)
 
             step.status = "PASS"
-            step.detail = f"Database initialized at memory_db/memoria.db with {len(default_symbols)} seeded symbols"
+            backend = getattr(db, "db_path", type(db).__name__)
+            step.detail = (
+                f"Canonical database initialized at {backend} with "
+                f"{len(default_symbols)} seeded symbols"
+            )
         except Exception as e:
             step.status = "FAIL"
             step.detail = f"Database initialization failed: {e}"
@@ -203,28 +206,31 @@ class FirstRunWizard:
             description="Generate baseline CSV data for timeframes H1, H4, D1",
         )
         try:
-            from forex.data.csv_bulk_generator import generate_all_csvs
-            pairs = ["EURUSD", "GBPUSD", "USDJPY"]
-            timeframes = ["H1", "H4", "D1"]
-            res = generate_all_csvs(
-                pairs=pairs,
-                timeframes=timeframes,
-                bars=300,
-                force_synthetic=True,
-                verbose=False,
+            from infra.db.database import get_database
+            from scheduler.autonomous_scheduler import run_init
+
+            db = get_database()
+            results = run_init(db)
+            ready_actions = {"generated", "updated", "skip"}
+            ready_count = sum(
+                result.get("action") in ready_actions for result in results
             )
-            ok_count = len(res.get("ok", []))
-            if ok_count > 0:
+            if results and ready_count == len(results):
                 step.status = "PASS"
-                step.detail = f"Generated {ok_count} CSV files across H1, H4, D1 for {', '.join(pairs)}"
+                step.detail = (
+                    f"Canonical scheduler initialized {ready_count} real rolling datasets"
+                )
             else:
-                step.status = "FAIL"
-                step.detail = "CSV generation yielded 0 files"
-                step.recommendation = "Verify forex/data/csv_bulk_generator.py and generate_test_csv.py"
+                step.status = "PENDING"
+                step.detail = (
+                    f"Only {ready_count}/{len(results)} datasets satisfy initialization; "
+                    "no synthetic fallback was used"
+                )
+                step.recommendation = "Restore a real provider and rerun initialization"
         except Exception as e:
             step.status = "FAIL"
             step.detail = f"CSV generation failed: {e}"
-            step.recommendation = "Check generate_test_csv.py synthetic data functions"
+            step.recommendation = "Check the canonical DataRouter and scheduler initialization"
         return step
 
     def step_7_train_initial_models(self) -> WizardStep:
@@ -235,22 +241,32 @@ class FirstRunWizard:
         try:
             eurusd_h1 = self.root / "CSVs" / "H1" / "EURUSD.csv"
             if not eurusd_h1.exists():
-                eurusd_h1 = self.root / "test_EURUSD_H1.csv"
+                eurusd_h1 = self.root / "forex" / "data" / "EURUSD_H1.csv"
 
             if eurusd_h1.exists():
                 from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
                 pipeline = ForexIntegratedPipeline()
                 res = pipeline.train(str(eurusd_h1), pair="EURUSD")
-                acc = res.get("accuracy", 0.60) if isinstance(res, dict) else 0.60
-                step.status = "PASS"
-                step.detail = f"Trained initial EURUSD model (accuracy: {acc:.2f})"
+                training_complete = (
+                    isinstance(res, dict)
+                    and res.get("type") == "training_complete"
+                    and res.get("model_valid") is True
+                    and res.get("model") == "guardado"
+                )
+                if training_complete:
+                    step.status = "PASS"
+                    step.detail = (
+                        "Training completed and the pipeline explicitly reported "
+                        f"a persisted valid model (accuracy: {res['accuracy']:.2f})"
+                    )
+                else:
+                    step.status = "PENDING"
+                    step.detail = f"Training did not produce a required valid model: {res}"
+                    step.recommendation = "Resolve the quality/model gate before readiness"
             else:
-                models_dir = self.root / "models"
-                models_dir.mkdir(exist_ok=True)
-                sample_file = models_dir / "EURUSD_H1.json"
-                sample_file.write_text('{"status": "initialized"}', encoding="utf-8")
-                step.status = "PASS"
-                step.detail = f"Initialized model artifact at models/{sample_file.name}"
+                step.status = "PENDING"
+                step.detail = "A canonical EURUSD/H1 dataset is not available; no placeholder model was created"
+                step.recommendation = "Complete the real dataset initialization first"
         except Exception as e:
             step.status = "FAIL"
             step.detail = f"Model training failed: {e}"
@@ -265,19 +281,26 @@ class FirstRunWizard:
         try:
             eurusd_h1 = self.root / "CSVs" / "H1" / "EURUSD.csv"
             if not eurusd_h1.exists():
-                eurusd_h1 = self.root / "test_EURUSD_H1.csv"
+                eurusd_h1 = self.root / "forex" / "data" / "EURUSD_H1.csv"
 
             if eurusd_h1.exists():
                 from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
                 pipeline = ForexIntegratedPipeline()
                 pred = pipeline.predict(str(eurusd_h1), pair="EURUSD")
-                direction = pred.get("direction", "BUY") if isinstance(pred, dict) else "BUY"
-                confidence = pred.get("confidence", 0.5) if isinstance(pred, dict) else 0.5
-                step.status = "PASS"
-                step.detail = f"First prediction executed: EURUSD direction={direction}, confidence={confidence:.2f}"
+                if isinstance(pred, dict) and pred.get("type") == "prediction" and "action" in pred:
+                    step.status = "PASS"
+                    step.detail = (
+                        "First prediction executed with explicit pipeline evidence: "
+                        f"action={pred['action']}, confidence={pred.get('confidence')}"
+                    )
+                else:
+                    step.status = "FAIL"
+                    step.detail = f"Prediction returned no valid evidence: {pred}"
+                    step.recommendation = "Check model and prediction safeguards"
             else:
-                step.status = "PASS"
-                step.detail = "Prediction step completed (dry run mode)"
+                step.status = "PENDING"
+                step.detail = "Prediction was not executed because the canonical dataset is missing"
+                step.recommendation = "Complete dataset and model initialization"
         except Exception as e:
             step.status = "FAIL"
             step.detail = f"First prediction failed: {e}"
@@ -296,14 +319,9 @@ class FirstRunWizard:
                 step.status = "PASS"
                 step.detail = "Workspace server API responding on health endpoint"
             else:
-                import workspace.server as ws_server
-                if hasattr(ws_server, "app"):
-                    step.status = "PASS"
-                    step.detail = "Workspace server FastAPI app verified and importable"
-                else:
-                    step.status = "FAIL"
-                    step.detail = "Workspace server app not found in workspace/server.py"
-                    step.recommendation = "Check workspace/server.py configuration"
+                step.status = "PENDING"
+                step.detail = "Workspace module may exist, but no operational health response was verified"
+                step.recommendation = "Start Workplace and verify its health endpoint"
         except Exception as e:
             step.status = "FAIL"
             step.detail = f"Workspace server check failed: {e}"
@@ -317,11 +335,24 @@ class FirstRunWizard:
         )
         try:
             from deployment.first_run_validator import run_first_deployment_check
-            result = run_first_deployment_check(symbols=["EURUSD"], timeframe="H1", force=True)
-            dep_status = result.get("deployment_status", "pass")
-            readiness_status = result.get("readiness_status", "pass")
-            step.status = "PASS"
-            step.detail = f"Deployment validation passed: deployment={dep_status}, readiness={readiness_status}"
+            result = run_first_deployment_check(
+                symbols=["EURUSD"],
+                timeframe="H1",
+                force=True,
+                probe_providers=True,
+            )
+            dep_status = result.get("deployment_status", "UNKNOWN")
+            readiness_status = result.get("readiness_status", "UNKNOWN")
+            if result.get("ready") is True:
+                step.status = "PASS"
+                step.detail = f"Readiness verified: deployment={dep_status}, readiness={readiness_status}"
+            else:
+                step.status = "PENDING" if result.get("status") == "pending" else "FAIL"
+                step.detail = (
+                    f"Readiness is not complete: deployment={dep_status}, "
+                    f"readiness={readiness_status}; blockers={result.get('blocking_reasons', [])}"
+                )
+                step.recommendation = "Resolve every blocking readiness reason"
         except Exception as e:
             step.status = "FAIL"
             step.detail = f"Deployment validation failed: {e}"
@@ -378,7 +409,7 @@ class FirstRunWizard:
             step_obj = method()
             self._print_step_header(i, total_count, step_obj)
 
-            if step_obj.status == "FAIL":
+            if step_obj.status in {"FAIL", "PENDING"}:
                 has_failed = True
 
             self.steps_history.append(step_obj)
@@ -386,18 +417,29 @@ class FirstRunWizard:
 
         passed_count = sum(1 for s in self.steps_history if s.status == "PASS")
         failed_count = sum(1 for s in self.steps_history if s.status == "FAIL")
+        pending_count = sum(1 for s in self.steps_history if s.status == "PENDING")
         skipped_count = sum(1 for s in self.steps_history if s.status == "SKIPPED")
-        overall_status = "PASS" if failed_count == 0 else "FAIL"
+        if failed_count:
+            overall_status = "ERROR"
+        elif pending_count or skipped_count:
+            overall_status = "PENDING"
+        else:
+            overall_status = "READY"
 
         print(f"{'='*65}")
         print(f"  WIZARD COMPLETE — Status: {overall_status}")
-        print(f"  Passed: {passed_count}/{total_count} | Failed: {failed_count} | Skipped: {skipped_count}")
+        print(
+            f"  Passed: {passed_count}/{total_count} | Pending: {pending_count} | "
+            f"Failed: {failed_count} | Skipped: {skipped_count}"
+        )
         print(f"{'='*65}\n")
 
         return {
             "status": overall_status,
+            "ready": overall_status == "READY",
             "passed": passed_count,
             "failed": failed_count,
+            "pending": pending_count,
             "skipped": skipped_count,
             "total_steps": total_count,
             "summary": f"Wizard finished with status {overall_status} ({passed_count}/{total_count} passed)",

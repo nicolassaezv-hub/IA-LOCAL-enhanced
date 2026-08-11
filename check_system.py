@@ -240,7 +240,10 @@ def run_self_test(verbose: bool = True) -> dict:
         f"\n  ✅ {n_ok} OK   ⚠️ {n_warn} Warnings   ❌ {n_error} Errores\n"
     )
     if n_error == 0:
-        console.print(f"[bold green]{summary}  Sistema listo para operar.[/]")
+        console.print(
+            f"[bold green]{summary}  Self-test básico completado. "
+            "No certifica Production Readiness.[/]"
+        )
     else:
         console.print(f"[bold yellow]{summary}  Hay errores que requieren atención.[/]")
 
@@ -250,7 +253,10 @@ def run_self_test(verbose: bool = True) -> dict:
         "warn_list": checks["warn"],
         "error_list": checks["error"],
         "elapsed_s": elapsed,
+        "diagnostic_passed": n_error == 0,
         "healthy": n_error == 0,
+        "production_ready": False,
+        "readiness_scope": "diagnostic_only",
     }
 
 

@@ -330,6 +330,12 @@ permiten inspeccionar cada pieza por separado.
 
 > Todos los comandos `robustness *` tienen alias en español `robustez *`.
 
+La Production Readiness es de solo lectura y valida evidencia real del registry,
+los CSV rolling y los modelos. La disponibilidad de un paquete de provider no
+demuestra que la adquisición sea operacional: el probe de red se ejecuta solo
+en modo explícito (`run_production_readiness(probe_providers=True)`). Sin ese
+probe, la adquisición queda `PENDING` y no se declara production-ready.
+
 ### 2.12 Documentos, web, audio y utilidades
 
 | Comando | Qué hace |

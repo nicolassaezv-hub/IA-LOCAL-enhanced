@@ -1,42 +1,23 @@
-"""
-Production Readiness Report — Valida el entorno completo de produccion.
+"""Evidence-based, fail-closed production readiness for ASTRA.
 
-Verifica 15+ aspectos criticos:
-  1.  Version de Python
-  2.  Dependencias instaladas (requirements.txt)
-  3.  Variables de entorno (astra.env)
-  4.  Acceso a la base de datos
-  5.  Disponibilidad de modelos
-  6.  Existencia de datasets (CSVs)
-  7.  Scheduler funcional
-  8.  Servicios systemd
-  9.  Temporizadores (timers)
-  10. Workspace responde
-  11. API responde
-  12. Conectividad con proveedor de datos
-  13. Permisos de escritura
-  14. Estructura de directorios
-  15. Logs y rotacion
-  16. Memoria/Recursos del sistema
-
-Emite un estado global: READY FOR PRODUCTION / READY WITH WARNINGS / NOT READY
+The report is diagnostic and read-only.  It never creates datasets, models,
+configuration, databases, or directories.  Provider traffic is performed only
+when ``probe_providers=True``.
 """
 from __future__ import annotations
 
-import os
-import sys
-import json
-import time
-import platform
-import subprocess
 import importlib
-from datetime import datetime
-from pathlib import Path
+import os
+import platform
+import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Callable, Iterable
+
 
 _BASE = Path(__file__).resolve().parent.parent
 
-# Dependencias criticas y opcionales
 _CRITICAL_DEPS = [
     ("pandas", "pandas"),
     ("numpy", "numpy"),
@@ -64,572 +45,651 @@ _OPTIONAL_DEPS = [
     ("openai", "openai"),
 ]
 
-# Directorios esperados
 _EXPECTED_DIRS = [
     "CSVs", "CSVs/H1", "CSVs/H4", "CSVs/D1",
-    "models", "models/forex",
-    "memory_db",
-    "logs",
-    "reports",
-    "reports/deployment",
-    "workspace", "workspace/static", "workspace/static/js", "workspace/static/css",
-    "scheduler",
-    "forex", "forex/prediction", "forex/data", "forex/portfolio",
-    "infra", "infra/db", "infra/config",
+    "models", "models/forex", "memory_db", "logs", "reports",
+    "reports/deployment", "workspace", "scheduler", "forex",
+    "forex/prediction", "forex/data", "infra", "infra/config",
     "deployment",
-    "constitution", "evolution", "feedback",
 ]
+
+_PLACEHOLDER_MARKERS = {
+    "dummy", "fake", "mock", "placeholder", "sample", "synthetic", "test",
+}
 
 
 @dataclass
 class ReadinessCheck:
-    """Resultado de un check de readiness."""
+    """One evidence item in the production-readiness decision."""
+
     category: str
     check: str
-    status: str  # "pass" | "fail" | "warn"
+    status: str  # pass | fail | warn | pending
     detail: str = ""
     recommendation: str = ""
+    blocking: bool = False
+    evidence_state: str = ""
 
 
 @dataclass
 class ProductionReadinessReport:
-    """Informe de readiness del entorno de produccion."""
+    """Structured production-readiness result."""
+
     timestamp: str = ""
     checks: list[ReadinessCheck] = field(default_factory=list)
-    global_status: str = "pending"
+    global_status: str = "PENDING"
+    status: str = "pending"
     summary: dict = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.timestamp:
-            self.timestamp = datetime.utcnow().isoformat() + "Z"
+            self.timestamp = datetime.now(timezone.utc).isoformat()
 
     @property
     def passed(self) -> int:
-        return sum(1 for c in self.checks if c.status == "pass")
+        return sum(check.status == "pass" for check in self.checks)
 
     @property
     def failed(self) -> int:
-        return sum(1 for c in self.checks if c.status == "fail")
+        return sum(check.status == "fail" for check in self.checks)
 
     @property
     def warned(self) -> int:
-        return sum(1 for c in self.checks if c.status == "warn")
+        return sum(check.status == "warn" for check in self.checks)
 
-    def add_check(self, check: ReadinessCheck):
+    @property
+    def pending(self) -> int:
+        return sum(check.status == "pending" for check in self.checks)
+
+    @property
+    def ready(self) -> bool:
+        return self.status in {"ready", "degraded"}
+
+    @property
+    def blocking_reasons(self) -> list[str]:
+        return [
+            f"{check.check}: {check.detail}"
+            for check in self.checks
+            if check.blocking and check.status in {"fail", "pending"}
+        ]
+
+    @property
+    def warnings(self) -> list[str]:
+        return [
+            f"{check.check}: {check.detail}"
+            for check in self.checks
+            if check.status == "warn"
+        ]
+
+    def add_check(self, check: ReadinessCheck) -> None:
         self.checks.append(check)
 
-    def finalize(self):
-        if self.failed > 0:
+    def finalize(self) -> None:
+        blocking_failures = any(
+            check.blocking and check.status == "fail" for check in self.checks
+        )
+        blocking_pending = any(
+            check.blocking and check.status == "pending" for check in self.checks
+        )
+        if blocking_failures:
             self.global_status = "NOT READY"
-        elif self.warned > 0:
+            self.status = "error"
+        elif blocking_pending:
+            self.global_status = "PENDING"
+            self.status = "pending"
+        elif self.warned:
             self.global_status = "READY WITH WARNINGS"
+            self.status = "degraded"
         else:
             self.global_status = "READY FOR PRODUCTION"
+            self.status = "ready"
 
         self.summary = {
+            "ready": self.ready,
+            "status": self.status,
             "total_checks": len(self.checks),
             "passed": self.passed,
             "failed": self.failed,
             "warned": self.warned,
+            "pending": self.pending,
+            "blocking_count": len(self.blocking_reasons),
             "global_status": self.global_status,
         }
 
     def to_dict(self) -> dict:
         return {
             "timestamp": self.timestamp,
+            "ready": self.ready,
+            "status": self.status,
             "global_status": self.global_status,
             "summary": self.summary,
+            "blocking_reasons": self.blocking_reasons,
+            "warnings": self.warnings,
             "checks": [
                 {
-                    "category": c.category,
-                    "check": c.check,
-                    "status": c.status,
-                    "detail": c.detail,
-                    "recommendation": c.recommendation,
+                    "category": check.category,
+                    "check": check.check,
+                    "status": check.status,
+                    "detail": check.detail,
+                    "recommendation": check.recommendation,
+                    "blocking": check.blocking,
+                    "evidence_state": check.evidence_state,
                 }
-                for c in self.checks
+                for check in self.checks
             ],
         }
 
     def to_markdown(self) -> str:
-        icons = {"pass": "PASS", "fail": "FAIL", "warn": "WARN"}
-
+        icons = {"pass": "PASS", "fail": "FAIL", "warn": "WARN", "pending": "PENDING"}
         lines = [
-            f"# Production Readiness Report",
-            f"",
+            "# Production Readiness Report",
+            "",
             f"**Fecha:** {self.timestamp}",
             f"**Estado global:** {self.global_status}",
-            f"",
-            f"| Metrica | Valor |",
-            f"|---------|-------|",
+            f"**Ready:** {self.ready}",
+            "",
+            "| Métrica | Valor |",
+            "|---------|-------|",
             f"| Checks totales | {len(self.checks)} |",
             f"| Pasados | {self.passed} |",
             f"| Fallidos | {self.failed} |",
+            f"| Pendientes | {self.pending} |",
             f"| Warnings | {self.warned} |",
-            f"",
-            f"---",
-            f"",
+            f"| Bloqueos | {len(self.blocking_reasons)} |",
+            "",
         ]
-
-        # Agrupar por categoria
-        categories = {}
-        for c in self.checks:
-            categories.setdefault(c.category, []).append(c)
-
-        for cat, checks in categories.items():
-            lines.append(f"## {cat}")
-            lines.append(f"")
-            for c in checks:
-                icon = icons.get(c.status, c.status.upper())
-                lines.append(f"### {c.check}")
-                lines.append(f"")
-                lines.append(f"- **Estado:** {icon}")
-                lines.append(f"- **Detalle:** {c.detail}")
-                if c.recommendation:
-                    lines.append(f"- **Recomendacion:** {c.recommendation}")
+        categories: dict[str, list[ReadinessCheck]] = {}
+        for check in self.checks:
+            categories.setdefault(check.category, []).append(check)
+        for category, checks in categories.items():
+            lines.extend([f"## {category}", ""])
+            for check in checks:
+                lines.extend([
+                    f"### {check.check}",
+                    "",
+                    f"- **Estado:** {icons.get(check.status, check.status.upper())}",
+                    f"- **Bloqueante:** {'sí' if check.blocking else 'no'}",
+                    f"- **Detalle:** {check.detail}",
+                ])
+                if check.evidence_state:
+                    lines.append(f"- **Evidencia:** {check.evidence_state}")
+                if check.recommendation:
+                    lines.append(f"- **Recomendación:** {check.recommendation}")
                 lines.append("")
 
-        lines.append("---")
-        lines.append("")
-
-        if self.global_status == "READY FOR PRODUCTION":
-            lines.append("## Conclusion")
-            lines.append("")
-            lines.append("El sistema esta listo para produccion. Todos los checks criticos pasaron.")
-        elif self.global_status == "READY WITH WARNINGS":
-            lines.append("## Conclusion")
-            lines.append("")
-            lines.append("El sistema esta listo con advertencias. Los componentes criticos funcionan,")
-            lines.append("pero hay warnings que deberian revisarse:")
-            failed_items = [c.check for c in self.checks if c.status == "warn"]
-            for item in failed_items:
-                lines.append(f"  - {item}")
+        lines.extend(["---", "", "## Conclusión", ""])
+        if self.ready:
+            lines.append(
+                "La evidencia crítica está completa; revise las advertencias no bloqueantes."
+            )
         else:
-            lines.append("## Conclusion")
-            lines.append("")
-            lines.append("El sistema NO esta listo para produccion. Los siguientes checks fallaron:")
-            failed_items = [(c.check, c.recommendation) for c in self.checks if c.status == "fail"]
-            for check_name, rec in failed_items:
-                lines.append(f"  - **{check_name}**: {rec}")
-
+            lines.append("ASTRA no está listo para producción.")
+            for reason in self.blocking_reasons:
+                lines.append(f"- {reason}")
         return "\n".join(lines)
 
 
 def _try_import(mod_name: str) -> tuple[bool, str]:
     try:
-        m = importlib.import_module(mod_name)
-        version = getattr(m, "__version__", "OK")
-        return True, version
+        module = importlib.import_module(mod_name)
+        return True, str(getattr(module, "__version__", "OK"))
     except ImportError:
         return False, "No instalado"
-    except Exception as e:
-        return False, f"Error: {e}"
+    except Exception as exc:
+        return False, f"Error: {exc}"
 
 
-def run_production_readiness() -> ProductionReadinessReport:
-    """Ejecuta todos los checks de readiness y retorna el informe completo."""
-    report = ProductionReadinessReport()
+def _contains_placeholder_marker(path: Path, metadata: dict | None = None) -> str | None:
+    file_tokens = {token for token in path.stem.lower().replace("-", "_").split("_") if token}
+    matches = sorted(file_tokens & _PLACEHOLDER_MARKERS)
+    if matches:
+        return f"artifact filename contains marker {matches[0]!r}"
 
-    # ── 1. Entorno Python ────────────────────────────────────
+    metadata = metadata or {}
+    for key in ("source", "provenance", "artifact_type", "data_type"):
+        value = str(metadata.get(key, "")).lower()
+        if any(marker in value for marker in _PLACEHOLDER_MARKERS):
+            return f"registry {key}={metadata.get(key)!r} is non-production provenance"
+    if metadata.get("is_synthetic") is True:
+        return "registry explicitly marks the artifact as synthetic"
+    return None
+
+
+def evaluate_dataset_registry_entry(
+    entry: dict | None,
+    *,
+    base_dir: Path | str | None = None,
+) -> dict:
+    """Evaluate one registry row through the canonical rolling contract."""
+    from scheduler.autonomous_scheduler import registry_entry_readiness
+
+    root = Path(base_dir) if base_dir is not None else _BASE
+    evidence = registry_entry_readiness(entry, project_root=root)
+    path_value = evidence.get("path")
+    if entry and path_value:
+        marker = _contains_placeholder_marker(Path(path_value), entry)
+        if marker:
+            evidence = dict(evidence)
+            evidence["ready"] = False
+            evidence["status"] = "invalid"
+            evidence["reasons"] = [*evidence.get("reasons", []), marker]
+    return evidence
+
+
+def _find_model_path(models_dir: Path, symbol: str) -> Path | None:
+    """Return only the artifact promoted through ModelStorage's latest contract."""
+    exact = models_dir / f"latest_{symbol.upper()}.pkl"
+    return exact if exact.is_file() else None
+
+
+def evaluate_model_artifact(
+    model_path: Path | str | None,
+    symbol: str,
+    *,
+    checker: Callable[[str, str], object] | None = None,
+) -> dict:
+    """Classify a mandatory model without recovery or retraining."""
+    if model_path is None:
+        return {"valid": False, "state": "MISSING", "reasons": ["Model artifact is missing"]}
+    path = Path(model_path)
+    if not path.is_file():
+        return {"valid": False, "state": "MISSING", "reasons": [f"Model artifact does not exist: {path}"]}
+    marker = _contains_placeholder_marker(path)
+    if marker:
+        return {"valid": False, "state": "INVALID/CORRUPT", "reasons": [marker]}
+
+    try:
+        if checker is None:
+            from robustness.model_integrity_checker import _check_single_model
+
+            result = _check_single_model(
+                str(path), expected_symbol=symbol, auto_recover=False
+            )
+        else:
+            result = checker(str(path), symbol)
+        status = result.get("status") if isinstance(result, dict) else result.status
+        issues = list(result.get("issues", [])) if isinstance(result, dict) else list(result.issues)
+    except Exception as exc:
+        message = f"Integrity checker raised {type(exc).__name__}: {exc}"
+        state = "INCOMPATIBLE" if any(
+            token in str(exc).lower() for token in ("version", "incompatib", "module")
+        ) else "INVALID/CORRUPT"
+        return {"valid": False, "state": state, "reasons": [message]}
+
+    if status not in {"ok", "valid"}:
+        joined = " ".join(issues).lower()
+        state = "INCOMPATIBLE" if any(
+            token in joined for token in ("version", "incompatib", "module")
+        ) else "INVALID/CORRUPT"
+        return {
+            "valid": False,
+            "state": state,
+            "reasons": issues or [f"Integrity status is {status!r}"],
+        }
+    return {"valid": True, "state": "VALID", "reasons": [], "warnings": issues}
+
+
+def _default_provider_probe(active_symbols: Iterable[str]) -> dict:
+    """Probe one active symbol per DataRouter acquisition route."""
+    from forex.data.data_router import DataRouter
+
+    routes: dict[str, tuple[str, object]] = {}
+    for symbol in active_symbols:
+        router = DataRouter(symbol, "H1")
+        route = "crypto" if router.asset_type == "crypto" else "forex"
+        routes.setdefault(route, (symbol, router))
+
+    if not routes:
+        return {
+            "operational": False,
+            "provider": "none",
+            "detail": "No active production route is configured",
+        }
+
+    details: list[str] = []
+    providers: list[str] = []
+    operational = True
+    for route, (symbol, router) in sorted(routes.items()):
+        try:
+            frame = router.fetch(bars=2, raise_on_failure=True)
+            if frame is None or len(frame) == 0:
+                raise RuntimeError("no candles returned")
+            provider = router.source_used or "unknown"
+            providers.append(f"{route}={provider}")
+            details.append(
+                f"{route} route via {symbol}: {len(frame)} candle(s) from {provider}"
+            )
+        except Exception as exc:
+            operational = False
+            details.append(
+                f"{route} route via {symbol}: {type(exc).__name__}: {exc}"
+            )
+
+    return {
+        "operational": operational,
+        "provider": ", ".join(providers) or "none",
+        "detail": "; ".join(details),
+    }
+
+
+def _existing_sqlite_path(base_dir: Path) -> Path:
+    from infra.db.database import DEFAULT_SQLITE_DB_PATH
+
+    configured = Path(os.environ.get("ASTRA_DB_PATH", DEFAULT_SQLITE_DB_PATH))
+    return configured if configured.is_absolute() else base_dir / configured
+
+
+def _add_environment_checks(report: ProductionReadinessReport, base_dir: Path) -> None:
     py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     py_ok = sys.version_info >= (3, 10)
     report.add_check(ReadinessCheck(
-        category="1. Entorno Python",
-        check="Version de Python",
-        status="pass" if py_ok else "fail",
-        detail=f"Python {py_version} en {platform.system()} {platform.machine()}",
-        recommendation="" if py_ok else "Actualiza a Python 3.10+ (recomendado 3.11)",
+        "1. Entorno Python", "Versión de Python", "pass" if py_ok else "fail",
+        f"Python {py_version} en {platform.system()} {platform.machine()}",
+        "Use Python 3.12 on the production VM" if not py_ok else "",
+        blocking=True,
     ))
 
-    # ── 2. Dependencias instaladas ───────────────────────────
-    missing_critical = []
-    for mod, label in _CRITICAL_DEPS:
-        ok, ver = _try_import(mod)
-        status = "pass" if ok else "fail"
-        if not ok:
-            missing_critical.append(label)
+    for module, label in _CRITICAL_DEPS:
+        ok, version = _try_import(module)
         report.add_check(ReadinessCheck(
-            category="2. Dependencias",
-            check=f"{label} ({mod})",
-            status=status,
-            detail=ver if ok else "No instalado",
-            recommendation="" if ok else f"pip install {label}",
+            "2. Dependencias", f"{label} ({module})", "pass" if ok else "fail",
+            version, f"Instale la dependencia crítica {label}" if not ok else "",
+            blocking=True,
+        ))
+    for module, label in _OPTIONAL_DEPS:
+        ok, version = _try_import(module)
+        report.add_check(ReadinessCheck(
+            "2. Dependencias", f"{label} (opcional)", "pass" if ok else "warn",
+            version if ok else "No instalado (opcional)",
+            f"Instale {label} solo si necesita esa funcionalidad" if not ok else "",
+            blocking=False,
         ))
 
-    for mod, label in _OPTIONAL_DEPS:
-        ok, ver = _try_import(mod)
-        if ok:
-            report.add_check(ReadinessCheck(
-                category="2. Dependencias",
-                check=f"{label} (opcional)",
-                status="pass",
-                detail=f"Instalado ({ver})",
-            ))
-        else:
-            report.add_check(ReadinessCheck(
-                category="2. Dependencias",
-                check=f"{label} (opcional)",
-                status="warn",
-                detail="No instalado (opcional)",
-                recommendation=f"Opcional: pip install {label} si necesitas esta funcionalidad",
-            ))
-
-    # ── 3. Variables de entorno ──────────────────────────────
-    env_path = _BASE / "infra" / "config" / "astra.env"
-    env_exists = env_path.exists()
+    env_path = base_dir / "infra" / "config" / "astra.env"
     report.add_check(ReadinessCheck(
-        category="3. Configuracion",
-        check="Archivo astra.env",
-        status="pass" if env_exists else "warn",
-        detail=str(env_path) if env_exists else "No encontrado",
-        recommendation="" if env_exists else f"Copia infra/config/astra.env.example a infra/config/astra.env y edita los valores",
+        "3. Configuración", "Archivo astra.env",
+        "pass" if env_path.is_file() else "warn",
+        str(env_path) if env_path.is_file() else "No encontrado",
+        "Configure el entorno desde el archivo example; readiness no lo crea",
+        blocking=False,
     ))
-
-    # API keys
-    groq_key = os.getenv("GROQ_API_KEY", "")
-    openai_key = os.getenv("OPENAI_API_KEY", "")
-    has_any_key = bool(groq_key or openai_key)
+    has_chat_key = bool(os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY"))
     report.add_check(ReadinessCheck(
-        category="3. Configuracion",
-        check="API Keys (Groq/OpenAI)",
-        status="pass" if has_any_key else "warn",
-        detail=f"Groq: {'configurada' if groq_key else 'vacia'} | OpenAI: {'configurada' if openai_key else 'vacia'}",
-        recommendation="" if has_any_key else "Configura GROQ_API_KEY o OPENAI_API_KEY en astra.env para usar el chat con LLM",
+        "3. Configuración", "API Keys de chat",
+        "pass" if has_chat_key else "warn",
+        "Al menos una key configurada" if has_chat_key else "Chat cloud no configurado",
+        "Configure una key solo si el chat cloud es requerido",
+        blocking=False,
     ))
 
-    # ── 4. Base de datos ──────────────────────────────────────
-    try:
-        from infra.db.database import get_database
-        db = get_database()
-        db_engine = getattr(db, "engine", getattr(db, "_engine", "unknown"))
-        symbols = db.get_supported_symbols()
-        report.add_check(ReadinessCheck(
-            category="4. Base de datos",
-            check="Conexion y inicializacion",
-            status="pass",
-            detail=f"Engine: {db_engine} | Simbolos: {len(symbols)} | Tablas: OK",
-        ))
-    except Exception as e:
-        report.add_check(ReadinessCheck(
-            category="4. Base de datos",
-            check="Conexion y inicializacion",
-            status="fail",
-            detail=f"Error: {e}",
-            recommendation="Ejecuta `python astra.py` para inicializar la base de datos",
-        ))
 
-    # ── 5. Modelos disponibles ────────────────────────────────
-    models_dir = _BASE / "models" / "forex"
-    if models_dir.exists():
-        pkl_files = list(models_dir.glob("*.pkl"))
-        latest_files = [f for f in pkl_files if f.name.startswith("latest_")]
-        report.add_check(ReadinessCheck(
-            category="5. Modelos",
-            check="Modelos entrenados",
-            status="pass" if latest_files else "warn",
-            detail=f"{len(pkl_files)} archivos .pkl | {len(latest_files)} modelos 'latest'",
-            recommendation="" if latest_files else "Entrena al menos un modelo: `full forex CSVs/H4/USDJPY.csv`",
-        ))
-    else:
-        report.add_check(ReadinessCheck(
-            category="5. Modelos",
-            check="Directorio de modelos",
-            status="warn",
-            detail="models/forex no existe",
-            recommendation="El directorio se creara automaticamente al entrenar el primer modelo",
-        ))
+def run_production_readiness(
+    *,
+    base_dir: Path | str | None = None,
+    db=None,
+    required_timeframes: Iterable[str] = ("H1", "H4", "D1"),
+    require_models: bool = True,
+    probe_providers: bool = False,
+    provider_probe: Callable[[], dict] | None = None,
+    model_checker: Callable[[str, str], object] | None = None,
+) -> ProductionReadinessReport:
+    """Run read-only production readiness and return structured evidence."""
+    root = Path(base_dir).resolve() if base_dir is not None else _BASE
+    report = ProductionReadinessReport()
+    _add_environment_checks(report, root)
 
-    # ── 6. Datasets (CSVs) ────────────────────────────────────
-    csvs_dir = _BASE / "CSVs"
-    csv_count = 0
-    if csvs_dir.exists():
-        csv_count = len(list(csvs_dir.rglob("*.csv")))
-    report.add_check(ReadinessCheck(
-        category="6. Datasets",
-        check="Archivos CSV disponibles",
-        status="pass" if csv_count > 0 else "warn",
-        detail=f"{csv_count} archivos CSV en CSVs/",
-        recommendation="" if csv_count > 0 else "Genera CSVs con: `generar csvs forex H1,H4,D1` o descarga datos manualmente",
-    ))
-
-    # ── 7. Scheduler ─────────────────────────────────────────
-    try:
-        from scheduler.autonomous_scheduler import get_status
-        from infra.db.database import get_database
-        db = get_database()
-        status = get_status(db)
-        sched_ok = status.get("healthy", False)
-        report.add_check(ReadinessCheck(
-            category="7. Scheduler",
-            check="Estado del scheduler",
-            status="pass" if sched_ok else "warn",
-            detail=f"Healthy: {sched_ok} | Symbols: {status.get('symbols_active', 0)} | Datasets: {status.get('datasets_ready', 0)}",
-            recommendation="" if sched_ok else "Ejecuta `python astra.py` y luego `scheduler start` para activar el scheduler",
-        ))
-    except Exception as e:
-        report.add_check(ReadinessCheck(
-            category="7. Scheduler",
-            check="Estado del scheduler",
-            status="fail",
-            detail=f"Error: {e}",
-            recommendation="Verifica que scheduler/autonomous_scheduler.py este accesible",
-        ))
-
-    # ── 8. Servicios systemd ─────────────────────────────────
-    systemd_dir = _BASE / "infra" / "systemd"
-    if systemd_dir.exists():
-        services = list(systemd_dir.glob("*.service"))
-        timers = list(systemd_dir.glob("*.timer"))
-        report.add_check(ReadinessCheck(
-            category="8. Servicios systemd",
-            check="Archivos de servicio",
-            status="pass" if services else "warn",
-            detail=f"{len(services)} .service | {len(timers)} .timer",
-            recommendation="" if services else "Crea archivos .service en infra/systemd/ para despliegue automatico",
-        ))
-
-        # Verificar si estan activos (solo en Linux)
-        if platform.system() == "Linux":
-            for svc in services:
-                svc_name = svc.stem
-                try:
-                    result = subprocess.run(
-                        ["systemctl", "is-active", svc_name],
-                        capture_output=True, text=True, timeout=5
-                    )
-                    is_active = result.returncode == 0
-                    report.add_check(ReadinessCheck(
-                        category="8. Servicios systemd",
-                        check=f"systemd: {svc_name}",
-                        status="pass" if is_active else "warn",
-                        detail=result.stdout.strip() if result.stdout else "inactive",
-                        recommendation="" if is_active else f"sudo systemctl start {svc_name} && sudo systemctl enable {svc_name}",
-                    ))
-                except Exception:
-                    report.add_check(ReadinessCheck(
-                        category="8. Servicios systemd",
-                        check=f"systemd: {svc_name}",
-                        status="warn",
-                        detail="No se pudo verificar (posiblemente no ejecutandose como root)",
-                    ))
-        else:
-            report.add_check(ReadinessCheck(
-                category="8. Servicios systemd",
-                check="systemd activo",
-                status="warn",
-                detail="systemd solo disponible en Linux",
-                recommendation="En Windows/Mac: usa los scripts en infra/ para iniciar el scheduler manualmente",
-            ))
-    else:
-        report.add_check(ReadinessCheck(
-            category="8. Servicios systemd",
-            check="Directorio systemd",
-            status="warn",
-            detail="infra/systemd/ no existe",
-        ))
-
-    # ── 9. Workspace ─────────────────────────────────────────
-    try:
-        from fastapi.testclient import TestClient
-        from workspace.server import app
-        c = TestClient(app)
-        r = c.get("/")
-        ws_ok = r.status_code == 200 and len(r.content) > 1000
-        report.add_check(ReadinessCheck(
-            category="9. Workspace y API",
-            check="Workspace HTML responde",
-            status="pass" if ws_ok else "fail",
-            detail=f"HTTP {r.status_code} | {len(r.content)} bytes",
-            recommendation="" if ws_ok else "Verifica que workspace/static/index.html existe",
-        ))
-
-        r2 = c.get("/health")
-        api_ok = r2.status_code == 200
-        report.add_check(ReadinessCheck(
-            category="9. Workspace y API",
-            check="API /health responde",
-            status="pass" if api_ok else "fail",
-            detail=f"HTTP {r2.status_code}",
-            recommendation="" if api_ok else "El servidor FastAPI no responde. Inicia con: uvicorn workspace.server:app",
-        ))
-
-        r3 = c.get("/api/datasets/status")
-        ds_ok = r3.status_code == 200
-        report.add_check(ReadinessCheck(
-            category="9. Workspace y API",
-            check="API /api/datasets/status",
-            status="pass" if ds_ok else "warn",
-            detail=f"HTTP {r3.status_code}",
-            recommendation="" if ds_ok else "Verifica que la DB esta inicializada",
-        ))
-    except Exception as e:
-        report.add_check(ReadinessCheck(
-            category="9. Workspace y API",
-            check="Servidor FastAPI",
-            status="warn",
-            detail=f"Error: {e}",
-            recommendation="Inicia el servidor: uvicorn workspace.server:app --host 0.0.0.0 --port 8000",
-        ))
-
-    # ── 10. Conectividad con proveedor de datos ───────────────
-    # Yahoo Finance
-    try:
-        ok, _ = _try_import("yfinance")
-        if ok:
-            import yfinance as yf
-            # Test rapido: descargar 1 vela
-            ticker = yf.Ticker("EURUSD=X")
-            hist = ticker.history(period="1d")
-            yf_ok = len(hist) > 0
-            report.add_check(ReadinessCheck(
-                category="10. Proveedor de datos",
-                check="Yahoo Finance",
-                status="pass" if yf_ok else "warn",
-                detail=f"Conectividad: {'OK' if yf_ok else 'Sin datos'}",
-                recommendation="" if yf_ok else "Verifica conexion a internet o firewall",
-            ))
-        else:
-            report.add_check(ReadinessCheck(
-                category="10. Proveedor de datos",
-                check="Yahoo Finance",
-                status="warn",
-                detail="yfinance no instalado",
-                recommendation="pip install yfinance para descargar datos automaticamente",
-            ))
-    except Exception as e:
-        report.add_check(ReadinessCheck(
-            category="10. Proveedor de datos",
-            check="Yahoo Finance",
-            status="warn",
-            detail=f"Error de conectividad: {e}",
-            recommendation="Verifica conexion a internet. Como alternativa, usa CSVs locales",
-        ))
-
-    # MT5
-    try:
-        ok, _ = _try_import("MetaTrader5")
-        if ok:
-            import MetaTrader5 as mt5
-            mt5_ok = mt5.initialize()
-            report.add_check(ReadinessCheck(
-                category="10. Proveedor de datos",
-                check="MetaTrader 5",
-                status="pass" if mt5_ok else "warn",
-                detail=f"MT5 inicializado: {mt5_ok}",
-                recommendation="" if mt5_ok else "Verifica que MetaTrader 5 esta corriendo y las credenciales son correctas",
-            ))
-            mt5.shutdown()
-        else:
-            report.add_check(ReadinessCheck(
-                category="10. Proveedor de datos",
-                check="MetaTrader 5",
-                status="warn",
-                detail="MetaTrader5 no instalado (solo Windows)",
-                recommendation="Opcional: instala MetaTrader5 en Windows para datos en tiempo real",
-            ))
-    except Exception:
-        report.add_check(ReadinessCheck(
-            category="10. Proveedor de datos",
-            check="MetaTrader 5",
-            status="warn",
-            detail="No disponible (posiblemente no es Windows)",
-        ))
-
-    # ── 11. Permisos de escritura ─────────────────────────────
-    write_dirs = ["CSVs", "models", "memory_db", "logs", "reports"]
-    for dirname in write_dirs:
-        dirpath = _BASE / dirname
-        if not dirpath.exists():
-            dirpath.mkdir(parents=True, exist_ok=True)
+    # Database: do not call the SQLite factory when its file is absent because
+    # the factory initializes schema and would make readiness mutate resources.
+    active_symbols: list[str] = []
+    database = db
+    if database is None:
         try:
-            test_file = dirpath / ".write_test"
-            test_file.write_text("test")
-            test_file.unlink()
+            engine = os.environ.get("ASTRA_DB_ENGINE", "sqlite").lower()
+            if engine in {"sqlite", ""} and not _existing_sqlite_path(root).is_file():
+                raise FileNotFoundError(f"Database does not exist: {_existing_sqlite_path(root)}")
+            from infra.db.database import get_database
+
+            database = get_database()
+        except Exception as exc:
             report.add_check(ReadinessCheck(
-                category="11. Permisos",
-                check=f"Escritura: {dirname}/",
-                status="pass",
-                detail="Permisos OK",
-            ))
-        except Exception as e:
-            report.add_check(ReadinessCheck(
-                category="11. Permisos",
-                check=f"Escritura: {dirname}/",
-                status="fail",
-                detail=f"Sin permisos: {e}",
-                recommendation=f"chmod 755 {dirname}/ o verifica el propietario del directorio",
+                "4. Base de datos", "Conexión y registry", "fail",
+                f"{type(exc).__name__}: {exc}",
+                "Inicialice la DB mediante el flujo explícito de first-run",
+                blocking=True,
+                evidence_state="MISSING/UNAVAILABLE",
             ))
 
-    # ── 12. Estructura de directorios ────────────────────────
-    missing_dirs = []
-    for dirname in _EXPECTED_DIRS:
-        dirpath = _BASE / dirname
-        if not dirpath.exists():
-            missing_dirs.append(dirname)
+    if database is not None:
+        try:
+            rows = database.get_supported_symbols()
+            active_symbols = [
+                row["symbol_code"] for row in rows
+                if str(row.get("status", "active")).lower() == "active"
+            ]
+            report.add_check(ReadinessCheck(
+                "4. Base de datos", "Conexión y registry",
+                "pass" if active_symbols else "pending",
+                f"{len(active_symbols)} símbolo(s) activo(s)",
+                "Configure al menos un símbolo productivo" if not active_symbols else "",
+                blocking=True,
+                evidence_state="QUERY_VERIFIED",
+            ))
+        except Exception as exc:
+            report.add_check(ReadinessCheck(
+                "4. Base de datos", "Conexión y registry", "fail",
+                f"Critical DB check raised {type(exc).__name__}: {exc}",
+                "Revise integridad y acceso a la DB",
+                blocking=True,
+                evidence_state="ERROR",
+            ))
+            database = None
 
-    if missing_dirs:
-        report.add_check(ReadinessCheck(
-            category="12. Estructura de directorios",
-            check="Directorios del proyecto",
-            status="warn",
-            detail=f"Faltan: {', '.join(missing_dirs)}",
-            recommendation="Algunos directorios se crean automaticamente. Si el error persiste, descomprime el ZIP completo",
-        ))
+    # Datasets: registry and persisted bytes must satisfy the canonical contract.
+    if database is not None:
+        for symbol in active_symbols:
+            for timeframe in tuple(required_timeframes):
+                try:
+                    entries = database.get_dataset_registry(symbol, timeframe)
+                    entry = entries[0] if entries else None
+                    evidence = evaluate_dataset_registry_entry(entry, base_dir=root)
+                    state = evidence["status"]
+                    check_status = "pass" if evidence["ready"] else (
+                        "pending" if state in {"missing", "pending"} else "fail"
+                    )
+                    report.add_check(ReadinessCheck(
+                        "5. Datasets", f"Dataset {symbol}/{timeframe}", check_status,
+                        "; ".join(evidence.get("reasons", [])) or (
+                            f"Canonical contract verified at {evidence.get('path')}"
+                        ),
+                        "Complete la rolling window canónica con datos reales"
+                        if not evidence["ready"] else "",
+                        blocking=True,
+                        evidence_state=state.upper(),
+                    ))
+                except Exception as exc:
+                    report.add_check(ReadinessCheck(
+                        "5. Datasets", f"Dataset {symbol}/{timeframe}", "fail",
+                        f"Critical dataset check raised {type(exc).__name__}: {exc}",
+                        "Revise registry y CSV persistido",
+                        blocking=True,
+                        evidence_state="ERROR",
+                    ))
+
+    # Models are mandatory for the H1 executable prediction cycle.
+    if require_models:
+        models_dir = root / "models" / "forex"
+        for symbol in active_symbols:
+            model_path = _find_model_path(models_dir, symbol)
+            evidence = evaluate_model_artifact(
+                model_path, symbol, checker=model_checker
+            )
+            warnings = evidence.get("warnings", [])
+            status = "pass" if evidence["valid"] and not warnings else (
+                "warn" if evidence["valid"] else "fail"
+            )
+            report.add_check(ReadinessCheck(
+                "6. Modelos", f"Modelo {symbol}/H1", status,
+                "; ".join(evidence.get("reasons", []) or warnings)
+                or f"Integrity verified: {model_path}",
+                "Proporcione un modelo válido; readiness nunca entrena ni recupera modelos"
+                if not evidence["valid"] else "",
+                blocking=not evidence["valid"],
+                evidence_state=evidence["state"],
+            ))
+
+    # Scheduler state must come from an actual recorded run, not the DB's
+    # superficial healthy boolean.
+    if database is not None:
+        try:
+            runs = database.get_scheduler_runs(limit=1)
+            last_run = runs[0] if runs else None
+            if not last_run:
+                scheduler_status = "pending"
+                detail = "No scheduler run has been recorded"
+            elif last_run.get("status") == "completed" and not last_run.get("errors_count"):
+                scheduler_status = "pass"
+                detail = f"Recorded completed run #{last_run.get('id')}"
+            elif last_run.get("status") == "running":
+                scheduler_status = "pending"
+                detail = f"Run #{last_run.get('id')} is still running"
+            else:
+                scheduler_status = "fail"
+                detail = (
+                    f"Last run status={last_run.get('status')!r}, "
+                    f"errors={last_run.get('errors_count')!r}"
+                )
+            report.add_check(ReadinessCheck(
+                "7. Scheduler", "Ejecución registrada", scheduler_status, detail,
+                "Ejecute y verifique un ciclo scheduler real",
+                blocking=True,
+                evidence_state="RECORDED_RUN" if last_run else "UNVERIFIED",
+            ))
+        except Exception as exc:
+            report.add_check(ReadinessCheck(
+                "7. Scheduler", "Ejecución registrada", "fail",
+                f"Critical scheduler check raised {type(exc).__name__}: {exc}",
+                "Revise la tabla scheduler_runs",
+                blocking=True,
+                evidence_state="ERROR",
+            ))
+
+    # Provider package availability is configuration evidence only.
+    yahoo_available, _ = _try_import("yfinance")
+    mt5_available, _ = _try_import("MetaTrader5")
+    configured = yahoo_available or (platform.system() == "Windows" and mt5_available)
+    report.add_check(ReadinessCheck(
+        "8. Proveedores", "Proveedor Forex configurado",
+        "pass" if configured else "fail",
+        f"Yahoo importable={yahoo_available}; MT5 importable={mt5_available}",
+        "Configure Yahoo en Linux o un proveedor soportado",
+        blocking=True,
+        evidence_state="AVAILABLE/CONFIGURED" if configured else "MISSING",
+    ))
+
+    if probe_providers:
+        try:
+            probe_result = (
+                provider_probe()
+                if provider_probe is not None
+                else _default_provider_probe(active_symbols)
+            )
+            operational = bool(probe_result.get("operational"))
+            report.add_check(ReadinessCheck(
+                "8. Proveedores", "Adquisición operacional verificada",
+                "pass" if operational else "fail",
+                f"{probe_result.get('provider', 'unknown')}: {probe_result.get('detail', '')}",
+                "Revise conectividad y el proveedor configurado",
+                blocking=True,
+                evidence_state="VERIFIED_OPERATIONAL" if operational else "VERIFIED_FAILED",
+            ))
+        except Exception as exc:
+            report.add_check(ReadinessCheck(
+                "8. Proveedores", "Adquisición operacional verificada", "fail",
+                f"Provider probe raised {type(exc).__name__}: {exc}",
+                "Revise conectividad y el proveedor configurado",
+                blocking=True,
+                evidence_state="ERROR",
+            ))
     else:
         report.add_check(ReadinessCheck(
-            category="12. Estructura de directorios",
-            check="Directorios del proyecto",
-            status="pass",
-            detail=f"Todos los {len(_EXPECTED_DIRS)} directorios existen",
+            "8. Proveedores", "Adquisición operacional verificada", "pending",
+            "Probe de red no ejecutado; disponibilidad de import no prueba operación",
+            "Ejecute explícitamente run_production_readiness(probe_providers=True)",
+            blocking=True,
+            evidence_state="UNVERIFIED",
         ))
 
-    # ── 13. Logs y rotacion ───────────────────────────────────
-    log_dir = _BASE / "logs"
-    log_files = list(log_dir.glob("*.log")) if log_dir.exists() else []
-    logrotate = _BASE / "infra" / "logging" / "logrotate.conf"
+    # Read-only filesystem and deployment-manifest evidence.  Runtime service
+    # installation belongs to A-07 and is intentionally not inferred here.
+    missing_dirs = [name for name in _EXPECTED_DIRS if not (root / name).is_dir()]
     report.add_check(ReadinessCheck(
-        category="13. Logs",
-        check="Directorio de logs",
-        status="pass" if log_dir.exists() else "warn",
-        detail=f"{len(log_files)} archivos de log",
-        recommendation="" if log_dir.exists() else "Crea logs/ manualmente",
+        "9. Filesystem", "Estructura de directorios",
+        "warn" if missing_dirs else "pass",
+        f"Faltan: {', '.join(missing_dirs)}" if missing_dirs else "Estructura esperada presente",
+        "Cree directorios mediante setup explícito; readiness es de solo lectura",
+        blocking=False,
     ))
+    non_writable = [
+        name for name in ("CSVs", "models", "memory_db", "logs", "reports")
+        if (root / name).exists() and not os.access(root / name, os.W_OK)
+    ]
     report.add_check(ReadinessCheck(
-        category="13. Logs",
-        check="Configuracion logrotate",
-        status="pass" if logrotate.exists() else "warn",
-        detail=str(logrotate) if logrotate.exists() else "No encontrado",
-        recommendation="" if logrotate.exists() else "Configura logrotate para evitar que los logs crezcan indefinidamente",
+        "9. Filesystem", "Permisos declarados de escritura",
+        "fail" if non_writable else "pass",
+        f"Sin acceso de escritura: {', '.join(non_writable)}" if non_writable
+        else "os.access confirma escritura en directorios existentes",
+        "Corrija propietario/permisos en la VM",
+        blocking=bool(non_writable),
+        evidence_state="READ_ONLY_PERMISSION_CHECK",
     ))
 
-    # ── 14. Recursos del sistema ──────────────────────────────
+    service_files = list((root / "infra" / "systemd").glob("*.service"))
+    report.add_check(ReadinessCheck(
+        "10. Deployment", "Manifiestos systemd",
+        "pass" if service_files else "warn",
+        f"{len(service_files)} archivo(s) .service; presencia no implica servicio activo",
+        "La instalación/activación real se valida fuera de A-08",
+        blocking=False,
+        evidence_state="MANIFEST_ONLY",
+    ))
+
+    workspace_contract = (root / "workspace" / "server.py").is_file()
+    report.add_check(ReadinessCheck(
+        "11. Workplace", "Contrato FastAPI presente",
+        "pass" if workspace_contract else "fail",
+        "workspace/server.py presente; no afirma proceso operativo"
+        if workspace_contract else "workspace/server.py ausente",
+        "Restaure Workplace/FastAPI",
+        blocking=not workspace_contract,
+        evidence_state="STATIC_CONTRACT_ONLY",
+    ))
+
     try:
         import psutil
-        mem = psutil.virtual_memory()
-        disk = psutil.disk_usage(str(_BASE))
+
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage(str(root))
+        enough_memory = memory.available > 512 * 1024 * 1024
+        enough_disk = disk.free > 1024 ** 3
         report.add_check(ReadinessCheck(
-            category="14. Recursos del sistema",
-            check="Memoria RAM",
-            status="pass" if mem.available > 512 * 1024 * 1024 else "warn",
-            detail=f"{mem.available / 1024**3:.1f} GB disponibles / {mem.total / 1024**3:.1f} GB total",
-            recommendation="" if mem.available > 512 * 1024 * 1024 else "Memoria baja. Cierra aplicaciones innecesarias",
+            "12. Recursos", "RAM disponible", "pass" if enough_memory else "warn",
+            f"{memory.available / 1024 ** 3:.1f} GB disponibles",
+            "Libere memoria" if not enough_memory else "",
+            blocking=False,
         ))
         report.add_check(ReadinessCheck(
-            category="14. Recursos del sistema",
-            check="Espacio en disco",
-            status="pass" if disk.free > 1 * 1024**3 else "warn",
-            detail=f"{disk.free / 1024**3:.1f} GB libres / {disk.total / 1024**3:.1f} GB total",
-            recommendation="" if disk.free > 1 * 1024**3 else "Espacio en disco bajo. Limpia logs y backups antiguos",
+            "12. Recursos", "Disco disponible", "pass" if enough_disk else "warn",
+            f"{disk.free / 1024 ** 3:.1f} GB libres",
+            "Libere espacio" if not enough_disk else "",
+            blocking=False,
         ))
-    except Exception:
+    except Exception as exc:
         report.add_check(ReadinessCheck(
-            category="14. Recursos del sistema",
-            check="Monitorizacion (psutil)",
-            status="warn",
-            detail="psutil no disponible",
-            recommendation="pip install psutil para monitoreo del sistema",
+            "12. Recursos", "Lectura de recursos", "warn",
+            f"No se pudo verificar: {type(exc).__name__}: {exc}",
+            "Instale/configure psutil",
+            blocking=False,
         ))
 
-    # Finalizar
     report.finalize()
     return report
