@@ -144,7 +144,9 @@ class YahooProvider:
                         "1h": 24, "4h": 6, "1d": 1, "1wk": 0.14}
         bpd = bars_per_day.get(interval, 24)
         needed_bars = bars * 4 if tf.upper() == "H4" else bars
-        days_needed = max(2, int(needed_bars / max(bpd, 0.1)) + 5)
+        # Calendar-day headroom covers Forex weekends and holidays. H4 asks
+        # for four H1 observations per output candle before closed-bar filtering.
+        days_needed = max(2, int(needed_bars / max(bpd, 0.1) * 1.5) + 10)
 
         # yfinance limite: datos intraday solo van 60 días atrás
         if interval in ("1m", "5m", "15m", "30m"):

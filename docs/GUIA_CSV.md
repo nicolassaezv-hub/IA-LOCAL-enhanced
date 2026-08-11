@@ -69,7 +69,7 @@ Si ya tienes un CSV de MT5 u otra fuente:
 migrar csv CSVs/H1/EURUSD_raw.csv EURUSD H1
 ```
 
-ASTRA normaliza los nombres de columnas, ajusta el tamaño a 5000 filas máximo y registra el par en el índice activo.
+ASTRA normaliza los nombres de columnas, ajusta el tamaño a 2000 filas máximo y registra el par en el índice activo.
 
 ## Errores comunes
 
@@ -82,9 +82,9 @@ ASTRA normaliza los nombres de columnas, ajusta el tamaño a 5000 filas máximo 
 
 ## Sistema Rolling Dataset (VI.6)
 
-Una vez migrado el CSV, ASTRA mantiene el tamaño fijo (5000 filas) automáticamente:
+Una vez migrado el CSV, ASTRA mantiene el tamaño fijo (2000 filas) automáticamente:
 - Al añadir una vela nueva, elimina la más antigua
-- Solo recalcula los indicadores de las últimas 60 filas (0.3s vs 60s reconstrucción total)
+- Recalcula y valida los indicadores técnicos obligatorios antes del reemplazo atómico
 - Actualización automática con `auto update` o mediante el scheduler
 
 ```

@@ -9,6 +9,8 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 
+from forex.data.rolling_dataset import ROLLING_WINDOW
+
 
 _INDEX_PATH = Path(__file__).parent.parent.parent / "astra_csv_index.json"
 _DEFAULT_CSV_ROOT = Path(__file__).parent.parent.parent / "CSVs"
@@ -40,7 +42,7 @@ def _normalize_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def migrate_csv(csv_path: str, pair: str = None, tf: str = None,
-                max_rows: int = 5000, output_dir: str = None) -> dict:
+                max_rows: int = ROLLING_WINDOW, output_dir: str = None) -> dict:
     """
     Migra un CSV existente al formato rolling.
     Normaliza columnas, ajusta tamaño y guarda en la ruta estándar.

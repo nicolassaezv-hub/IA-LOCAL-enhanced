@@ -446,6 +446,7 @@ ASTRA_DB_ENGINE=sqlite          # sqlite (default) | postgresql (futuro)
 ASTRA_API_HOST=0.0.0.0
 ASTRA_API_PORT=8000
 ASTRA_SCHEDULER_ENABLED=true
+# Contrato productivo fijo; otros valores se ignoran.
 ASTRA_ROLLING_WINDOW_SIZE=2000
 ASTRA_BACKUP_RETENTION_DAYS=7
 ASTRA_MONITOR_INTERVAL_SECONDS=30

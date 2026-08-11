@@ -14,6 +14,29 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 PASS = 0; FAIL = 0; TESTS = []
 
+
+def _write_ready_dataset(path, pair="EURUSD"):
+    import pandas as pd
+
+    from forex.data.indicator_delta import recalculate_tail_indicators
+    from forex.data.rolling_dataset import ROLLING_WINDOW, validate_dataset
+
+    values = pd.Series(range(ROLLING_WINDOW), dtype=float)
+    dataset = pd.DataFrame({
+        "timestamp": pd.date_range("2020-01-01", periods=ROLLING_WINDOW, freq="1h"),
+        "open": 1.08 + values / 10000,
+        "high": 1.085 + values / 10000,
+        "low": 1.075 + values / 10000,
+        "close": 1.082 + values / 10000,
+        "volume": 1000,
+        "pair": pair,
+    })
+    dataset = recalculate_tail_indicators(dataset, k=len(dataset))
+    validate_dataset(dataset, ROLLING_WINDOW)
+    dataset.to_csv(path, index=False)
+    return dataset
+
+
 def _run_test(name, fn):
     global PASS, FAIL
     start = time.time()
@@ -58,9 +81,9 @@ def test_init_first_run():
     from scheduler.autonomous_scheduler import run_init, DEFAULT_SYMBOLS
     tmpdir = tempfile.mkdtemp(); db = SQLiteDatabase(os.path.join(tmpdir,"t.db"))
     import pandas as pd
-    df = pd.DataFrame({"timestamp":pd.date_range("2026-01-01",periods=100,freq="1h"),"open":1.08,"high":1.085,"low":1.075,"close":1.082,"volume":1000,"pair":"EURUSD"})
-    with patch("scheduler.autonomous_scheduler.fetch_yfinance",return_value=df):
-        with patch("scheduler.autonomous_scheduler.save_dataset_csv",return_value="/tmp/t.csv"):
+    df = pd.DataFrame({"timestamp":pd.date_range("2020-01-01",periods=2000,freq="1h"),"open":1.08,"high":1.085,"low":1.075,"close":1.082,"volume":1000,"pair":"EURUSD"})
+    with patch("scheduler.autonomous_scheduler.PROJECT_ROOT",Path(tmpdir)):
+        with patch("scheduler.autonomous_scheduler.fetch_market_data",return_value=(df,"test")):
             results = run_init(db)
     assert len(results)==len(DEFAULT_SYMBOLS)*3
     assert all(r["action"]=="generated" for r in results)
@@ -75,15 +98,14 @@ def test_rolling_update():
     import pandas as pd
     old = pd.date_range("2026-01-01",periods=2000,freq="1h")
     old_df = pd.DataFrame({"timestamp":old,"open":1.08,"high":1.085,"low":1.075,"close":1.082,"volume":1000,"pair":"EURUSD"})
-    data_dir = PROJECT_ROOT/"forex"/"data"; data_dir.mkdir(parents=True,exist_ok=True)
+    data_dir = Path(tmpdir)/"forex"/"data"; data_dir.mkdir(parents=True,exist_ok=True)
     csv = data_dir/"EURUSD_H1.csv"; old_df.to_csv(csv,index=False)
     db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":"H1","candle_count":2000,"last_candle_timestamp":str(old[-1]),"blob_path":str(csv),"status":"ready"})
     new_all = pd.date_range("2026-01-01",periods=2003,freq="1h")
     new_df = pd.DataFrame({"timestamp":new_all,"open":1.08,"high":1.085,"low":1.075,"close":1.083,"volume":1000,"pair":"EURUSD"})
-    with patch("scheduler.autonomous_scheduler.fetch_yfinance",return_value=new_df):
-        with patch("scheduler.autonomous_scheduler.load_dataset_csv",return_value=old_df):
-            with patch("scheduler.autonomous_scheduler.save_dataset_csv",return_value=str(csv)):
-                result = run_rolling_update(db,"EURUSD","H1")
+    with patch("scheduler.autonomous_scheduler.PROJECT_ROOT",Path(tmpdir)):
+        with patch("scheduler.autonomous_scheduler.fetch_market_data",return_value=(new_df,"test")):
+            result = run_rolling_update(db,"EURUSD","H1")
     assert result["action"]=="updated",f"got {result}"
     assert result["total"]==ROLLING_WINDOW
     assert result["added"]==3
@@ -92,14 +114,16 @@ def test_rolling_update():
 def test_new_symbol_detection():
     from infra.db.database import SQLiteDatabase
     from scheduler.autonomous_scheduler import detect_new_symbols
+    import pandas as pd
     tmpdir = tempfile.mkdtemp(); db = SQLiteDatabase(os.path.join(tmpdir,"t.db"))
     db.add_symbol("EURUSD","EUR/USD",0.0001); db.add_symbol("NZDUSD","NZD/USD",0.0001)
     for tf in ["H1","H4","D1"]:
-        db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":100})
-    import pandas as pd
-    df = pd.DataFrame({"timestamp":pd.date_range("2026-01-01",periods=100,freq="1h"),"open":0.6,"high":0.605,"low":0.595,"close":0.602,"volume":1000,"pair":"NZDUSD"})
-    with patch("scheduler.autonomous_scheduler.fetch_yfinance",return_value=df):
-        with patch("scheduler.autonomous_scheduler.save_dataset_csv",return_value="/tmp/t.csv"):
+        existing_path = Path(tmpdir)/f"EURUSD_{tf}.csv"
+        existing_df = _write_ready_dataset(existing_path)
+        db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(existing_df["timestamp"].iloc[-1]),"blob_path":str(existing_path)})
+    df = pd.DataFrame({"timestamp":pd.date_range("2020-01-01",periods=2000,freq="1h"),"open":0.6,"high":0.605,"low":0.595,"close":0.602,"volume":1000,"pair":"NZDUSD"})
+    with patch("scheduler.autonomous_scheduler.PROJECT_ROOT",Path(tmpdir)):
+        with patch("scheduler.autonomous_scheduler.fetch_market_data",return_value=(df,"test")):
             gen = detect_new_symbols(db)
     assert len(gen)==3
     assert all(g["symbol"]=="NZDUSD" for g in gen)
@@ -111,14 +135,14 @@ def test_init_skip():
     tmpdir = tempfile.mkdtemp(); db = SQLiteDatabase(os.path.join(tmpdir,"t.db"))
     db.add_symbol("EURUSD","EUR/USD",0.0001)
     for tf in ["H1","H4","D1"]:
-        db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":500})
-    import pandas as pd
-    df = pd.DataFrame({"timestamp":pd.date_range("2026-01-01",periods=100,freq="1h"),"open":1.08,"high":1.085,"low":1.075,"close":1.082,"volume":1000,"pair":"EURUSD"})
-    with patch("scheduler.autonomous_scheduler.fetch_yfinance",return_value=df):
+        existing_path = Path(tmpdir)/f"EURUSD_{tf}.csv"
+        existing_df = _write_ready_dataset(existing_path)
+        db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(existing_df["timestamp"].iloc[-1]),"blob_path":str(existing_path)})
+    with patch("scheduler.autonomous_scheduler.PROJECT_ROOT",Path(tmpdir)):
         results = run_init(db)
     assert all(r["action"]=="skip" for r in results)
     for reg in db.get_dataset_registry():
-        assert reg["candle_count"]==500
+        assert reg["candle_count"]==2000
     shutil.rmtree(tmpdir)
 
 def test_api_health():
@@ -176,20 +200,19 @@ def test_e2e_cycle():
     tmpdir = tempfile.mkdtemp(); db = SQLiteDatabase(os.path.join(tmpdir,"t.db"))
     db.add_symbol("EURUSD","EUR/USD",0.0001)
     import pandas as pd
-    df = pd.DataFrame({"timestamp":pd.date_range("2026-01-01",periods=100,freq="1h"),"open":1.08,"high":1.085,"low":1.075,"close":1.082,"volume":1000,"pair":"EURUSD"})
-    data_dir = PROJECT_ROOT/"forex"/"data"; data_dir.mkdir(parents=True,exist_ok=True)
+    df = pd.DataFrame({"timestamp":pd.date_range("2020-01-01",periods=2000,freq="1h"),"open":1.08,"high":1.085,"low":1.075,"close":1.082,"volume":1000,"pair":"EURUSD"})
+    data_dir = Path(tmpdir)/"forex"/"data"; data_dir.mkdir(parents=True,exist_ok=True)
     csv = data_dir/"EURUSD_H1.csv"; df.to_csv(csv,index=False)
     for tf in ["H1","H4","D1"]:
-        db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":100,"last_candle_timestamp":str(df["timestamp"].iloc[-1]),"blob_path":str(csv)})
-    # Mock yfinance returns data with newer candles so rolling update finds them
-    new_dates = pd.date_range("2026-01-05 04:00", periods=103, freq="1h")
+        db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(df["timestamp"].iloc[-1]),"blob_path":str(csv)})
+    # Mock the canonical router boundary with newer candles.
+    new_dates = pd.date_range("2020-01-01", periods=2003, freq="1h")
     new_data = pd.DataFrame({"timestamp":new_dates,"open":1.08,"high":1.085,"low":1.075,"close":1.083,"volume":1000,"pair":"EURUSD"})
-    with patch("scheduler.autonomous_scheduler.fetch_yfinance",return_value=new_data):
-        with patch("scheduler.autonomous_scheduler.load_dataset_csv",return_value=df):
-            with patch("scheduler.autonomous_scheduler.save_dataset_csv",return_value=str(csv)):
-                with patch("scheduler.autonomous_scheduler.run_prediction",return_value={"action":"predicted"}):
-                    with patch("scheduler.autonomous_scheduler.detect_new_symbols",return_value=[]):
-                        result = run_cycle(db,"H1")
+    with patch("scheduler.autonomous_scheduler.PROJECT_ROOT",Path(tmpdir)):
+        with patch("scheduler.autonomous_scheduler.fetch_market_data",return_value=(new_data,"test")):
+            with patch("scheduler.autonomous_scheduler.run_prediction",return_value={"action":"predicted"}):
+                with patch("scheduler.autonomous_scheduler.detect_new_symbols",return_value=[]):
+                    result = run_cycle(db,"H1")
     assert result["timeframe"]=="H1" and result["symbols_processed"]==1
     assert result["predictions_generated"]==1 and result["errors_count"]==0
     runs = db.get_scheduler_runs()

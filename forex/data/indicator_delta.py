@@ -48,20 +48,25 @@ def _safe_bb(close: pd.Series, period: int = 20, std_dev: float = 2.0):
     return upper, lower
 
 
-_INDICATOR_WINDOWS = {
-    "RSI_14": 14 + 5,
-    "MACD": 26 + 9 + 5,
-    "MACD_signal": 26 + 9 + 5,
-    "MACD_hist": 26 + 9 + 5,
-    "ATR_14": 14 + 5,
-    "EMA20": 20 + 5,
-    "EMA50": 50 + 5,
-    "EMA200": 200 + 5,
-    "BB_upper": 20 + 5,
-    "BB_lower": 20 + 5,
+INDICATOR_MIN_HISTORY = {
+    "RSI_14": 14,
+    "MACD": 26,
+    "MACD_signal": 26 + 9,
+    "MACD_hist": 26 + 9,
+    "ATR_14": 14,
+    "EMA20": 20,
+    "EMA50": 50,
+    "EMA200": 200,
+    "BB_upper": 20,
+    "BB_lower": 20,
     "returns": 2,
-    "volatility_24h": 24 + 5,
+    "volatility_24h": 24,
 }
+
+# Delta recalculation uses five extra observations as numerical context.  Keep
+# this distinct from the minimum history used to validate indicator warm-up.
+_INDICATOR_CONTEXT_BUFFER = 5
+_INDICATOR_WINDOWS = dict(INDICATOR_MIN_HISTORY)
 
 
 def recalculate_tail_indicators(df: pd.DataFrame, k: int = 60) -> pd.DataFrame:
@@ -73,11 +78,17 @@ def recalculate_tail_indicators(df: pd.DataFrame, k: int = 60) -> pd.DataFrame:
     k: número de filas al final a recalcular
     Retorna el DataFrame con los indicadores de la cola actualizados.
     """
+    # Providers return OHLCV-only frames. Materialize the complete production
+    # indicator contract before the existing formulas recalculate the tail.
+    for column in INDICATOR_MIN_HISTORY:
+        if column not in df.columns:
+            df[column] = np.nan
+
     if len(df) < 2:
         return df
 
     # Contexto mínimo para que la recalculación sea precisa
-    max_window = max(_INDICATOR_WINDOWS.values())
+    max_window = max(_INDICATOR_WINDOWS.values()) + _INDICATOR_CONTEXT_BUFFER
     context_rows = min(len(df), k + max_window)
     tail_start_idx = len(df) - context_rows
 

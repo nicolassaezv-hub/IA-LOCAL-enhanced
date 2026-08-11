@@ -18,7 +18,7 @@ import os
 import json
 import logging
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -26,6 +26,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from infra.db.database import get_database, DatabaseAdapter
+from forex.data.data_router import DataRouter
+from forex.data.rolling_dataset import (
+    ROLLING_WINDOW,
+    RollingDataset,
+    exclude_incomplete_candles,
+)
 
 logging.basicConfig(
     level=os.environ.get("ASTRA_LOG_LEVEL", "INFO"),
@@ -34,7 +40,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("astra.scheduler")
 
-ROLLING_WINDOW = int(os.environ.get("ASTRA_ROLLING_WINDOW_SIZE", "2000"))
+_configured_window = os.environ.get("ASTRA_ROLLING_WINDOW_SIZE")
+if _configured_window not in (None, str(ROLLING_WINDOW)):
+    logger.warning(
+        "Ignoring ASTRA_ROLLING_WINDOW_SIZE=%s; production contract is %s",
+        _configured_window,
+        ROLLING_WINDOW,
+    )
+
+FETCH_BARS = ROLLING_WINDOW + 1
 TIMEFRAMES = ["H1", "H4", "D1"]
 PREDICTION_TIMEFRAME = "H1"
 DEFAULT_SYMBOLS = [
@@ -44,79 +58,31 @@ DEFAULT_SYMBOLS = [
     ("AUDUSD", "AUD/USD", 0.0001),
 ]
 
-# YFinance interval mapping
-YF_INTERVAL = {"H1": "1h", "H4": "1h", "D1": "1d"}
-YF_PERIOD = {"H1": "5d", "H4": "20d", "D1": "3mo"}
+def fetch_market_data(symbol: str, timeframe: str, count: int = FETCH_BARS):
+    """Fetch real market data through ASTRA's canonical provider router."""
+    router = DataRouter(symbol, timeframe)
+    df = router.fetch(bars=count, raise_on_failure=True)
+    return df, router.source_used
 
 
-def fetch_yfinance(symbol: str, timeframe: str, count: int = 2000):
-    """Download OHLCV data from Yahoo Finance. Returns DataFrame."""
-    import yfinance as yf
-    import pandas as pd
-
-    ticker_str = f"{symbol}=X" if len(symbol) == 6 else symbol
-    interval = YF_INTERVAL[timeframe]
-    period = YF_PERIOD[timeframe]
-
-    df = yf.download(ticker_str, interval=interval, period=period, progress=False)
-    if df is None or df.empty:
-        raise ValueError(f"No data returned for {symbol} {timeframe}")
-
-    # Handle MultiIndex columns from yfinance
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    df = df.reset_index()
-    col_map = {}
-    for c in df.columns:
-        cl = c.lower()
-        if "datetime" in cl or cl == "index" or cl == "date":
-            col_map[c] = "timestamp"
-        elif cl == "open":
-            col_map[c] = "open"
-        elif cl == "high":
-            col_map[c] = "high"
-        elif cl == "low":
-            col_map[c] = "low"
-        elif cl == "close":
-            col_map[c] = "close"
-        elif "volume" in cl:
-            col_map[c] = "volume"
-    df = df.rename(columns=col_map)
-
-    # Ensure required columns
-    for col in ["open", "high", "low", "close"]:
-        if col not in df.columns:
-            raise ValueError(f"Missing column {col} in yfinance data")
-    if "volume" not in df.columns:
-        df["volume"] = 0
-
-    df["pair"] = symbol
-    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True).dt.tz_localize(None)
-    df = df[["timestamp", "open", "high", "low", "close", "volume", "pair"]]
-
-    # For H4: resample 1h to 4h
-    if timeframe == "H4":
-        df = df.set_index("timestamp")
-        df = df.resample("4h").agg({
-            "open": "first", "high": "max", "low": "min",
-            "close": "last", "volume": "sum", "pair": "last"
-        }).dropna().reset_index()
-
-    # Trim to rolling window
-    if len(df) > count:
-        df = df.iloc[-count:]
-
-    return df
+def _dataset_path(symbol: str, timeframe: str, registry_entry: dict = None) -> Path:
+    canonical = PROJECT_ROOT / "forex" / "data" / f"{symbol}_{timeframe}.csv"
+    raw_path = registry_entry.get("blob_path") if registry_entry else None
+    if raw_path:
+        path = Path(raw_path)
+        path = path if path.is_absolute() else PROJECT_ROOT / path
+        if path.exists() or not canonical.exists():
+            return path
+    return canonical
 
 
 def save_dataset_csv(df, symbol: str, timeframe: str) -> str:
-    """Save DataFrame as CSV. Returns the file path."""
-    data_dir = PROJECT_ROOT / "forex" / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    path = data_dir / f"{symbol}_{timeframe}.csv"
-    df.to_csv(path, index=False)
-    return str(path)
+    """Compatibility wrapper using the canonical atomic dataset transaction."""
+    path = _dataset_path(symbol, timeframe)
+    dataset = RollingDataset(
+        symbol, timeframe, max_rows=ROLLING_WINDOW, csv_path=path
+    )
+    return dataset.apply(df, include_existing=False)["path"]
 
 
 def load_dataset_csv(symbol: str, timeframe: str):
@@ -127,6 +93,65 @@ def load_dataset_csv(symbol: str, timeframe: str):
         return None
     df = pd.read_csv(path, parse_dates=["timestamp"])
     return df
+
+
+def _registry_entry_is_ready(entry: dict | None) -> bool:
+    """Ready means exactly 2000 persisted candles and matching metadata."""
+    if not entry or entry.get("status") != "ready":
+        return False
+    if entry.get("candle_count") != ROLLING_WINDOW:
+        return False
+    if entry.get("rolling_window_size", ROLLING_WINDOW) != ROLLING_WINDOW:
+        return False
+    raw_path = entry.get("blob_path")
+    if not raw_path:
+        return False
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    if not path.is_file():
+        return False
+    try:
+        dataset = RollingDataset(
+            entry["symbol"],
+            entry["timeframe"],
+            max_rows=ROLLING_WINDOW,
+            csv_path=path,
+        )
+        if not dataset.load() or not dataset.validate()["ok"]:
+            return False
+        persisted = dataset.get_df()
+        return (
+            len(persisted) == ROLLING_WINDOW
+            and len(exclude_incomplete_candles(persisted, entry["timeframe"]))
+            == ROLLING_WINDOW
+            and str(persisted["timestamp"].iloc[-1])
+            == str(entry.get("last_candle_timestamp"))
+        )
+    except Exception:
+        return False
+
+
+def _upsert_successful_dataset(
+    db: DatabaseAdapter,
+    symbol: str,
+    timeframe: str,
+    stored: dict,
+) -> str:
+    """Update registry only after the dataset transaction has committed."""
+    candle_count = int(stored["rows"])
+    status = "ready" if candle_count == ROLLING_WINDOW else "pending"
+    db.upsert_dataset_registry({
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "candle_count": candle_count,
+        "rolling_window_size": ROLLING_WINDOW,
+        "last_candle_timestamp": str(stored["last_timestamp"]),
+        "blob_path": stored["path"],
+        "status": status,
+        "last_error": None,
+    })
+    return status
 
 
 def run_init(db: DatabaseAdapter):
@@ -143,99 +168,69 @@ def run_init(db: DatabaseAdapter):
         code = sym["symbol_code"]
         for tf in TIMEFRAMES:
             existing = db.get_dataset_registry(code, tf)
-            if existing and existing[0].get("status") == "ready":
+            entry = existing[0] if existing else None
+            if _registry_entry_is_ready(entry):
                 logger.info(f"SKIP {code} {tf} — already exists ({existing[0]['candle_count']} candles)")
                 results.append({"symbol": code, "timeframe": tf, "action": "skip"})
                 continue
 
             logger.info(f"GENERATE {code} {tf}...")
-            try:
-                df = fetch_yfinance(code, tf, ROLLING_WINDOW)
-                path = save_dataset_csv(df, code, tf)
-                db.upsert_dataset_registry({
-                    "symbol": code, "timeframe": tf,
-                    "candle_count": len(df),
-                    "rolling_window_size": ROLLING_WINDOW,
-                    "last_candle_timestamp": str(df["timestamp"].iloc[-1]),
-                    "blob_path": path,
-                    "status": "ready"
-                })
-                logger.info(f"  → {len(df)} candles saved to {path}")
-                results.append({"symbol": code, "timeframe": tf, "action": "generated", "candles": len(df)})
-            except Exception as e:
-                logger.error(f"  → FAILED: {e}")
-                db.upsert_dataset_registry({
-                    "symbol": code, "timeframe": tf, "status": "error",
-                    "last_error": str(e), "blob_path": ""
-                })
-                results.append({"symbol": code, "timeframe": tf, "action": "error", "error": str(e)})
+            result = run_rolling_update(db, code, tf)
+            results.append({"symbol": code, "timeframe": tf, **result})
 
     return results
 
 
 def run_rolling_update(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict:
-    """Update a rolling dataset: add new candles, remove oldest, maintain window size."""
-    import pandas as pd
-
+    """Acquire, validate and atomically update one production rolling dataset."""
     registry = db.get_dataset_registry(symbol, timeframe)
-    if not registry or registry[0].get("status") != "ready":
-        logger.info(f"SKIP {symbol} {timeframe} — no ready dataset, generating...")
-        df = fetch_yfinance(symbol, timeframe, ROLLING_WINDOW)
-        path = save_dataset_csv(df, symbol, timeframe)
-        db.upsert_dataset_registry({
-            "symbol": symbol, "timeframe": timeframe,
-            "candle_count": len(df), "rolling_window_size": ROLLING_WINDOW,
-            "last_candle_timestamp": str(df["timestamp"].iloc[-1]),
-            "blob_path": path, "status": "ready"
-        })
-        return {"action": "generated", "candles": len(df)}
-
-    reg = registry[0]
-    last_ts = reg.get("last_candle_timestamp")
-    logger.info(f"UPDATE {symbol} {timeframe} — last candle: {last_ts}")
+    entry = registry[0] if registry else None
+    path = _dataset_path(symbol, timeframe, entry)
+    existed_before = path.is_file()
+    logger.info(
+        "UPDATE %s %s - current=%s",
+        symbol,
+        timeframe,
+        entry.get("last_candle_timestamp") if entry else "none",
+    )
 
     try:
-        df_new = fetch_yfinance(symbol, timeframe, ROLLING_WINDOW)
-    except Exception as e:
-        logger.error(f"  → fetch failed: {e}")
-        return {"action": "error", "error": str(e)}
+        df_new, source = fetch_market_data(symbol, timeframe, FETCH_BARS)
+        dataset = RollingDataset(
+            symbol, timeframe, max_rows=ROLLING_WINDOW, csv_path=path
+        )
+        stored = dataset.update_frame(df_new)
+        status = _upsert_successful_dataset(db, symbol, timeframe, stored)
+    except Exception as exc:
+        logger.error("UPDATE FAILED %s %s: %s", symbol, timeframe, exc)
+        return {"action": "error", "error": str(exc)}
 
-    df_existing = load_dataset_csv(symbol, timeframe)
-    if df_existing is not None and last_ts:
-        last_dt = pd.to_datetime(last_ts)
-        new_candles = df_new[df_new["timestamp"] > last_dt]
-        if new_candles.empty:
-            logger.info(f"  → no new candles (last={last_ts})")
-            return {"action": "skip", "reason": "no_new_candles", "rows": len(df_existing)}
+    if status != "ready":
+        logger.warning(
+            "%s %s remains pending: %s/%s closed candles",
+            symbol, timeframe, stored["rows"], ROLLING_WINDOW,
+        )
+        return {
+            "action": "pending",
+            "status": status,
+            "total": stored["rows"],
+            "added": stored["added"],
+            "source": source,
+        }
 
-        # Append new, trim to window
-        combined = pd.concat([df_existing, new_candles], ignore_index=True)
-        combined = combined.drop_duplicates(subset=["timestamp"], keep="last")
-        combined = combined.sort_values("timestamp").reset_index(drop=True)
-        if len(combined) > ROLLING_WINDOW:
-            combined = combined.iloc[-ROLLING_WINDOW:]
-
-        path = save_dataset_csv(combined, symbol, timeframe)
-        db.upsert_dataset_registry({
-            "symbol": symbol, "timeframe": timeframe,
-            "candle_count": len(combined),
-            "rolling_window_size": ROLLING_WINDOW,
-            "last_candle_timestamp": str(combined["timestamp"].iloc[-1]),
-            "blob_path": path, "status": "ready"
-        })
-        added = len(new_candles)
-        logger.info(f"  → +{added} candles, total={len(combined)}")
-        return {"action": "updated", "added": added, "total": len(combined)}
-    else:
-        path = save_dataset_csv(df_new, symbol, timeframe)
-        db.upsert_dataset_registry({
-            "symbol": symbol, "timeframe": timeframe,
-            "candle_count": len(df_new),
-            "rolling_window_size": ROLLING_WINDOW,
-            "last_candle_timestamp": str(df_new["timestamp"].iloc[-1]),
-            "blob_path": path, "status": "ready"
-        })
-        return {"action": "generated", "candles": len(df_new)}
+    action = "updated" if existed_before else "generated"
+    logger.info(
+        "%s %s %s: +%s, total=%s, source=%s",
+        symbol, timeframe, action, stored["added"], stored["rows"], source,
+    )
+    return {
+        "action": action,
+        "status": status,
+        "total": stored["rows"],
+        "candles": stored["rows"],
+        "added": stored["added"],
+        "source": source,
+    }
 
 
 def _resolve_prediction_dataset(
@@ -364,21 +359,12 @@ def detect_new_symbols(db: DatabaseAdapter) -> list:
         code = sym["symbol_code"]
         for tf in TIMEFRAMES:
             existing = db.get_dataset_registry(code, tf)
-            if not existing or existing[0].get("status") != "ready":
+            entry = existing[0] if existing else None
+            if not _registry_entry_is_ready(entry):
                 logger.info(f"NEW SYMBOL DETECTED: {code} {tf} — generating...")
-                try:
-                    df = fetch_yfinance(code, tf, ROLLING_WINDOW)
-                    path = save_dataset_csv(df, code, tf)
-                    db.upsert_dataset_registry({
-                        "symbol": code, "timeframe": tf,
-                        "candle_count": len(df),
-                        "rolling_window_size": ROLLING_WINDOW,
-                        "last_candle_timestamp": str(df["timestamp"].iloc[-1]),
-                        "blob_path": path, "status": "ready"
-                    })
-                    generated.append({"symbol": code, "timeframe": tf, "candles": len(df)})
-                except Exception as e:
-                    logger.error(f"  → failed: {e}")
+                result = run_rolling_update(db, code, tf)
+                if result.get("action") != "error":
+                    generated.append({"symbol": code, "timeframe": tf, **result})
     return generated
 
 
@@ -493,8 +479,13 @@ def main():
         return
 
     if args.init:
-        results = run_init(db)
-        print(json.dumps({"ok": True, "init": results}, indent=2, default=str))
+        result = run_init_with_deployment_check(db)
+        payload = {"ok": True, "init": result["init_results"]}
+        if "deployment" in result:
+            payload["deployment"] = result["deployment"]
+        if "deployment_error" in result:
+            payload["deployment_error"] = result["deployment_error"]
+        print(json.dumps(payload, indent=2, default=str))
         return
 
     if args.timeframe:
@@ -507,10 +498,6 @@ def main():
         return
 
     parser.print_help()
-
-
-if __name__ == "__main__":
-    main()
 
 
 # ─────────────────────────────────────────────────────────
@@ -557,3 +544,7 @@ def run_init_with_deployment_check(db: DatabaseAdapter, force: bool = False) -> 
     else:
         logger.info("No es primera instalacion — saltando First Deployment Experience")
         return {"init_results": init_results}
+
+
+if __name__ == "__main__":
+    main()

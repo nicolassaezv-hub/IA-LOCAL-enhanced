@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Optional
 
 
+class DataProviderError(RuntimeError):
+    """No configured real provider could return market data."""
+
+
 _FOREX_PAIRS = {
     "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "NZDUSD",
     "USDCAD", "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD",
@@ -58,14 +62,17 @@ class DataRouter:
         self.tf = tf.upper()
         self.asset_type = _detect_asset_type(self.pair)
         self._source_used: Optional[str] = None
+        self._attempt_errors: list[str] = []
 
     def fetch(self, bars: int = 500, save_csv: bool = False,
-              csv_dir: str = None) -> Optional[pd.DataFrame]:
+              csv_dir: str = None,
+              raise_on_failure: bool = False) -> Optional[pd.DataFrame]:
         """
         Descarga datos del activo.
         Enruta automáticamente a MT5 (forex), Yahoo (fallback) o Binance (crypto).
         """
         df = None
+        self._attempt_errors = []
 
         if self.asset_type == "crypto":
             df, source = self._fetch_crypto(bars)
@@ -73,6 +80,12 @@ class DataRouter:
             df, source = self._fetch_forex(bars)
 
         self._source_used = source
+
+        if df is None and raise_on_failure:
+            detail = "; ".join(self._attempt_errors) or "no provider available"
+            raise DataProviderError(
+                f"DataRouter({self.pair}/{self.tf}) failed: {detail}"
+            )
 
         if df is not None and save_csv:
             self._save(df, csv_dir)
@@ -85,11 +98,15 @@ class DataRouter:
             from forex.data.mt5_provider import get_mt5_provider
             mt5 = get_mt5_provider()
             if mt5.is_available():
-                df = mt5.fetch(self.pair, self.tf, bars)
+                # DataRouter owns fallback and must report the provider used.
+                df = mt5.fetch(self.pair, self.tf, bars, allow_fallback=False)
                 if df is not None and len(df) > 0:
                     return df, "MT5"
-        except Exception:
-            pass
+                self._attempt_errors.append("MT5 returned no data")
+            else:
+                self._attempt_errors.append("MT5 unavailable")
+        except Exception as exc:
+            self._attempt_errors.append(f"MT5: {exc}")
 
         try:
             from forex.data.yahoo_provider import get_yahoo_provider
@@ -98,8 +115,11 @@ class DataRouter:
                 df = yp.fetch(self.pair, self.tf, bars)
                 if df is not None and len(df) > 0:
                     return df, "Yahoo"
-        except Exception:
-            pass
+                self._attempt_errors.append("Yahoo returned no data")
+            else:
+                self._attempt_errors.append("Yahoo unavailable")
+        except Exception as exc:
+            self._attempt_errors.append(f"Yahoo: {exc}")
 
         return None, "none"
 
@@ -112,17 +132,24 @@ class DataRouter:
                 df = bp.fetch(self.pair, self.tf, bars)
                 if df is not None and len(df) > 0:
                     return df, "Binance"
-        except Exception:
-            pass
+                self._attempt_errors.append("Binance returned no data")
+            else:
+                self._attempt_errors.append("Binance unavailable")
+        except Exception as exc:
+            self._attempt_errors.append(f"Binance: {exc}")
 
         try:
             from forex.data.yahoo_provider import get_yahoo_provider
             yp = get_yahoo_provider()
-            df = yp.fetch(self.pair, self.tf, bars)
-            if df is not None and len(df) > 0:
-                return df, "Yahoo"
-        except Exception:
-            pass
+            if yp.is_available():
+                df = yp.fetch(self.pair, self.tf, bars)
+                if df is not None and len(df) > 0:
+                    return df, "Yahoo"
+                self._attempt_errors.append("Yahoo returned no data")
+            else:
+                self._attempt_errors.append("Yahoo unavailable")
+        except Exception as exc:
+            self._attempt_errors.append(f"Yahoo: {exc}")
 
         return None, "none"
 
@@ -135,6 +162,10 @@ class DataRouter:
     @property
     def source_used(self) -> Optional[str]:
         return self._source_used
+
+    @property
+    def attempt_errors(self) -> tuple[str, ...]:
+        return tuple(self._attempt_errors)
 
     def info(self) -> str:
         return (

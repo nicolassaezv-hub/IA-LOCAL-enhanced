@@ -67,24 +67,28 @@ class MT5Provider:
         except Exception:
             return False
 
-    def fetch(self, pair: str, tf: str = "H1", bars: int = 500) -> Optional[pd.DataFrame]:
+    def fetch(self, pair: str, tf: str = "H1", bars: int = 500,
+              allow_fallback: bool = True) -> Optional[pd.DataFrame]:
         """
         Descarga datos históricos de MT5.
         Con fallback automático a Yahoo si MT5 no está disponible.
         """
         if not self._ensure_init():
-            return self._fallback(pair, tf, bars)
+            return self._fallback(pair, tf, bars) if allow_fallback else None
 
         try:
             import MetaTrader5 as mt5
             tf_code = _MT5_TIMEFRAMES.get(tf.upper(), 16385)  # default H1
             rates = mt5.copy_rates_from_pos(pair.upper(), tf_code, 0, bars)
             if rates is None or len(rates) == 0:
-                return self._fallback(pair, tf, bars)
+                return self._fallback(pair, tf, bars) if allow_fallback else None
             return _normalize_mt5_df(rates, pair)
         except Exception as e:
-            print(f"[MT5Provider] Error: {e} — usando fallback Yahoo")
-            return self._fallback(pair, tf, bars)
+            if allow_fallback:
+                print(f"[MT5Provider] Error MT5: {e} — usando fallback Yahoo")
+                return self._fallback(pair, tf, bars)
+            print(f"[MT5Provider] Error MT5: {e}")
+            return None
 
     def _fallback(self, pair: str, tf: str, bars: int) -> Optional[pd.DataFrame]:
         """Fallback a Yahoo Finance cuando MT5 no está disponible."""

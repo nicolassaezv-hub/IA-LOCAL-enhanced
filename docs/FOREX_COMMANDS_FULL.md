@@ -107,7 +107,7 @@ ranking = ranker.rank([sig1, sig2, ...])
 rd = get_rolling_dataset(pair, tf)
 rd.load()               # carga desde CSV
 rd.initialize(df)       # primer carga desde DataFrame
-rd.update(candle_dict)  # añade vela, mantiene max_rows=5000
+rd.update(candle_dict)  # añade vela, mantiene max_rows=2000
 v = rd.validate()       # {'ok': bool, 'rows': int, ...}
 rd.info()               # str resumen
 ```

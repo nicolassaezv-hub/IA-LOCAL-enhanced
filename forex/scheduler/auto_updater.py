@@ -17,7 +17,7 @@ _INDEX_PATH = Path(__file__).parent.parent.parent / "astra_csv_index.json"
 class AutoUpdater:
     """
     Actualiza incrementalmente los datasets de pares activos.
-    Usa RollingDataset para actualización eficiente (0.3s vs 60s reconstrucción).
+    Usa RollingDataset para actualización validada, bloqueada y atómica.
     """
 
     def __init__(self):
@@ -55,17 +55,8 @@ class AutoUpdater:
 
             from forex.data.rolling_dataset import RollingDataset
             rd = RollingDataset(pair, tf)
-            if rd.load():
-                # Dataset existe — actualizar incrementalmente
-                added = 0
-                for _, row in df_new.iterrows():
-                    if rd.update(row.to_dict()):
-                        added += 1
-                result["rows_added"] = added
-            else:
-                # Primera vez — inicializar
-                rd.initialize(df_new)
-                result["rows_added"] = len(df_new)
+            stored = rd.update_frame(df_new)
+            result["rows_added"] = stored["added"]
 
             result["ok"] = True
             self._last_update[f"{pair}_{tf}"] = datetime.now()

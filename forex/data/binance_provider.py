@@ -3,7 +3,6 @@ VI.7.C — Binance Crypto Provider
 Datos de criptomonedas via python-binance (API pública, sin auth para datos históricos).
 """
 import pandas as pd
-from datetime import datetime, timedelta
 from typing import Optional
 
 
@@ -83,19 +82,43 @@ class BinanceProvider:
 
         p = pair.upper().replace("_", "").replace("/", "")
         interval = _TF_MAP.get(tf.upper(), "1h")
-        limit = min(bars, 1000)
-
         try:
-            resp = requests.get(
-                _BINANCE_BASE,
-                params={"symbol": p, "interval": interval, "limit": limit},
-                timeout=10
-            )
-            resp.raise_for_status()
-            klines = resp.json()
-            if not klines or isinstance(klines, dict):
+            requested = max(1, int(bars))
+            remaining = requested + 1  # one slot may be the current open kline
+            end_time = None
+            batches = []
+            while remaining > 0:
+                params = {
+                    "symbol": p,
+                    "interval": interval,
+                    "limit": min(remaining, 1000),
+                }
+                if end_time is not None:
+                    params["endTime"] = end_time
+                resp = requests.get(_BINANCE_BASE, params=params, timeout=10)
+                resp.raise_for_status()
+                batch = resp.json()
+                if not batch or isinstance(batch, dict):
+                    break
+                batches.extend(batch)
+                remaining -= len(batch)
+                oldest_open = int(batch[0][0])
+                next_end_time = oldest_open - 1
+                if len(batch) < params["limit"] or next_end_time == end_time:
+                    break
+                end_time = next_end_time
+
+            if not batches:
                 return None
-            return _normalize_binance_klines(klines, pair)
+            now_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
+            closed = [row for row in batches if int(row[6]) <= now_ms]
+            if not closed:
+                return None
+            df = _normalize_binance_klines(closed, pair)
+            return (df.drop_duplicates(subset=["timestamp"], keep="last")
+                      .sort_values("timestamp")
+                      .tail(requested)
+                      .reset_index(drop=True))
         except Exception as e:
             print(f"[BinanceProvider] Error descargando {pair}/{tf}: {e}")
             return None

@@ -236,11 +236,11 @@ def run_pipeline_report(
                 duration_ms=(time.time() - t0) * 1000,
             ))
         else:
-            # Intentar Yahoo Finance
+            # Adquirir mediante el router canónico (MT5/Yahoo o Binance/Yahoo).
             try:
-                from scheduler.autonomous_scheduler import fetch_yfinance
-                df = fetch_yfinance(symbol, timeframe, count=2000)
-                data_source = f"Yahoo Finance: {len(df)} velas"
+                from scheduler.autonomous_scheduler import fetch_market_data
+                df, provider = fetch_market_data(symbol, timeframe)
+                data_source = f"{provider}: {len(df)} velas"
                 report.add_stage(StageResult(
                     stage="1. Descarga de datos",
                     status="pass",
@@ -334,7 +334,8 @@ def run_pipeline_report(
             # Guardar CSV descargado
             from scheduler.autonomous_scheduler import save_dataset_csv
             csv_path = save_dataset_csv(df, symbol, timeframe)
-            row_count = len(df)
+            import pandas as pd
+            row_count = len(pd.read_csv(csv_path))
         else:
             # Verificar CSV local
             import pandas as pd
