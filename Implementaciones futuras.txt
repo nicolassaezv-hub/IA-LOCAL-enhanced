@@ -6,8 +6,8 @@ La barra de personalizacion (el setting del glow button, color de la interfaz y 
 
 
 FUNCIONAL:
+✅ ## Kernel Lab
 El Prediction Lab debe revisar que el prompt (de prediccion) se cumple usando la variable propuesta y que  se añade Clasificacion Binaria por Kernalizacion si el sistema de prediccion es valido
-
 En el caso que el dataset y el prompt sean validos, se procede con la Clasificacion binaria y la muestra que avalen los resultados (graficos de Kernels, Matriz de confusion y fiabilidad del sistema de prediccion)
  Aquellos que pasaron y tienen todo listo tienen una seccion dentro de la barra del Prediction Lab)
 
