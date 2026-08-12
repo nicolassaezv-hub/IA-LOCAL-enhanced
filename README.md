@@ -2,17 +2,30 @@
 
 # Peticiones Personales
 
-- Sube los archivos desde el C:\ASTRA
+- Actualiza constantemente
 
-- Sigue avanzando con el [Download File](astra-roadmap-v4.html)
+- Sigue avanzando con la rama forex, consigue como minimo:
 
-- Usa Base44 para ir completando las ramificaciones/partes del proyecto, de no estar disponible pasa luego a Github Copilot, Bolt y Replit (ve turnandote como lo veas a tu gusto)
+  - Una prediccion real en timeframes H1/H4/D1
+  - Conexion correcta entre el proyecto y la API VM para finalizar la automatizacion de la rama
+  - Integrar informe automatico en primera iteracion entre la rama forex y el servidor de flujo automatizado
 
-- Para comprobaciones de calidad de usuario (XUA) o estetica consulta con ChatGPT
+- Configura el servidor VM a usar, aplica tests end-end para verificar viabilidad y finalizar la consolidacion del proyecto (Version Final)
+- Usa herramientas para avanzar
+
+   - ### Base44
+   - ### Replit
+   - ### Bolt.new
+   - ### Lovable
+   - ### Github Copilot (desde repositorio)
+   - ### Claude (solo de diagnostico)
+
+- Para comprobaciones de calidad de usuario (XUA) o estetica consulta con Base44, asegurate de mencionar que la estetica es propia del Workspace en servidor (modificar HTML constantemente)
+
 
 ## Informacion General
 
-Este Workflow IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, ChatGPT y analisis activo de Copilot con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI con fijacion en procesamiento de archivos y analisis intensivo de datasets del area del mercado FOREX (Divisas y Materias Primas).
+Este Workflow IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, Replit, Copilot, Chatgpt entre otros servicios digitales con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI con fijacion en procesamiento de archivos y analisis intensivo de datasets del area del mercado FOREX (Divisas y Materias Primas).
 
 Todo, en base a un sistema local PC de las siguientes especificaciones
 
@@ -34,15 +47,15 @@ GPU:
 
 Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 
-- name: copi
+- name: NICO'S LOCAL AI
 
 - ID: key_3uC3DbwL1KZFUHJa
 
-- model="gpt-3.5-turbo"
+- model="llama-3.3-70b-versatile"
 
 # Estructura
 
-Esta IA Local se compone de mas de 40 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
+Esta IA Local se compone de mas de 200 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
 El programa puente (main.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
 
 Se incluyen 5 codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python.
@@ -51,7 +64,7 @@ Se incluyen 5 codigos adicionales para verificar la integridad de los modulos pr
 
 - check_skeleton
 
-- check
+- check_pipeline
 Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
