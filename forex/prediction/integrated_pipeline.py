@@ -15,6 +15,7 @@ Modos:
 
 import logging
 import math
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -199,6 +200,64 @@ class ForexIntegratedPipeline:
             return getattr(self, "risk_config", None)
         return resolver.resolve(pair).to_engine_config()
 
+    def _dataset_provenance(
+        self, filepath: str, df: pd.DataFrame, *, horizon: int | None = None
+    ) -> dict:
+        configured = getattr(self, "closed_loop_dataset_provenance", None)
+        if configured:
+            provenance = dict(configured)
+        else:
+            timestamp = df["timestamp"].iloc[-1] if "timestamp" in df.columns else None
+            provenance = {
+                "path": str(Path(filepath).resolve()),
+                "candle_count": len(df),
+                "last_candle_timestamp": (
+                    pd.Timestamp(timestamp).isoformat() if timestamp is not None else None
+                ),
+            }
+        if horizon is not None:
+            provenance["training_horizon_candles"] = int(horizon)
+        return provenance
+
+    def _promote_initial_training(
+        self,
+        model: object,
+        *,
+        pair: str,
+        filepath: str,
+        df: pd.DataFrame,
+        feature_names: list[str],
+        horizon: int | None = None,
+        metadata: dict | None = None,
+    ) -> dict:
+        from forex.prediction.retrain_manager import RetrainManager
+
+        database = getattr(self, "closed_loop_database", None)
+        manager = (
+            RetrainManager(database=database, storage=self.storage)
+            if database is not None
+            else RetrainManager(storage=self.storage)
+        )
+        return manager.promote_initial_model(
+            model,
+            pair=pair,
+            timeframe=PREDICTION_TIMEFRAME,
+            dataset_provenance=self._dataset_provenance(
+                filepath, df, horizon=horizon
+            ),
+            feature_names=feature_names,
+            metadata=metadata,
+        )
+
+    def _model_identity(self, pair: str) -> str | None:
+        """Return only the checksum of the exact symbol alias requested."""
+        base_dir = getattr(self.storage, "base_dir", None)
+        if base_dir is None or not hasattr(self.storage, "checksum"):
+            return None
+        clean = "".join(character for character in pair.upper() if character.isalnum())
+        latest = Path(base_dir) / f"latest_{clean}.pkl"
+        return self.storage.checksum(latest) if latest.is_file() else None
+
     # ─────────────────────────────────────────────────────────
     # TRAIN — con WFV deslizante + MTF opcional
     # ─────────────────────────────────────────────────────────
@@ -262,7 +321,27 @@ class ForexIntegratedPipeline:
         print(f"\n[PIPELINE] Par: {pair} | Horizon: {horizon} | RR: {rr_ratio}{mtf_note}")
 
         if use_wfv and len(X) >= 300:
-            trainer, wfv_r, acc, prec = train_with_wfv(X, y, pair=pair, save=True, force=force)
+            trainer, wfv_r, acc, prec = train_with_wfv(
+                X, y, pair=pair, save=False, force=force
+            )
+            eligible = bool(force or wfv_r.get("wfv_passed", False))
+            deployed = bool(
+                eligible
+                and trainer.model is not None
+                and getattr(trainer.model, "sufficient", False)
+            )
+            if deployed:
+                promotion = self._promote_initial_training(
+                    trainer.model,
+                    pair=pair,
+                    filepath=filepath,
+                    df=df,
+                    feature_names=list(X.columns),
+                    horizon=horizon,
+                    metadata={"accuracy": acc, "precision": prec, "wfv": wfv_r},
+                )
+                deployed = promotion.get("status") == "PROMOTED"
+            wfv_r["model_deployed"] = deployed
             self.predictor.invalidate_cache(pair=pair)
             return {
                 "type":        "training_complete",
@@ -276,11 +355,26 @@ class ForexIntegratedPipeline:
                 "precision":   round(prec, 4),
                 "wfv":         wfv_r,
                 "model_valid": getattr(trainer.model, "sufficient", False) if trainer.model else False,
-                "model":       "guardado" if prec >= 0.65 else "NO guardado (prec < 65%)",
+                "model":       "guardado" if deployed else "NO guardado",
             }
         else:
             trainer   = ForexEnsembleTrainer(pair=pair)
-            acc, prec = trainer.train(X, y, save=True)
+            acc, prec = trainer.train(X, y, save=False)
+            deployed = bool(
+                trainer.model is not None
+                and getattr(trainer.model, "sufficient", False)
+            )
+            if deployed:
+                promotion = self._promote_initial_training(
+                    trainer.model,
+                    pair=pair,
+                    filepath=filepath,
+                    df=df,
+                    feature_names=list(X.columns),
+                    horizon=horizon,
+                    metadata={"accuracy": acc, "precision": prec},
+                )
+                deployed = promotion.get("status") == "PROMOTED"
             self.predictor.invalidate_cache(pair=pair)
             return {
                 "type":        "training_complete",
@@ -290,7 +384,7 @@ class ForexIntegratedPipeline:
                 "accuracy":    round(acc,  4),
                 "precision":   round(prec, 4),
                 "model_valid": getattr(trainer.model, "sufficient", False) if trainer.model else False,
-                "model":       "guardado" if prec >= 0.65 else "NO guardado (prec < 65%)",
+                "model":       "guardado" if deployed else "NO guardado",
             }
 
     # ─────────────────────────────────────────────────────────
@@ -555,27 +649,73 @@ class ForexIntegratedPipeline:
                 signal["position_size"] = _r.position_size
                 signal["rr_ratio"]      = _r.rr_ratio
 
-        # ── V.14: Registrar predicción para Outcome Tracker ─────────
+        # ── V.14: persist canonical prediction evidence ─────────────
         try:
             from forex.prediction.outcome_tracker import OutcomeTracker
             if _sig in ("BUY", "SELL"):
                 _price = float(df["close"].iloc[-1])
-                OutcomeTracker().record_prediction(
+                candle_timestamp = (
+                    df["timestamp"].iloc[-1]
+                    if "timestamp" in df.columns
+                    else None
+                )
+                candle_identity = None
+                if candle_timestamp is not None:
+                    candle_identity = pd.Timestamp(candle_timestamp)
+                    if candle_identity.tzinfo is None:
+                        candle_identity = candle_identity.tz_localize("UTC")
+                    else:
+                        candle_identity = candle_identity.tz_convert("UTC")
+                    candle_identity = candle_identity.isoformat()
+                horizon, _ = self._pair_params(pair)
+                model_identity = self._model_identity(pair)
+                tracker_database = getattr(self, "closed_loop_database", None)
+                tracker = (
+                    OutcomeTracker(database=tracker_database)
+                    if tracker_database is not None
+                    else OutcomeTracker()
+                )
+                provenance = getattr(
+                    self,
+                    "closed_loop_dataset_provenance",
+                    {
+                        "path": str(filepath),
+                        "last_candle_timestamp": candle_identity,
+                    },
+                )
+                prediction_id = tracker.record_prediction(
                     pair=pair, timeframe=PREDICTION_TIMEFRAME, signal=_sig,
                     entry_price=_price,
                     reliability_score=float(
                         signal.get("reliability_score", _conf * 100.0)
                     ),
+                    candle_timestamp=candle_identity,
+                    raw_action=raw_action,
+                    horizon_candles=horizon,
+                    model_identity=model_identity,
+                    dataset_provenance=provenance,
                 )
+                if prediction_id in (None, "", -1):
+                    raise RuntimeError("Outcome Tracker returned an invalid prediction identity")
+                if isinstance(prediction_id, str):
+                    signal["prediction_id"] = prediction_id
+                signal["candle_timestamp"] = candle_identity
+                signal["horizon_candles"] = horizon
+                signal["model_identity"] = model_identity
         except Exception as exc:
             failure = _protection_failure(
                 "outcome_tracker",
                 "outcome_tracker_record_failed",
                 "Outcome Tracker no pudo registrar la predicción autorizada.",
-                critical=False,
+                critical=True,
                 exc=exc,
             )
             protection_errors.append(failure)
+            if _sig in _TRADE_ACTIONS:
+                safeguard_failures.append(failure)
+                _sig = "HOLD"
+                signal["action"] = _sig
+                signal["signal"] = _sig
             logger.warning(
                 "OutcomeTracker no registró la predicción: %s", exc, exc_info=True
             )
@@ -600,8 +740,7 @@ class ForexIntegratedPipeline:
         pair = _infer_pair(df, pair, filepath=filepath)
         df   = build_features(df)
 
-        from .model_storage import ModelStorage
-        storage = ModelStorage()
+        storage = self.storage
 
         votes       = []
         horizons    = [5, 10, 20]
@@ -621,7 +760,15 @@ class ForexIntegratedPipeline:
                 trainer = ForexEnsembleTrainer(pair=pair)
                 trainer.train(X, y, save=False)
                 if trainer.model is not None and trainer.model.sufficient:
-                    storage.save_model(trainer.model, name=model_name, pair=f"{pair}_h{h}")
+                    self._promote_initial_training(
+                        trainer.model,
+                        pair=f"{pair}_h{h}",
+                        filepath=filepath,
+                        df=df,
+                        feature_names=list(X.columns),
+                        horizon=h,
+                        metadata={"model_name": model_name},
+                    )
                 model = trainer.model
             else:
                 model = storage.load_model(pair=f"{pair}_h{h}")
@@ -706,7 +853,29 @@ class ForexIntegratedPipeline:
         tuner = ForexHyperparameterTuner(pair=pair)
         best  = tuner.tune(X_tr, y_tr, X_val, y_val, n_trials=n_trials)
 
-        trainer, wfv_r, acc, prec = train_with_wfv(X, y, pair=pair, save=True)
+        trainer, wfv_r, acc, prec = train_with_wfv(X, y, pair=pair, save=False)
+        deployed = bool(
+            wfv_r.get("wfv_passed", False)
+            and trainer.model is not None
+            and getattr(trainer.model, "sufficient", False)
+        )
+        if deployed:
+            promotion = self._promote_initial_training(
+                trainer.model,
+                pair=pair,
+                filepath=filepath,
+                df=df,
+                feature_names=list(X.columns),
+                horizon=hz,
+                metadata={
+                    "accuracy": acc,
+                    "precision": prec,
+                    "wfv": wfv_r,
+                    "tuning_trials": n_trials,
+                },
+            )
+            deployed = promotion.get("status") == "PROMOTED"
+        wfv_r["model_deployed"] = deployed
         self.predictor.invalidate_cache(pair=pair)
 
         X_pred = DatasetBuilder(df).predict_features(n_rows=1)

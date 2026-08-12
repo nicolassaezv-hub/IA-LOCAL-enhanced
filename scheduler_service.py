@@ -18,6 +18,21 @@ logging.basicConfig(
 logger = logging.getLogger("astra.scheduler_service")
 
 
+def run_closed_loop_job(database=None) -> list[dict]:
+    """Run canonical H1 maintenance for every configured symbol."""
+    from infra.db.database import get_database
+    from scheduler.autonomous_scheduler import run_closed_loop_maintenance
+
+    db = database or get_database()
+    return [
+        {
+            "symbol": symbol["symbol_code"],
+            **run_closed_loop_maintenance(db, symbol["symbol_code"], "H1"),
+        }
+        for symbol in db.get_supported_symbols()
+    ]
+
+
 def run_service():
     """Inicia el scheduler autónomo + API como servicio."""
     logger.info("═" * 50)
@@ -64,43 +79,35 @@ def run_service():
             except Exception as e:
                 logger.error(f"  [D1] error: {e}")
 
-        def _outcome_eval():
-            """Evalúa predicciones pendientes cuando cierra la vela siguiente."""
+        def _closed_loop_maintenance():
+            """Delega outcomes y elegibilidad a la implementación canónica."""
             try:
-                from forex.prediction.outcome_tracker import OutcomeTracker
-                from forex.data.data_router import fetch_data
-                def _price(pair: str):
-                    df = fetch_data(pair, tf="H1", bars=1)
-                    if df is not None and len(df) > 0:
-                        return float(df["close"].iloc[-1])
-                    return None
-                tracker = OutcomeTracker()
-                n = tracker.auto_evaluate(price_func=_price, max_age_hours=1)
-                if n:
-                    logger.info(f"  [OUTCOME] {n} predicciones evaluadas")
+                results = run_closed_loop_job()
+                finalized = sum(
+                    int(result.get("outcomes_finalized", 0)) for result in results
+                )
+                pending = sum(
+                    result.get("retrain_run_id") is not None for result in results
+                )
+                errors = sum(result.get("action") == "error" for result in results)
+                logger.info(
+                    "  [CLOSED LOOP] outcomes=%s retrain_runs=%s errors=%s",
+                    finalized,
+                    pending,
+                    errors,
+                )
             except Exception as e:
-                logger.warning(f"  [OUTCOME] skip: {e}")
-
-        def _retrain_check():
-            """Revisa reentrenamiento adaptativo por par."""
-            try:
-                from forex.prediction.retrain_manager import RetrainManager
-                mgr = RetrainManager()
-                for pair in ("EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"):
-                    dec = mgr.check_retrain_needed(pair=pair)
-                    if dec.needed:
-                        logger.info(f"  [RETRAIN] {pair} → {dec.trigger.value}: {dec.reason}")
-            except Exception as e:
-                logger.warning(f"  [RETRAIN] skip: {e}")
+                logger.warning(f"  [CLOSED LOOP] skip: {e}")
 
         # Registrar tareas por timeframe + tareas adaptativas
         scheduler.add_job_seconds("update_h1",     interval_s=3600,  fn=_update_h1)
         scheduler.add_job_seconds("update_h4",     interval_s=14400, fn=_update_h4)
         scheduler.add_job_seconds("update_d1",     interval_s=86400, fn=_update_d1)
-        scheduler.add_job_seconds("outcome_eval",  interval_s=1800,  fn=_outcome_eval)
-        scheduler.add_job_seconds("retrain_check", interval_s=21600, fn=_retrain_check)
+        scheduler.add_job_seconds(
+            "closed_loop_maintenance", interval_s=1800, fn=_closed_loop_maintenance
+        )
 
-        logger.info("  ✅ Tareas registradas: update_h1/h4/d1 + outcome_eval + retrain_check")
+        logger.info("  ✅ Tareas registradas: update_h1/h4/d1 + closed_loop_maintenance")
         logger.info("  Iniciando bucle del scheduler...")
 
         scheduler.start(daemon=False)

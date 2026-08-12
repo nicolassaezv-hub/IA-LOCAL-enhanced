@@ -179,12 +179,13 @@ def _model_performance(pair: str, timeframe: str) -> tuple[Optional[float], int]
     try:
         from forex.prediction.model_quality_history import get_quality_history
 
-        wr = get_quality_history().get_win_rate(pair=pair, horizon=timeframe)
-        if wr:
+        history = get_quality_history()
+        wr = history.get_win_rate(pair=pair, horizon=timeframe)
+        if wr is not None:
             wr = float(wr)
             if wr > 1.0:
                 wr /= 100.0
-            return wr, 0
+            return wr, history.get_sample_count(pair=pair, horizon=timeframe)
     except Exception as exc:
         logger.warning("ModelQualityHistory no disponible (%s).", exc)
 
@@ -413,7 +414,7 @@ def build_context(
                 reliability_score=float(
                     getattr(ctx.reliability, "reliability_score", model_confidence * 100.0)
                 ),
-                model_win_rate=float(ctx.model_win_rate or 0.5),
+                model_win_rate=ctx.model_win_rate,
                 regime=str(getattr(ctx.regime, "primary", "") or ""),
                 pair=pair,
                 timeframe=timeframe,

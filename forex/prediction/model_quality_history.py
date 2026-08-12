@@ -1,185 +1,136 @@
-"""
-VI.8.C — Model Quality History
-Registro histórico de precisión de modelos verificada con resultados reales.
-El outcome_tracker (V.14) alimenta este módulo.
-El Opportunity Score pondera más a los modelos con mayor precisión histórica verificada.
-"""
-import sqlite3
-import json
-from datetime import datetime, timedelta
+"""Verified model performance projected from canonical finalized outcomes."""
+from __future__ import annotations
+
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-_DB_PATH = Path(__file__).parent.parent.parent / "astra_model_quality.db"
+from infra.db.database import SQLiteDatabase
+
+
+_MIN_SAMPLES_FOR_TRUST = 10
 _HISTORY_WINDOW_DAYS = 30
-_MIN_SAMPLES_FOR_TRUST = 10   # mínimo de muestras para considerar el historial fiable
 
 
-def _get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(_DB_PATH))
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS model_outcomes (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            pair        TEXT NOT NULL,
-            horizon     TEXT NOT NULL,
-            model_name  TEXT NOT NULL,
-            predicted   TEXT NOT NULL,      -- BUY / SELL / HOLD
-            actual      TEXT,               -- resultado real (puede ser NULL si no verificado)
-            correct     INTEGER,            -- 1 = correcto, 0 = incorrecto, NULL = pendiente
-            op_score    REAL,
-            ts          TEXT NOT NULL,
-            verified_at TEXT
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS model_accuracy_cache (
-            pair        TEXT,
-            horizon     TEXT,
-            model_name  TEXT,
-            samples     INTEGER,
-            accuracy    REAL,
-            last_updated TEXT,
-            PRIMARY KEY (pair, horizon, model_name)
-        )
-    """)
-    conn.commit()
-    return conn
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _timestamp_in_history_window(value: object) -> bool:
+    if not value:
+        return False
+    try:
+        timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp >= _utc_now() - timedelta(days=_HISTORY_WINDOW_DAYS)
 
 
 class ModelQualityHistory:
-    """
-    Rastrea y calcula la precisión histórica de modelos por par/horizonte.
-    Ventana deslizante de 30 días.
-    """
+    """Read model quality without maintaining a parallel outcome database."""
 
-    def record_prediction(self, pair: str, horizon: str, model_name: str,
-                          predicted: str, op_score: float = 0.0):
-        """Registra una predicción para seguimiento futuro."""
-        try:
-            with _get_conn() as conn:
-                conn.execute("""
-                    INSERT INTO model_outcomes
-                        (pair, horizon, model_name, predicted, op_score, ts)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (pair.upper(), horizon, model_name, predicted,
-                      op_score, datetime.now().isoformat()))
-                conn.commit()
-        except Exception:
-            pass
+    def __init__(
+        self,
+        db_path: str | Path | None = None,
+        *,
+        database: SQLiteDatabase | None = None,
+    ):
+        if database is not None and db_path is not None:
+            raise ValueError("provide database or db_path, not both")
+        self._provided_database = database
+        self._db_path = str(db_path) if db_path is not None else None
 
-    def record_outcome(self, pair: str, horizon: str, model_name: str,
-                       prediction_ts: str, actual: str):
-        """
-        Registra el resultado real de una predicción anterior.
-        Actualiza la precisión del modelo en el caché.
-        """
-        try:
-            with _get_conn() as conn:
-                # Buscar la predicción más cercana al timestamp dado
-                row = conn.execute("""
-                    SELECT id, predicted FROM model_outcomes
-                    WHERE pair=? AND horizon=? AND model_name=? AND actual IS NULL
-                    ORDER BY ABS(julianday(ts) - julianday(?)) LIMIT 1
-                """, (pair.upper(), horizon, model_name, prediction_ts)).fetchone()
+    @property
+    def database(self) -> SQLiteDatabase:
+        if self._provided_database is None:
+            self._provided_database = SQLiteDatabase(self._db_path)
+        return self._provided_database
 
-                if not row:
-                    return
+    def record_prediction(self, *_args, **_kwargs):
+        raise RuntimeError(
+            "ModelQualityHistory is read-only; persist through OutcomeTracker"
+        )
 
-                pred_id, predicted = row
-                correct = 1 if predicted == actual else 0
-                conn.execute("""
-                    UPDATE model_outcomes
-                    SET actual=?, correct=?, verified_at=?
-                    WHERE id=?
-                """, (actual, correct, datetime.now().isoformat(), pred_id))
-                conn.commit()
-                self._refresh_accuracy_cache(pair, horizon, model_name, conn)
-        except Exception:
-            pass
+    def record_outcome(self, *_args, **_kwargs):
+        raise RuntimeError(
+            "ModelQualityHistory is read-only; finalize through OutcomeTracker"
+        )
 
-    def _refresh_accuracy_cache(self, pair: str, horizon: str, model_name: str,
-                                 conn: sqlite3.Connection):
-        """Recalcula y cachea la precisión del modelo."""
-        cutoff = (datetime.now() - timedelta(days=_HISTORY_WINDOW_DAYS)).isoformat()
-        rows = conn.execute("""
-            SELECT COUNT(*), SUM(correct) FROM model_outcomes
-            WHERE pair=? AND horizon=? AND model_name=?
-              AND correct IS NOT NULL AND ts > ?
-        """, (pair.upper(), horizon, model_name, cutoff)).fetchone()
+    def _matching_outcomes(
+        self,
+        pair: str,
+        horizon: str,
+        model_name: str = "",
+    ) -> list[dict]:
+        outcomes = self.database.get_finalized_outcomes(
+            pair.upper(), horizon.upper()
+        )
+        outcomes = [
+            row for row in outcomes
+            if _timestamp_in_history_window(row.get("prediction_timestamp"))
+        ]
+        if model_name:
+            outcomes = [
+                row for row in outcomes
+                if str(row.get("model_identity") or "") == model_name
+            ]
+        return outcomes
 
-        if not rows or rows[0] == 0:
-            return
-
-        samples, correct_sum = rows
-        accuracy = (correct_sum / samples) * 100
-        conn.execute("""
-            INSERT INTO model_accuracy_cache
-                (pair, horizon, model_name, samples, accuracy, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(pair, horizon, model_name) DO UPDATE SET
-                samples=excluded.samples,
-                accuracy=excluded.accuracy,
-                last_updated=excluded.last_updated
-        """, (pair.upper(), horizon, model_name, samples, accuracy,
-              datetime.now().isoformat()))
-        conn.commit()
-
-    def get_accuracy(self, pair: str, horizon: str = "H1",
-                     model_name: str = "ensemble") -> Optional[float]:
-        """
-        Devuelve la precisión verificada del modelo en los últimos 30 días.
-        None si hay menos de MIN_SAMPLES_FOR_TRUST muestras verificadas.
-        """
-        try:
-            with _get_conn() as conn:
-                row = conn.execute("""
-                    SELECT accuracy, samples FROM model_accuracy_cache
-                    WHERE pair=? AND horizon=? AND model_name=?
-                """, (pair.upper(), horizon, model_name)).fetchone()
-                if not row:
-                    return None
-                accuracy, samples = row
-                if samples < _MIN_SAMPLES_FOR_TRUST:
-                    return None
-                return float(accuracy)
-        except Exception:
+    def get_accuracy(
+        self,
+        pair: str,
+        horizon: str = "H1",
+        model_name: str = "",
+    ) -> Optional[float]:
+        outcomes = self._matching_outcomes(pair, horizon, model_name)
+        if len(outcomes) < _MIN_SAMPLES_FOR_TRUST:
             return None
+        wins = sum(row.get("result") == "win" for row in outcomes)
+        return wins / len(outcomes) * 100.0
 
-    def get_win_rate(self, pair: str, horizon: str = "H1") -> float:
-        """
-        Devuelve el win rate para uso en OpScore.
-        Si no hay historial suficiente, devuelve el win rate por defecto (50%).
-        """
-        acc = self.get_accuracy(pair, horizon)
-        return acc if acc is not None else 50.0
+    def get_win_rate(self, pair: str, horizon: str = "H1") -> Optional[float]:
+        return self.get_accuracy(pair, horizon)
+
+    def get_sample_count(self, pair: str, horizon: str = "H1") -> int:
+        return len(self._matching_outcomes(pair, horizon))
 
     def list_history(self, limit: int = 20) -> list[dict]:
-        """Lista los últimos registros de precisión."""
-        try:
-            with _get_conn() as conn:
-                rows = conn.execute("""
-                    SELECT pair, horizon, model_name, accuracy, samples, last_updated
-                    FROM model_accuracy_cache
-                    ORDER BY last_updated DESC LIMIT ?
-                """, (limit,)).fetchall()
-                return [
-                    {"pair": r[0], "horizon": r[1], "model": r[2],
-                     "accuracy": r[3], "samples": r[4], "updated": r[5]}
-                    for r in rows
-                ]
-        except Exception:
-            return []
+        groups: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
+        for row in self.database.get_finalized_outcomes():
+            if not _timestamp_in_history_window(row.get("prediction_timestamp")):
+                continue
+            key = (
+                row["symbol"],
+                row["timeframe"],
+                str(row.get("model_identity") or "unknown"),
+            )
+            groups[key].append(row)
+        history = []
+        for (pair, horizon, model), outcomes in groups.items():
+            samples = len(outcomes)
+            wins = sum(row.get("result") == "win" for row in outcomes)
+            history.append({
+                "pair": pair,
+                "horizon": horizon,
+                "model": model,
+                "accuracy": wins / samples * 100.0,
+                "samples": samples,
+                "updated": max(row.get("evaluation_timestamp") or "" for row in outcomes),
+            })
+        return sorted(history, key=lambda row: row["updated"], reverse=True)[:limit]
 
     def status(self) -> str:
         items = self.list_history()
         if not items:
-            return "Sin historial de precisión verificada. Se necesitan al menos 10 predicciones confirmadas."
-        lines = [f"  Model Quality History (ventana 30 días):"]
-        for it in items[:10]:
-            stars = "★" * min(5, max(1, int(it["accuracy"] / 20)))
+            return "Sin outcomes finalizados persistidos."
+        lines = ["  Model Quality History (outcomes canónicos, ventana 30 días):"]
+        for item in items[:10]:
             lines.append(
-                f"    {it['pair']}/{it['horizon']} ({it['model']}) — "
-                f"{it['accuracy']:.1f}% ({it['samples']} muestras) {stars}"
+                f"    {item['pair']}/{item['horizon']} ({item['model']}) — "
+                f"{item['accuracy']:.1f}% ({item['samples']} muestras)"
             )
         return "\n".join(lines)
 

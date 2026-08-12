@@ -1,120 +1,247 @@
-"""
-model_storage.py — Guarda y carga modelos entrenados con joblib.
+"""Atomic, versioned storage for Forex model bundles."""
+from __future__ import annotations
 
-FIX #2: Cada par tiene su propio archivo de modelo.
-  - save_model(model, pair="EURUSD") → models/forex/latest_EURUSD.pkl
-  - load_model(pair="EURUSD")        → carga el modelo correcto
-  - load_latest() sigue disponible como fallback si pair=None
-"""
-
+import hashlib
 import os
+import shutil
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Callable
+
 import joblib
-from datetime import datetime
+
+# Pair-specific aliases are executable production state.  Only the canonical
+# promotion coordinator imports this capability; public storage helpers may
+# stage artifacts or maintain the explicit no-pair legacy alias, but cannot
+# publish a symbol model by themselves.
+_PROMOTION_AUTHORITY = object()
 
 
 class ModelStorage:
+    """Store immutable artifacts before atomically updating a latest alias."""
 
-    def __init__(self, base_dir: str = "models/forex"):
-        self.base_dir    = base_dir
-        self.latest_path = os.path.join(base_dir, "latest_model.pkl")   # fallback legacy
-        os.makedirs(base_dir, exist_ok=True)
+    def __init__(self, base_dir: str | Path = "models/forex"):
+        self.base_dir = Path(base_dir).resolve()
+        self.latest_path = self.base_dir / "latest_model.pkl"
+        self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    # ─────────────────────────────────────────────────────────
-    # GUARDAR — siempre crea versión timestamped + actualiza latest_{PAIR}
-    # ─────────────────────────────────────────────────────────
-    def save_model(self, model, name: str = "ensemble_forex",
-                   pair: str = None, version: str = None,
-                   feature_names: list = None) -> str:
-        if version is None:
-            version = datetime.now().strftime("%Y%m%d_%H%M%S")
+    @staticmethod
+    def checksum(path: str | Path) -> str:
+        digest = hashlib.sha256()
+        with Path(path).open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
-        # Empaquetar modelo + columnas para evitar feature mismatch
-        bundle = {"model": model, "feature_names": feature_names}
+    @staticmethod
+    def validate_artifact(
+        path: str | Path,
+        validator: Callable[[object], bool] | None = None,
+    ) -> object:
+        artifact = Path(path)
+        if not artifact.is_file() or artifact.stat().st_size <= 0:
+            raise ValueError(f"model artifact is missing or empty: {artifact}")
+        bundle = joblib.load(artifact)
+        if isinstance(bundle, dict) and "model" not in bundle:
+            raise ValueError(f"model bundle has no model payload: {artifact}")
+        model = bundle.get("model") if isinstance(bundle, dict) else bundle
+        if model is None:
+            raise ValueError(f"model payload is empty: {artifact}")
+        if validator is not None and validator(model) is not True:
+            raise ValueError(f"model validation rejected artifact: {artifact}")
+        return bundle
 
-        filename = f"{name}_{version}.pkl"
-        path     = os.path.join(self.base_dir, filename)
-        joblib.dump(bundle, path)
+    def stage_model(
+        self,
+        model: object,
+        *,
+        name: str,
+        version: str,
+        feature_names: list | None = None,
+        metadata: dict | None = None,
+    ) -> Path:
+        filename = f"{_clean_name(name)}_{_clean_name(version)}.pkl"
+        target = self.base_dir / filename
+        if target.exists():
+            existing = self.validate_artifact(target)
+            existing_metadata = existing.get("metadata", {}) if isinstance(existing, dict) else {}
+            if (
+                metadata
+                and metadata.get("run_id")
+                and existing_metadata.get("run_id") == metadata.get("run_id")
+            ):
+                return target
+            raise FileExistsError(f"immutable model artifact already exists: {target}")
+        bundle = {
+            "model": model,
+            "feature_names": feature_names,
+            "metadata": metadata or {},
+        }
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=self.base_dir,
+                prefix=f".{filename}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+            joblib.dump(bundle, temporary)
+            with temporary.open("r+b") as handle:
+                os.fsync(handle.fileno())
+            self.validate_artifact(temporary)
+            os.replace(temporary, target)
+            temporary = None
+            return target
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
-        # latest genérico (compatibilidad legacy)
-        joblib.dump(bundle, self.latest_path)
+    def promote_artifact(
+        self,
+        artifact_path: str | Path,
+        *,
+        pair: str,
+        validator: Callable[[object], bool] | None = None,
+        _authority: object | None = None,
+    ) -> Path:
+        if _authority is not _PROMOTION_AUTHORITY:
+            raise RuntimeError(
+                "pair-specific promotion requires RetrainManager provenance"
+            )
+        source = Path(artifact_path)
+        self.validate_artifact(source, validator)
+        latest = self.base_dir / f"latest_{_clean_pair(pair)}.pkl"
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=self.base_dir,
+                prefix=f".{latest.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+            shutil.copyfile(source, temporary)
+            with temporary.open("r+b") as handle:
+                os.fsync(handle.fileno())
+            self.validate_artifact(temporary, validator)
+            if self.checksum(temporary) != self.checksum(source):
+                raise ValueError("promoted model copy does not match staged artifact")
+            os.replace(temporary, latest)
+            temporary = None
+            return latest
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
-        # latest por par
-        if pair:
-            clean  = _clean_pair(pair)
-            p_path = os.path.join(self.base_dir, f"latest_{clean}.pkl")
-            joblib.dump(bundle, p_path)
-            print(f"[ModelStorage] Guardado → {path}")
-            print(f"[ModelStorage] Latest par → {p_path}")
-        else:
-            print(f"[ModelStorage] Guardado → {path}")
+    def save_model(
+        self,
+        model,
+        name: str = "ensemble_forex",
+        pair: str | None = None,
+        version: str | None = None,
+        feature_names: list | None = None,
+    ) -> str:
+        if pair is not None:
+            raise RuntimeError(
+                "save_model(pair=...) cannot publish production aliases; "
+                "use RetrainManager initial-training or retrain promotion"
+            )
+        version = version or datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+        artifact = self.stage_model(
+            model,
+            name=name,
+            version=version,
+            feature_names=feature_names,
+        )
+        self._promote_generic(artifact)
+        return str(artifact)
 
-        return path
+    def _promote_generic(self, artifact: Path) -> None:
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=self.base_dir,
+                prefix=f".{self.latest_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+            shutil.copyfile(artifact, temporary)
+            with temporary.open("r+b") as handle:
+                os.fsync(handle.fileno())
+            self.validate_artifact(temporary)
+            os.replace(temporary, self.latest_path)
+            temporary = None
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
-    # ─────────────────────────────────────────────────────────
-    # CARGAR — por par primero, luego fallback genérico
-    # ─────────────────────────────────────────────────────────
-    def load_model(self, pair: str = None):
-        if pair:
-            clean  = _clean_pair(pair)
-            p_path = os.path.join(self.base_dir, f"latest_{clean}.pkl")
-            if os.path.exists(p_path):
-                bundle = joblib.load(p_path)
-                print(f"[ModelStorage] Modelo cargado para {clean}: {p_path}")
-                return self._unwrap(bundle)
-            print(f"[ModelStorage] ⚠ No hay modelo para {clean}, usando latest genérico.")
-        return self.load_latest()
+    def load_model(self, pair: str | None = None):
+        if pair is None:
+            return self.load_latest()
+        clean = _clean_pair(pair)
+        path = self.base_dir / f"latest_{clean}.pkl"
+        if not path.is_file():
+            raise FileNotFoundError(f"No hay modelo entrenado para {clean}: {path}")
+        return self._unwrap(joblib.load(path))
 
-    def load_model_with_features(self, pair: str = None):
-        """Carga modelo Y lista de feature_names. Usar en predict para alinear columnas."""
-        if pair:
-            clean  = _clean_pair(pair)
-            p_path = os.path.join(self.base_dir, f"latest_{clean}.pkl")
-            if os.path.exists(p_path):
-                bundle = joblib.load(p_path)
-                if isinstance(bundle, dict):
-                    return bundle["model"], bundle.get("feature_names")
-                return bundle, None   # modelo legacy sin bundle
-        bundle = joblib.load(self.latest_path) if os.path.exists(self.latest_path) else None
-        if bundle is None:
+    def load_model_with_features(self, pair: str | None = None):
+        path = (
+            self.base_dir / f"latest_{_clean_pair(pair)}.pkl"
+            if pair is not None
+            else self.latest_path
+        )
+        if not path.is_file():
+            if pair is not None:
+                raise FileNotFoundError(
+                    f"No hay modelo entrenado para {_clean_pair(pair)}: {path}"
+                )
             raise FileNotFoundError("No hay modelo entrenado.")
+        bundle = joblib.load(path)
         if isinstance(bundle, dict):
             return bundle["model"], bundle.get("feature_names")
         return bundle, None
 
     @staticmethod
     def _unwrap(bundle):
-        """Extrae el modelo del bundle dict o devuelve el objeto directamente (legacy)."""
-        if isinstance(bundle, dict) and "model" in bundle:
-            return bundle["model"]
-        return bundle   # compatibilidad con modelos guardados antes de este fix
+        return bundle["model"] if isinstance(bundle, dict) and "model" in bundle else bundle
 
     def load_latest(self):
-        if not os.path.exists(self.latest_path):
+        if not self.latest_path.exists():
             raise FileNotFoundError(
                 "No hay modelo entrenado. Ejecuta primero: pipeline.train('archivo.csv')"
             )
-        bundle = joblib.load(self.latest_path)
-        print("[ModelStorage] Modelo latest (genérico) cargado.")
-        return self._unwrap(bundle)
+        return self._unwrap(joblib.load(self.latest_path))
 
     def load_version(self, filename: str):
-        path = os.path.join(self.base_dir, filename)
-        if not os.path.exists(path):
+        path = self.base_dir / Path(filename).name
+        if not path.exists():
             raise FileNotFoundError(f"Modelo no encontrado: {filename}")
-        bundle = joblib.load(path)
-        return self._unwrap(bundle)
+        return self._unwrap(joblib.load(path))
 
-    def list_models(self) -> list:
-        return sorted(f for f in os.listdir(self.base_dir) if f.endswith(".pkl"))
+    def list_models(self) -> list[str]:
+        return sorted(path.name for path in self.base_dir.glob("*.pkl"))
 
-    def latest_exists(self, pair: str = None) -> bool:
-        if pair:
-            clean = _clean_pair(pair)
-            p_path = os.path.join(self.base_dir, f"latest_{clean}.pkl")
-            if os.path.exists(p_path):
-                return True
-        return os.path.exists(self.latest_path)
+    def latest_exists(self, pair: str | None = None) -> bool:
+        if pair is None:
+            return self.latest_path.is_file()
+        return (self.base_dir / f"latest_{_clean_pair(pair)}.pkl").is_file()
 
 
 def _clean_pair(pair: str) -> str:
-    return pair.upper().replace("/", "").replace("_", "").replace("-", "")
+    clean = "".join(character for character in str(pair).upper() if character.isalnum())
+    if not clean:
+        raise ValueError("model pair is empty or invalid")
+    return clean
+
+
+def _clean_name(value: str) -> str:
+    clean = "".join(
+        character if character.isalnum() or character in ("-", "_") else "_"
+        for character in str(value)
+    ).strip("_")
+    if not clean:
+        raise ValueError("model artifact name is empty or invalid")
+    return clean

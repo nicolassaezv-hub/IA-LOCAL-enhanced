@@ -34,7 +34,7 @@ import numpy as np
 @dataclass
 class ReliabilityComponent:
     name: str
-    score: float = 0.0
+    score: float | None = 0.0
     weight: float = 0.0
     weighted_score: float = 0.0
     description: str = ""
@@ -202,16 +202,33 @@ class ReliabilityScorer:
 
         # 7. Model history (0-100)
         hist_score = self._model_history_score(model_win_rate, model_recent_predictions)
-        components.append(ReliabilityComponent(
-            name="model_history",
-            score=round(hist_score, 2),
-            weight=self.weights["model_history"],
-            weighted_score=round(hist_score * self.weights["model_history"], 2),
-            description=f"Historial del modelo: {hist_score:.1f}/100",
-        ))
+        history_weight = self.weights["model_history"]
+        components.append(
+            ReliabilityComponent(
+                name="model_history",
+                score=round(hist_score, 2) if hist_score is not None else None,
+                weight=history_weight,
+                weighted_score=(
+                    round(hist_score * history_weight, 2)
+                    if hist_score is not None
+                    else 0.0
+                ),
+                description=(
+                    f"Historial del modelo: {hist_score:.1f}/100"
+                    if hist_score is not None
+                    else "Historial del modelo: evidencia no disponible"
+                ),
+            )
+        )
 
         report.components = components
-        report.reliability_score = sum(c.weighted_score for c in components)
+        weighted_total = sum(c.weighted_score for c in components)
+        available_weight = sum(c.weight for c in components if c.score is not None)
+        report.reliability_score = (
+            weighted_total / available_weight
+            if any(c.score is None for c in components) and available_weight > 0.0
+            else weighted_total
+        )
         report.breakdown = {c.name: {"score": c.score, "weight": c.weight, "weighted": c.weighted_score} for c in components}
 
         report.quality_tier = self._classify_tier(report.reliability_score)
@@ -302,10 +319,12 @@ class ReliabilityScorer:
         confidence_factor = regime_confidence / 100.0
         return base * (0.5 + 0.5 * confidence_factor)
 
-    def _model_history_score(self, win_rate: float | None, recent_predictions: int) -> float:
+    def _model_history_score(
+        self, win_rate: float | None, recent_predictions: int
+    ) -> float | None:
         """Evalua el historial reciente del modelo (0-100)."""
         if win_rate is None or recent_predictions == 0:
-            return 50.0
+            return None
 
         wr = self._normalize(win_rate)
         wr_score = wr * 100.0
@@ -381,8 +400,9 @@ def cmd_reliability_report(report: ReliabilityReport) -> str:
     lines.append(f"  {'-'*25} {'-'*8} {'-'*6} {'-'*10}")
 
     for comp in sorted(report.components, key=lambda c: c.weighted_score, reverse=True):
+        score = f"{comp.score:>8.1f}" if comp.score is not None else f"{'N/A':>8}"
         lines.append(
-            f"  {comp.name:<25} {comp.score:>8.1f} {comp.weight:>6.0%} {comp.weighted_score:>10.2f}"
+            f"  {comp.name:<25} {score} {comp.weight:>6.0%} {comp.weighted_score:>10.2f}"
         )
         if comp.description:
             lines.append(f"  {'':>25} {comp.description}")

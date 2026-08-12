@@ -1,51 +1,32 @@
-"""
-V.13 — Reentrenamiento Adaptativo
-=================================
-Monitor de degradacion del modelo. Dispara el reentrenamiento solo cuando
-hay evidencia real de que el modelo actual ya no es optimo.
-
-Triggers:
-  - Win rate cae > 10% vs. historico
-  - Cambio de regimen de mercado (V.4)
-  - N filas nuevas acumuladas (umbral configurable)
-  - Reentrenamiento programado (semanal/mensual)
-  - Solicitud manual del usuario
-
-Integracion:
-    from forex.prediction.retrain_manager import RetrainManager
-    mgr = RetrainManager()
-    needed, reason = mgr.check_retrain_needed(pair="EURUSD", current_win_rate=0.45)
-    if needed:
-        mgr.trigger_retrain(pair="EURUSD")
-"""
+"""Outcome-driven, recoverable adaptive retraining coordination."""
 from __future__ import annotations
 
-import sqlite3
+import hashlib
+import json
+import logging
+import os
+import shutil
+import tempfile
+import time
+import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Callable
+from pathlib import Path
+from typing import Callable
 
-try:
-    from colorama import Fore, Style
-    HAS_COLOR = True
-except ImportError:
-    HAS_COLOR = False
+from infra.db.database import SQLiteDatabase
+from .model_storage import ModelStorage, _PROMOTION_AUTHORITY
 
-if HAS_COLOR:
-    _C = lambda s: f"{Fore.CYAN}{s}{Style.RESET_ALL}"
-    _G = lambda s: f"{Fore.GREEN}{s}{Style.RESET_ALL}"
-    _Y = lambda s: f"{Fore.YELLOW}{s}{Style.RESET_ALL}"
-    _R = lambda s: f"{Fore.RED}{s}{Style.RESET_ALL}"
-    _B = lambda s: f"{Fore.BLUE}{s}{Style.RESET_ALL}"
-else:
-    _C = _G = _Y = _R = _B = lambda s: s
+logger = logging.getLogger(__name__)
 
 
 class RetrainTrigger(str, Enum):
+    INITIAL_TRAINING = "initial_training"
     WIN_RATE_DROP = "win_rate_drop"
     REGIME_CHANGE = "regime_change"
     NEW_DATA_THRESHOLD = "new_data_threshold"
+    OUTCOME_EVIDENCE = "outcome_evidence"
     SCHEDULED = "scheduled"
     MANUAL = "manual"
     ACCURACY_DROP = "accuracy_drop"
@@ -85,9 +66,11 @@ class RetrainRecord:
     success: bool = False
     error: str = ""
     timestamp: str = ""
+    run_id: str = ""
+    status: str = "FAILED"
 
     def to_dict(self) -> dict:
-        return {k: v for k, v in self.__dict__.items()}
+        return dict(self.__dict__)
 
 
 DEFAULT_CONFIG = {
@@ -96,55 +79,39 @@ DEFAULT_CONFIG = {
     "new_data_threshold": 500,
     "scheduled_interval_days": 7,
     "min_predictions_for_eval": 20,
+    "min_new_outcomes": 20,
+    "running_timeout_seconds": 21600,
 }
+
+_OWNER_TOKEN = f"{os.getpid()}:{uuid.uuid4().hex}"
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 class RetrainManager:
-    """Monitor de degradacion y disparador de reentrenamiento."""
+    """Create one retrain run per durable outcome evidence window."""
 
-    def __init__(self, db_path: str = "memoria.db", config: dict | None = None):
-        self.db_path = db_path
+    def __init__(
+        self,
+        db_path: str | Path | None = None,
+        config: dict | None = None,
+        *,
+        database: SQLiteDatabase | None = None,
+        storage: ModelStorage | None = None,
+    ):
+        if database is not None and db_path is not None:
+            raise ValueError("provide database or db_path, not both")
+        self.database = database or SQLiteDatabase(str(db_path) if db_path else None)
+        self.db_path = self.database.db_path
         self.config = {**DEFAULT_CONFIG, **(config or {})}
-        self._init_db()
+        if int(self.config["min_new_outcomes"]) <= 0:
+            raise ValueError("min_new_outcomes must be positive")
+        if float(self.config["running_timeout_seconds"]) <= 0:
+            raise ValueError("running_timeout_seconds must be positive")
+        self.storage = storage or ModelStorage()
 
-    def _init_db(self):
-        try:
-            conn = sqlite3.connect(self.db_path)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS retrain_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    pair TEXT,
-                    timeframe TEXT,
-                    trigger TEXT,
-                    old_model TEXT,
-                    new_model TEXT,
-                    old_win_rate REAL,
-                    new_win_rate REAL,
-                    old_accuracy REAL,
-                    new_accuracy REAL,
-                    duration_sec REAL,
-                    success INTEGER,
-                    error TEXT,
-                    timestamp TEXT
-                )
-            """)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS model_baseline (
-                    pair TEXT,
-                    timeframe TEXT,
-                    model_name TEXT,
-                    win_rate REAL,
-                    accuracy REAL,
-                    timestamp TEXT,
-                    PRIMARY KEY (pair, timeframe, model_name)
-                )
-            """)
-            conn.commit()
-            conn.close()
-        except Exception:
-            pass
-
-    # ── Store model baseline ──
     def store_baseline(
         self,
         pair: str,
@@ -152,52 +119,35 @@ class RetrainManager:
         model_name: str,
         win_rate: float,
         accuracy: float,
-    ):
-        try:
-            conn = sqlite3.connect(self.db_path)
-            conn.execute("""
-                INSERT OR REPLACE INTO model_baseline
-                (pair, timeframe, model_name, win_rate, accuracy, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (pair, timeframe, model_name, win_rate, accuracy, datetime.utcnow().isoformat()))
-            conn.commit()
-            conn.close()
-        except Exception:
-            pass
+    ) -> None:
+        self.database.save_model_quality({
+            "symbol": pair.upper(),
+            "timeframe": timeframe.upper(),
+            "accuracy": accuracy,
+            "precision": win_rate,
+            "status": "active",
+        })
 
-    # ── Get baseline ──
-    def get_baseline(self, pair: str, timeframe: str, model_name: str = "") -> dict | None:
-        try:
-            conn = sqlite3.connect(self.db_path)
-            if model_name:
-                row = conn.execute(
-                    "SELECT * FROM model_baseline WHERE pair=? AND timeframe=? AND model_name=?",
-                    (pair, timeframe, model_name),
-                ).fetchone()
-            else:
-                row = conn.execute(
-                    "SELECT * FROM model_baseline WHERE pair=? AND timeframe=? ORDER BY timestamp DESC LIMIT 1",
-                    (pair, timeframe),
-                ).fetchone()
-            conn.close()
-            if row:
-                return {
-                    "pair": row[0],
-                    "timeframe": row[1],
-                    "model_name": row[2],
-                    "win_rate": row[3],
-                    "accuracy": row[4],
-                    "timestamp": row[5],
-                }
-        except Exception:
-            pass
-        return None
+    def get_baseline(
+        self, pair: str, timeframe: str, model_name: str = ""
+    ) -> dict | None:
+        rows = self.database.get_model_quality(pair.upper(), timeframe.upper())
+        if not rows:
+            return None
+        row = rows[0]
+        return {
+            "pair": pair.upper(),
+            "timeframe": timeframe.upper(),
+            "model_name": model_name,
+            "win_rate": float(row.get("precision") or 0.0),
+            "accuracy": float(row.get("accuracy") or 0.0),
+            "timestamp": row.get("last_evaluated"),
+        }
 
-    # ── Check if retrain needed ──
     def check_retrain_needed(
         self,
         pair: str = "",
-        timeframe: str = "",
+        timeframe: str = "H1",
         current_win_rate: float | None = None,
         current_accuracy: float | None = None,
         model_name: str = "",
@@ -207,67 +157,454 @@ class RetrainManager:
         last_retrain_date: datetime | None = None,
         prediction_count: int = 0,
     ) -> RetrainDecision:
-        decision = RetrainDecision(timestamp=datetime.utcnow().isoformat())
-        details: dict = {}
-
+        decision = RetrainDecision(timestamp=_now())
         baseline = self.get_baseline(pair, timeframe, model_name)
+        details: dict = {}
         if baseline:
-            details["baseline_win_rate"] = baseline["win_rate"]
-            details["baseline_accuracy"] = baseline["accuracy"]
-            details["baseline_model"] = baseline["model_name"]
-
-        # Trigger 1: Win rate drop
+            details.update({
+                "baseline_win_rate": baseline["win_rate"],
+                "baseline_accuracy": baseline["accuracy"],
+                "baseline_model": baseline["model_name"],
+            })
         if current_win_rate is not None and baseline:
             drop = baseline["win_rate"] - current_win_rate
             details["win_rate_drop"] = round(drop, 4)
-            if drop >= self.config["win_rate_drop_threshold"] and prediction_count >= self.config["min_predictions_for_eval"]:
-                decision.needed = True
-                decision.trigger = RetrainTrigger.WIN_RATE_DROP
-                decision.reason = f"Win rate cayo {drop:.1%} (baseline={baseline['win_rate']:.1%}, actual={current_win_rate:.1%})"
-                decision.details = details
-                return decision
-
-        # Trigger 2: Accuracy drop
+            if (
+                drop >= self.config["win_rate_drop_threshold"]
+                and prediction_count >= self.config["min_predictions_for_eval"]
+            ):
+                return RetrainDecision(
+                    True, RetrainTrigger.WIN_RATE_DROP,
+                    f"Win rate drop {drop:.1%}", details, decision.timestamp,
+                )
         if current_accuracy is not None and baseline:
             drop = baseline["accuracy"] - current_accuracy
             details["accuracy_drop"] = round(drop, 4)
-            if drop >= self.config["accuracy_drop_threshold"]:
-                decision.needed = True
-                decision.trigger = RetrainTrigger.ACCURACY_DROP
-                decision.reason = f"Accuracy cayo {drop:.1%} (baseline={baseline['accuracy']:.1%}, actual={current_accuracy:.1%})"
-                decision.details = details
-                return decision
-
-        # Trigger 3: Regime change
+            if (
+                drop >= self.config["accuracy_drop_threshold"]
+                and prediction_count >= self.config["min_predictions_for_eval"]
+            ):
+                return RetrainDecision(
+                    True, RetrainTrigger.ACCURACY_DROP,
+                    f"Accuracy drop {drop:.1%}", details, decision.timestamp,
+                )
         if last_regime and current_regime and last_regime != current_regime:
-            decision.needed = True
-            decision.trigger = RetrainTrigger.REGIME_CHANGE
-            decision.reason = f"Regimen cambio de '{last_regime}' a '{current_regime}'"
-            decision.details = {**details, "last_regime": last_regime, "current_regime": current_regime}
-            return decision
-
-        # Trigger 4: New data threshold
+            return RetrainDecision(
+                True, RetrainTrigger.REGIME_CHANGE,
+                f"Regime changed from {last_regime} to {current_regime}",
+                {**details, "last_regime": last_regime, "current_regime": current_regime},
+                decision.timestamp,
+            )
         if new_rows_count >= self.config["new_data_threshold"]:
-            decision.needed = True
-            decision.trigger = RetrainTrigger.NEW_DATA_THRESHOLD
-            decision.reason = f"Nuevas filas acumuladas: {new_rows_count} (umbral={self.config['new_data_threshold']})"
-            decision.details = {**details, "new_rows": new_rows_count}
-            return decision
-
-        # Trigger 5: Scheduled
-        if last_retrain_date:
-            interval_days = self.config["scheduled_interval_days"]
-            if datetime.utcnow() - last_retrain_date >= timedelta(days=interval_days):
-                decision.needed = True
-                decision.trigger = RetrainTrigger.SCHEDULED
-                decision.reason = f"Reentrenamiento programado (ultima vez: {last_retrain_date.strftime('%Y-%m-%d')})"
-                decision.details = {**details, "last_retrain": last_retrain_date.isoformat(), "interval_days": interval_days}
-                return decision
-
+            return RetrainDecision(
+                True, RetrainTrigger.NEW_DATA_THRESHOLD,
+                f"New rows reached {new_rows_count}",
+                {**details, "new_rows": new_rows_count}, decision.timestamp,
+            )
+        comparison_now = (
+            datetime.now(timezone.utc)
+            if last_retrain_date and last_retrain_date.tzinfo is not None
+            else datetime.now()
+        )
+        if last_retrain_date and (
+            comparison_now - last_retrain_date
+            >= timedelta(days=self.config["scheduled_interval_days"])
+        ):
+            return RetrainDecision(
+                True, RetrainTrigger.SCHEDULED, "Scheduled interval elapsed",
+                details, decision.timestamp,
+            )
         decision.details = details
         return decision
 
-    # ── Trigger retrain ──
+    def ensure_pending_from_outcomes(
+        self,
+        pair: str,
+        *,
+        timeframe: str = "H1",
+        dataset_provenance: dict,
+    ) -> dict | None:
+        """Persist eligibility once enough new finalized outcomes exist."""
+        symbol = pair.upper()
+        tf = timeframe.upper()
+        existing = self.database.get_retrain_runs(symbol)
+        active = next(
+            (row for row in existing if row["status"] in {"PENDING", "RUNNING", "VALIDATED"}),
+            None,
+        )
+        if active:
+            return active
+        last_consumed = max(
+            (int(row.get("last_outcome_id") or 0) for row in existing),
+            default=0,
+        )
+        outcomes = self.database.get_finalized_outcomes(symbol, tf, after_id=last_consumed)
+        minimum = int(self.config["min_new_outcomes"])
+        if len(outcomes) < minimum:
+            return None
+        outcome_ids = [int(row["id"]) for row in outcomes]
+        evidence_payload = json.dumps(
+            {
+                "symbol": symbol,
+                "timeframe": tf,
+                "outcome_ids": outcome_ids,
+                "dataset_provenance": dataset_provenance,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        evidence_key = hashlib.sha256(evidence_payload.encode("utf-8")).hexdigest()
+        run_id = "retrain_" + evidence_key[:24]
+        latest = self.storage.base_dir / f"latest_{_clean_pair(symbol)}.pkl"
+        source_hash = self.storage.checksum(latest) if latest.is_file() else None
+        timestamp = _now()
+        return self.database.create_retrain_run({
+            "run_id": run_id,
+            "evidence_key": evidence_key,
+            "symbol": symbol,
+            "timeframe": tf,
+            "trigger": RetrainTrigger.OUTCOME_EVIDENCE.value,
+            "status": "PENDING",
+            "source_model_path": str(latest) if latest.is_file() else None,
+            "source_model_sha256": source_hash,
+            "dataset_provenance": dataset_provenance,
+            "outcome_ids": outcome_ids,
+            "last_outcome_id": outcome_ids[-1],
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        })
+
+    def _get_run(self, run_id: str) -> dict:
+        run = next(
+            (row for row in self.database.get_retrain_runs(limit=100000) if row["run_id"] == run_id),
+            None,
+        )
+        if not run:
+            raise KeyError(f"unknown retrain run {run_id}")
+        return run
+
+    def execute_retrain(
+        self,
+        run_id: str,
+        train_func: Callable[[str, str, dict], object],
+        *,
+        validator: Callable[[object], bool] | None = None,
+    ) -> dict:
+        """Train, validate and promote without exposing a partial latest model."""
+        return self._execute_run(
+            run_id,
+            train_func,
+            validator=validator,
+            provenance_status="PROMOTED",
+        )
+
+    def promote_initial_model(
+        self,
+        model: object,
+        *,
+        pair: str,
+        timeframe: str = "H1",
+        dataset_provenance: dict,
+        feature_names: list | None = None,
+        metadata: dict | None = None,
+        validator: Callable[[object], bool] | None = None,
+    ) -> dict:
+        """Publish the first symbol model with explicit non-retrain provenance."""
+        symbol = _clean_pair(pair)
+        tf = str(timeframe).upper().strip()
+        if not tf:
+            raise ValueError("initial training timeframe is required")
+        if not isinstance(dataset_provenance, dict) or not dataset_provenance:
+            raise ValueError("initial training requires dataset provenance")
+        latest = self.storage.base_dir / f"latest_{symbol}.pkl"
+        if latest.exists():
+            raise RuntimeError(
+                f"initial training cannot replace existing symbol model: {latest}"
+            )
+        evidence_payload = json.dumps(
+            {
+                "symbol": symbol,
+                "timeframe": tf,
+                "dataset_provenance": dataset_provenance,
+                "promotion_type": RetrainTrigger.INITIAL_TRAINING.value,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        evidence_key = hashlib.sha256(evidence_payload.encode("utf-8")).hexdigest()
+        run_id = "initial_" + evidence_key[:24]
+        timestamp = _now()
+        run = self.database.create_retrain_run({
+            "run_id": run_id,
+            "evidence_key": evidence_key,
+            "symbol": symbol,
+            "timeframe": tf,
+            "trigger": RetrainTrigger.INITIAL_TRAINING.value,
+            "status": "PENDING",
+            "source_model_path": None,
+            "source_model_sha256": None,
+            "dataset_provenance": dataset_provenance,
+            "outcome_ids": [],
+            "last_outcome_id": None,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        })
+        if run["status"] != "PENDING":
+            return run
+        training_result = {
+            "model": model,
+            "feature_names": feature_names,
+            "metadata": {
+                **(metadata or {}),
+                "promotion_type": RetrainTrigger.INITIAL_TRAINING.value,
+            },
+        }
+        return self._execute_run(
+            run_id,
+            lambda *_args: training_result,
+            validator=validator,
+            provenance_status="INITIAL_TRAINING",
+        )
+
+    def _execute_run(
+        self,
+        run_id: str,
+        train_func: Callable[[str, str, dict], object],
+        *,
+        validator: Callable[[object], bool] | None,
+        provenance_status: str,
+    ) -> dict:
+        run = self._get_run(run_id)
+        if run["status"] != "PENDING":
+            return run
+        timestamp = _now()
+        run = self.database.claim_retrain_run(run_id, _OWNER_TOKEN, timestamp)
+        if run is None:
+            current = self._get_run(run_id)
+            return current
+        outcome_ids = json.loads(run["outcome_ids"])
+        dataset_provenance = json.loads(run["dataset_provenance"])
+        artifact: Path | None = None
+        latest: Path | None = None
+        rollback: Path | None = None
+        try:
+            context = {
+                "run_id": run_id,
+                "outcome_ids": outcome_ids,
+                "dataset_provenance": dataset_provenance,
+                "source_model_path": run.get("source_model_path"),
+                "source_model_sha256": run.get("source_model_sha256"),
+            }
+            trained = train_func(run["symbol"], run["timeframe"], context)
+            heartbeat_at = _now()
+            self.database.update_retrain_run(run_id, {
+                "heartbeat_at": heartbeat_at,
+                "updated_at": heartbeat_at,
+            })
+            if isinstance(trained, dict):
+                if "model" not in trained:
+                    raise ValueError("training result has no model")
+                model = trained["model"]
+                feature_names = trained.get("feature_names")
+                training_metadata = trained.get("metadata") or {}
+            else:
+                model = trained
+                feature_names = None
+                training_metadata = {}
+            if model is None:
+                raise ValueError("training returned no model")
+            artifact = self.storage.stage_model(
+                model,
+                name=f"ensemble_{run['symbol']}_{run['timeframe']}",
+                version=run_id,
+                feature_names=feature_names,
+                metadata={**training_metadata, **context},
+            )
+            heartbeat_at = _now()
+            self.database.update_retrain_run(run_id, {
+                "heartbeat_at": heartbeat_at,
+                "updated_at": heartbeat_at,
+            })
+            self.storage.validate_artifact(artifact, validator)
+            artifact_hash = self.storage.checksum(artifact)
+            validated_at = _now()
+            self.database.update_retrain_run(run_id, {
+                "status": "VALIDATED",
+                "artifact_path": str(artifact),
+                "artifact_sha256": artifact_hash,
+                "validated_at": validated_at,
+                "heartbeat_at": validated_at,
+                "updated_at": validated_at,
+            })
+            latest = self.storage.base_dir / f"latest_{_clean_pair(run['symbol'])}.pkl"
+            if latest.exists():
+                with tempfile.NamedTemporaryFile(
+                    dir=self.storage.base_dir,
+                    prefix=f".{latest.name}.{run_id}.rollback.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as handle:
+                    rollback = Path(handle.name)
+                shutil.copyfile(latest, rollback)
+                with rollback.open("r+b") as handle:
+                    os.fsync(handle.fileno())
+            promoted = self.storage.promote_artifact(
+                artifact,
+                pair=run["symbol"],
+                validator=validator,
+                _authority=_PROMOTION_AUTHORITY,
+            )
+            promoted_at = _now()
+            provenance = {
+                "model_id": "model_" + artifact_hash[:32],
+                "retrain_run_id": run_id,
+                "symbol": run["symbol"],
+                "timeframe": run["timeframe"],
+                "artifact_path": str(artifact),
+                "artifact_sha256": artifact_hash,
+                "source_model_path": run.get("source_model_path"),
+                "source_model_sha256": run.get("source_model_sha256"),
+                "dataset_provenance": dataset_provenance,
+                "outcome_ids": outcome_ids,
+                "trained_at": run["updated_at"],
+                "validated_at": validated_at,
+                "promoted_at": promoted_at,
+                "latest_path": str(promoted),
+                "status": provenance_status,
+            }
+            promoted_run = self.database.finalize_model_promotion(run_id, provenance)
+            if rollback is not None:
+                completed_rollback = rollback
+                rollback = None
+                try:
+                    completed_rollback.unlink(missing_ok=True)
+                except OSError as exc:
+                    # Recovery reports residual .tmp evidence without reverting
+                    # a DB-certified promotion.
+                    logger.warning(
+                        "Could not remove promotion rollback evidence %s: %s",
+                        completed_rollback,
+                        exc,
+                    )
+            return promoted_run
+        except Exception as exc:
+            if latest is not None and rollback is not None and rollback.exists():
+                os.replace(rollback, latest)
+                rollback = None
+            elif latest is not None and artifact is not None and latest.exists():
+                if self.storage.checksum(latest) == self.storage.checksum(artifact):
+                    latest.unlink()
+            failed_at = _now()
+            self.database.update_retrain_run(run_id, {
+                "status": "FAILED",
+                "error": f"{type(exc).__name__}: {exc}",
+                "updated_at": failed_at,
+            })
+            return self._get_run(run_id)
+        finally:
+            if rollback is not None:
+                rollback.unlink(missing_ok=True)
+
+    def reconcile(self) -> dict:
+        """Detect crash states and DB/filesystem provenance mismatches."""
+        issues: list[dict] = []
+        recovered: list[str] = []
+        provenance_rows = self.database.get_model_provenance()
+        provenance_by_run = {
+            row["retrain_run_id"]: row for row in provenance_rows
+        }
+        active_run_by_symbol: dict[str, str] = {}
+        for row in provenance_rows:
+            active_run_by_symbol.setdefault(row["symbol"], row["retrain_run_id"])
+        for run in self.database.get_retrain_runs(limit=100000):
+            if run["status"] == "RUNNING":
+                heartbeat = run.get("heartbeat_at") or run.get("updated_at")
+                heartbeat_time = datetime.fromisoformat(heartbeat) if heartbeat else None
+                if heartbeat_time and heartbeat_time.tzinfo is None:
+                    heartbeat_time = heartbeat_time.replace(tzinfo=timezone.utc)
+                timed_out = (
+                    heartbeat_time is None
+                    or (datetime.now(timezone.utc) - heartbeat_time).total_seconds()
+                    >= float(self.config["running_timeout_seconds"])
+                )
+                if not timed_out:
+                    continue
+                self.database.update_retrain_run(run["run_id"], {
+                    "status": "FAILED",
+                    "error": "interrupted RUNNING retrain detected during recovery",
+                    "updated_at": _now(),
+                })
+                recovered.append(run["run_id"])
+                continue
+            artifact = Path(run["artifact_path"]) if run.get("artifact_path") else None
+            latest = Path(run["latest_path"]) if run.get("latest_path") else (
+                self.storage.base_dir / f"latest_{_clean_pair(run['symbol'])}.pkl"
+            )
+            if run["status"] == "VALIDATED":
+                issues.append({
+                    "run_id": run["run_id"],
+                    "symbol": run["symbol"],
+                    "code": "promotion_incomplete",
+                    "artifact_exists": bool(artifact and artifact.is_file()),
+                })
+            elif run["status"] == "PROMOTED":
+                provenance = provenance_by_run.get(run["run_id"])
+                if provenance is None:
+                    issues.append({
+                        "run_id": run["run_id"], "symbol": run["symbol"],
+                        "code": "model_provenance_missing",
+                    })
+                elif provenance["artifact_sha256"] != run["artifact_sha256"]:
+                    issues.append({
+                        "run_id": run["run_id"], "symbol": run["symbol"],
+                        "code": "model_provenance_mismatch",
+                    })
+                elif not artifact or not artifact.is_file():
+                    issues.append({
+                        "run_id": run["run_id"], "symbol": run["symbol"],
+                        "code": "artifact_missing",
+                    })
+                elif (
+                    active_run_by_symbol.get(run["symbol"]) == run["run_id"]
+                    and not latest.is_file()
+                ):
+                    issues.append({
+                        "run_id": run["run_id"], "symbol": run["symbol"],
+                        "code": "latest_missing",
+                    })
+                elif (
+                    self.storage.checksum(artifact) != run["artifact_sha256"]
+                    or (
+                        active_run_by_symbol.get(run["symbol"]) == run["run_id"]
+                        and self.storage.checksum(latest) != run["artifact_sha256"]
+                    )
+                ):
+                    issues.append({
+                        "run_id": run["run_id"], "symbol": run["symbol"],
+                        "code": "artifact_mismatch",
+                    })
+        certified_hashes = {
+            (row["symbol"], row["artifact_sha256"])
+            for row in provenance_rows
+            if row["status"] in {"PROMOTED", "INITIAL_TRAINING"}
+        }
+        for latest in self.storage.base_dir.glob("latest_*.pkl"):
+            symbol = latest.stem.removeprefix("latest_")
+            if (symbol, self.storage.checksum(latest)) not in certified_hashes:
+                issues.append({
+                    "run_id": None,
+                    "symbol": symbol,
+                    "code": "latest_without_provenance",
+                })
+        for temporary in self.storage.base_dir.glob(".*.tmp"):
+            issues.append({
+                "run_id": None,
+                "symbol": None,
+                "code": "orphan_temporary_artifact",
+                "path": str(temporary),
+            })
+        return {"healthy": not issues, "issues": issues, "recovered": recovered}
+
     def trigger_retrain(
         self,
         pair: str,
@@ -278,8 +615,13 @@ class RetrainManager:
         old_win_rate: float = 0.0,
         old_accuracy: float = 0.0,
     ) -> RetrainRecord:
-        import time as _time
-        start = _time.time()
+        """Persistently reject the legacy path that cannot provide provenance."""
+        started = time.monotonic()
+        timestamp = _now()
+        evidence_key = hashlib.sha256(
+            f"legacy|{pair.upper()}|{timeframe.upper()}|{trigger.value}|{timestamp}".encode()
+        ).hexdigest()
+        run_id = "retrain_" + evidence_key[:24]
         record = RetrainRecord(
             pair=pair,
             timeframe=timeframe,
@@ -287,132 +629,77 @@ class RetrainManager:
             old_model=old_model,
             old_win_rate=old_win_rate,
             old_accuracy=old_accuracy,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=timestamp,
+            run_id=run_id,
         )
-
-        if retrain_func is None:
-            record.success = True
-            record.new_model = old_model
-            record.new_win_rate = old_win_rate
-            record.new_accuracy = old_accuracy
-            record.duration_sec = _time.time() - start
-            record.error = "No retrain_func provided — logged only"
-        else:
-            try:
-                result = retrain_func(pair, timeframe)
-                record.success = True
-                record.new_model = result.get("model_name", "unknown") if isinstance(result, dict) else "unknown"
-                record.new_win_rate = result.get("win_rate", 0.0) if isinstance(result, dict) else 0.0
-                record.new_accuracy = result.get("accuracy", 0.0) if isinstance(result, dict) else 0.0
-                record.duration_sec = _time.time() - start
-            except Exception as e:
-                record.success = False
-                record.error = str(e)
-                record.duration_sec = _time.time() - start
-
-        self._log_retrain(record)
+        record.error = (
+            "Legacy trigger lacks outcome/dataset provenance; create a pending run "
+            "and use execute_retrain()"
+        )
+        self.database.create_retrain_run({
+            "run_id": run_id,
+            "evidence_key": evidence_key,
+            "symbol": pair.upper(),
+            "timeframe": timeframe.upper(),
+            "trigger": trigger.value,
+            "status": "PENDING",
+            "source_model_path": old_model or None,
+            "source_model_sha256": None,
+            "dataset_provenance": {"legacy_trigger": True, "complete": False},
+            "outcome_ids": [],
+            "last_outcome_id": None,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        })
+        self.database.update_retrain_run(run_id, {
+            "status": "FAILED",
+            "error": record.error,
+            "updated_at": _now(),
+        })
+        record.duration_sec = time.monotonic() - started
         return record
 
-    # ── Manual trigger ──
     def manual_retrain(
-        self,
-        pair: str,
-        timeframe: str = "H1",
-        retrain_func: Callable | None = None,
+        self, pair: str, timeframe: str = "H1", retrain_func: Callable | None = None
     ) -> RetrainRecord:
-        return self.trigger_retrain(
-            pair=pair,
-            timeframe=timeframe,
-            trigger=RetrainTrigger.MANUAL,
-            retrain_func=retrain_func,
-        )
+        return self.trigger_retrain(pair, timeframe, RetrainTrigger.MANUAL, retrain_func)
 
-    # ── Get history ──
     def get_history(self, pair: str = "", limit: int = 20) -> list[dict]:
-        try:
-            conn = sqlite3.connect(self.db_path)
-            if pair:
-                rows = conn.execute(
-                    "SELECT * FROM retrain_history WHERE pair=? ORDER BY id DESC LIMIT ?",
-                    (pair, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM retrain_history ORDER BY id DESC LIMIT ?",
-                    (limit,),
-                ).fetchall()
-            conn.close()
-            cols = ["id", "pair", "timeframe", "trigger", "old_model", "new_model",
-                    "old_win_rate", "new_win_rate", "old_accuracy", "new_accuracy",
-                    "duration_sec", "success", "error", "timestamp"]
-            return [dict(zip(cols, r)) for r in rows]
-        except Exception:
-            return []
-
-    # ── Log ──
-    def _log_retrain(self, record: RetrainRecord):
-        try:
-            conn = sqlite3.connect(self.db_path)
-            conn.execute("""
-                INSERT INTO retrain_history
-                (pair, timeframe, trigger, old_model, new_model,
-                 old_win_rate, new_win_rate, old_accuracy, new_accuracy,
-                 duration_sec, success, error, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                record.pair, record.timeframe, record.trigger,
-                record.old_model, record.new_model,
-                record.old_win_rate, record.new_win_rate,
-                record.old_accuracy, record.new_accuracy,
-                record.duration_sec, int(record.success), record.error,
-                record.timestamp,
-            ))
-            conn.commit()
-            conn.close()
-        except Exception:
-            pass
+        return self.database.get_retrain_runs(pair or None, limit=limit)
 
 
-# ── CLI ──
+def _clean_pair(pair: str) -> str:
+    clean = "".join(character for character in str(pair).upper() if character.isalnum())
+    if not clean:
+        raise ValueError("model pair is empty or invalid")
+    return clean
+
+
 def cmd_retrain_check(args: str = "") -> str:
-    """Comando CLI: retrain_check <pair> [current_win_rate] [model_name]"""
     parts = args.strip().split()
     if not parts:
         return "Uso: retrain_check <pair> [current_win_rate] [model_name]"
     pair = parts[0].upper()
     win_rate = float(parts[1]) if len(parts) > 1 else None
     model_name = parts[2] if len(parts) > 2 else ""
-    mgr = RetrainManager()
-    decision = mgr.check_retrain_needed(pair=pair, current_win_rate=win_rate, model_name=model_name)
-    if decision.needed:
-        return f"{_Y('Reentrenamiento necesario')} — trigger={_C(decision.trigger.value)}\n  {decision.reason}"
-    return f"{_G('No necesita reentrenamiento')} — {pair} esta dentro de parametros optimos"
+    decision = RetrainManager().check_retrain_needed(
+        pair=pair, current_win_rate=win_rate, model_name=model_name
+    )
+    return (
+        f"Reentrenamiento necesario — {decision.reason}"
+        if decision.needed
+        else f"No necesita reentrenamiento — {pair}"
+    )
 
 
 def cmd_retrain_history(args: str = "") -> str:
-    """Comando CLI: retrain_history [pair] [limit]"""
     parts = args.strip().split()
     pair = parts[0].upper() if parts else ""
     limit = int(parts[1]) if len(parts) > 1 else 20
-    mgr = RetrainManager()
-    history = mgr.get_history(pair=pair, limit=limit)
+    history = RetrainManager().get_history(pair, limit)
     if not history:
-        return f"{_Y('Sin historial de reentrenamientos')}"
-    lines = [f"{_C('Historial de Reentrenamientos')} ({len(history)} registros)"]
-    for h in history:
-        icon = _G("OK") if h["success"] else _R("FAIL")
-        lines.append(
-            f"  {icon} {h['timestamp'][:19]} | {h['pair']} {h['timeframe']} | "
-            f"trigger={h['trigger']} | {h['old_model']} → {h['new_model']} | "
-            f"WR: {h['old_win_rate']:.1%} → {h['new_win_rate']:.1%}"
-        )
-    return "\n".join(lines)
-
-
-if __name__ == "__main__":
-    mgr = RetrainManager()
-    mgr.store_baseline("EURUSD", "H1", "RF", 0.65, 0.70)
-    d = mgr.check_retrain_needed(pair="EURUSD", current_win_rate=0.50, model_name="RF", prediction_count=25)
-    print(f"Needed={d.needed}, Trigger={d.trigger.value}, Reason={d.reason}")
-    print(cmd_retrain_check("EURUSD 0.50 RF"))
-    print(cmd_retrain_history())
+        return "Sin historial de reentrenamientos"
+    return "\n".join(
+        [f"Historial de Reentrenamientos ({len(history)})"]
+        + [f"  {row['status']} {row['symbol']} {row['timeframe']} {row['run_id']}" for row in history]
+    )

@@ -1,147 +1,78 @@
-"""
-VI.1.C — Model Cache Manager
-Versioning inteligente: evita reentrenar si el dataset no cambió significativamente.
-"""
-import hashlib
-import json
-import sqlite3
-from datetime import datetime
+"""Compatibility view over canonical promoted-model provenance."""
+from __future__ import annotations
+
 from pathlib import Path
 
-_DB_PATH = Path(__file__).parent.parent.parent / "astra_hparam_cache.db"
-_CHANGE_THRESHOLD = 0.05   # 5% cambio en datos → reentrenar
-_ACCURACY_MIN     = 0.52   # precisión mínima aceptable para mantener modelo
-
-
-def _get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(_DB_PATH))
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS model_version_log (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            pair         TEXT,
-            horizon      TEXT,
-            model_path   TEXT,
-            data_hash    TEXT,
-            row_count    INTEGER,
-            accuracy     REAL,
-            created_at   TEXT,
-            is_active    INTEGER DEFAULT 1
-        )
-    """)
-    conn.commit()
-    return conn
-
-
-def _csv_hash(csv_path: str) -> tuple[str, int]:
-    """Hash del CSV y número de filas."""
-    try:
-        p = Path(csv_path)
-        if not p.exists():
-            return "no_file", 0
-        size = p.stat().st_size
-        rows = 0
-        with open(p, "rb") as f:
-            content = f.read()
-            rows = content.count(b"\n")
-            h = hashlib.md5(content[:2048] + content[-2048:] + str(size).encode()).hexdigest()[:16]
-        return h, rows
-    except Exception:
-        return "unknown", 0
+from infra.db.database import SQLiteDatabase
 
 
 class ModelCacheManager:
-    """
-    Gestiona versiones de modelos entrenados.
-    Decide si es necesario reentrenar comparando el dataset actual con el anterior.
-    """
+    """Expose active models without maintaining a second model registry."""
 
-    def should_retrain(self, pair: str, horizon: str = "H1",
-                       csv_path: str = "") -> tuple[bool, str]:
-        """
-        Retorna (debe_reentrenar, motivo).
-        Si no es necesario, el modelo existente sigue siendo válido.
-        """
-        try:
-            with _get_conn() as conn:
-                row = conn.execute("""
-                    SELECT data_hash, row_count, accuracy FROM model_version_log
-                    WHERE pair=? AND horizon=? AND is_active=1
-                    ORDER BY created_at DESC LIMIT 1
-                """, (pair.upper(), horizon)).fetchone()
+    def __init__(
+        self,
+        db_path: str | Path | None = None,
+        *,
+        database: SQLiteDatabase | None = None,
+    ):
+        if database is not None and db_path is not None:
+            raise ValueError("provide database or db_path, not both")
+        self._provided_database = database
+        self._db_path = str(db_path) if db_path is not None else None
 
-                if not row:
-                    return True, "Sin modelo previo — entrenamiento inicial"
+    @property
+    def database(self) -> SQLiteDatabase:
+        if self._provided_database is None:
+            self._provided_database = SQLiteDatabase(self._db_path)
+        return self._provided_database
 
-                old_hash, old_rows, accuracy = row
+    def should_retrain(
+        self, pair: str, horizon: str = "H1", csv_path: str = ""
+    ) -> tuple[bool, str]:
+        promoted = [
+            row for row in self.database.get_model_provenance(pair.upper())
+            if row["timeframe"] == horizon.upper()
+            and row["status"] in {"PROMOTED", "INITIAL_TRAINING"}
+        ]
+        if not promoted:
+            return True, "Sin modelo promovido con provenance canónica"
+        return (
+            False,
+            "Modelo promovido vigente; adaptive retrain depende de outcomes nuevos persistidos",
+        )
 
-                if accuracy is not None and accuracy < _ACCURACY_MIN:
-                    return True, f"Precisión ({accuracy:.1f}%) por debajo del mínimo ({_ACCURACY_MIN*100:.0f}%)"
-
-                if not csv_path:
-                    return False, "Sin CSV nuevo — manteniendo modelo existente"
-
-                new_hash, new_rows = _csv_hash(csv_path)
-
-                if old_rows > 0:
-                    change_ratio = abs(new_rows - old_rows) / old_rows
-                    if change_ratio > _CHANGE_THRESHOLD:
-                        return True, f"Dataset cambió {change_ratio*100:.1f}% ({old_rows}→{new_rows} filas)"
-
-                if new_hash == old_hash:
-                    return False, "Dataset sin cambios — modelo vigente válido"
-
-                return False, "Cambio mínimo en datos — modelo existente es suficiente"
-
-        except Exception as e:
-            return True, f"Error verificando caché: {e}"
-
-    def register_model(self, pair: str, horizon: str = "H1",
-                       model_path: str = "", csv_path: str = "",
-                       accuracy: float = 0.0):
-        """Registra un modelo recién entrenado."""
-        data_hash, row_count = _csv_hash(csv_path)
-        try:
-            with _get_conn() as conn:
-                conn.execute("""
-                    UPDATE model_version_log SET is_active=0
-                    WHERE pair=? AND horizon=?
-                """, (pair.upper(), horizon))
-                conn.execute("""
-                    INSERT INTO model_version_log
-                        (pair, horizon, model_path, data_hash, row_count, accuracy, created_at, is_active)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-                """, (pair.upper(), horizon, model_path, data_hash,
-                      row_count, accuracy, datetime.now().isoformat()))
-                conn.commit()
-        except Exception:
-            pass
+    def register_model(self, *_args, **_kwargs):
+        raise RuntimeError(
+            "Direct model-cache registration is disabled; use RetrainManager promotion"
+        )
 
     def list_active_models(self) -> list[dict]:
-        """Lista todos los modelos activos registrados."""
-        try:
-            with _get_conn() as conn:
-                rows = conn.execute("""
-                    SELECT pair, horizon, accuracy, row_count, created_at
-                    FROM model_version_log WHERE is_active=1
-                    ORDER BY created_at DESC
-                """).fetchall()
-                return [
-                    {"pair": r[0], "horizon": r[1], "accuracy": r[2],
-                     "row_count": r[3], "created_at": r[4]}
-                    for r in rows
-                ]
-        except Exception:
-            return []
+        active: dict[tuple[str, str], dict] = {}
+        for row in self.database.get_model_provenance():
+            if row["status"] not in {"PROMOTED", "INITIAL_TRAINING"}:
+                continue
+            key = (row["symbol"], row["timeframe"])
+            if key not in active:
+                active[key] = {
+                    "pair": row["symbol"],
+                    "horizon": row["timeframe"],
+                    "accuracy": None,
+                    "row_count": None,
+                    "created_at": row["promoted_at"],
+                    "model_id": row["model_id"],
+                    "artifact_path": row["artifact_path"],
+                }
+        return list(active.values())
 
     def status(self) -> str:
         models = self.list_active_models()
         if not models:
-            return "Sin modelos registrados en el model cache."
-        lines = [f"  Model Cache ({len(models)} modelos activos):"]
-        for m in models:
+            return "Sin modelos promovidos registrados."
+        lines = [f"  Model Cache ({len(models)} modelos promovidos):"]
+        for model in models:
             lines.append(
-                f"    {m['pair']}/{m['horizon']} — "
-                f"acc={m['accuracy']:.1f}%  rows={m['row_count']}  {m['created_at'][:10]}"
+                f"    {model['pair']}/{model['horizon']} — "
+                f"{model['model_id']}  {model['created_at'][:10]}"
             )
         return "\n".join(lines)
 

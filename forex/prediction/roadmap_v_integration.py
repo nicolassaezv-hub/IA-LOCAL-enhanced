@@ -654,7 +654,7 @@ def run_full_roadmap_v_evaluation(
             entry_price=entry_price,
             atr=atr_val,
             reliability_score=reliability.reliability_score,
-            model_win_rate=model_win_rate or 0.5,
+            model_win_rate=model_win_rate,
             regime=regime.primary,
             pair=pair,
             timeframe=timeframe,

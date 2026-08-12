@@ -1,44 +1,58 @@
-"""
-V.14 — Aprendizaje Basado en Resultados
-========================================
-Cada prediccion se evalua posteriormente contra el resultado real del mercado.
-Automatiza el feedback que antes era manual (el usuario votaba).
+"""Closed-loop prediction and outcome tracking.
 
-El Sentinel (V.10) dispara la evaluacion N horas despues de cada señal.
-
-Integracion:
-    from forex.prediction.outcome_tracker import OutcomeTracker
-    tracker = OutcomeTracker()
-    tracker.record_prediction("EURUSD", "H1", "BUY", 1.0850, reliability=82.0)
-    # ... N velas despues ...
-    result = tracker.evaluate_prediction(pred_id, actual_price=1.0900)
+The scheduler database is the canonical source for predictions, outcomes and
+their performance.  Outcome maturity is based on persisted, closed candles;
+elapsed wall-clock time or a spot-price lookup is never sufficient evidence.
 """
 from __future__ import annotations
 
-import sqlite3
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Any
+import json
+import math
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Iterable
 
-try:
-    from colorama import Fore, Style
-    HAS_COLOR = True
-except ImportError:
-    HAS_COLOR = False
+import pandas as pd
 
-if HAS_COLOR:
-    _C = lambda s: f"{Fore.CYAN}{s}{Style.RESET_ALL}"
-    _G = lambda s: f"{Fore.GREEN}{s}{Style.RESET_ALL}"
-    _Y = lambda s: f"{Fore.YELLOW}{s}{Style.RESET_ALL}"
-    _R = lambda s: f"{Fore.RED}{s}{Style.RESET_ALL}"
-    _B = lambda s: f"{Fore.BLUE}{s}{Style.RESET_ALL}"
-else:
-    _C = _G = _Y = _R = _B = lambda s: s
+from infra.db.database import SQLiteDatabase, stable_prediction_id
+
+
+_TRADE_ACTIONS = ("BUY", "SELL")
+_TIMEFRAME_DURATION = {
+    "H1": timedelta(hours=1),
+    "H4": timedelta(hours=4),
+    "D1": timedelta(days=1),
+}
+
+
+def _utc_iso(value: Any) -> str:
+    timestamp = pd.Timestamp(value)
+    if pd.isna(timestamp):
+        raise ValueError("prediction candle timestamp is invalid")
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.tz_localize("UTC")
+    else:
+        timestamp = timestamp.tz_convert("UTC")
+    return timestamp.isoformat()
+
+
+def _decode_json(value: Any) -> dict:
+    if isinstance(value, dict):
+        return value
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 @dataclass
 class PredictionRecord:
     id: int | None = None
+    prediction_id: str = ""
     pair: str = ""
     timeframe: str = ""
     signal: str = "HOLD"
@@ -54,9 +68,10 @@ class PredictionRecord:
     price_change: float = 0.0
     direction_correct: bool = False
     evaluation_time: str = ""
+    status: str = "PENDING"
 
     def to_dict(self) -> dict:
-        return {k: v for k, v in self.__dict__.items()}
+        return dict(self.__dict__)
 
 
 @dataclass
@@ -73,51 +88,23 @@ class OutcomeStats:
     worst_reliability: float = 0.0
 
     def to_dict(self) -> dict:
-        return {k: v for k, v in self.__dict__.items()}
+        return dict(self.__dict__)
 
 
 class OutcomeTracker:
-    """Evaluador automatico de resultados de predicciones."""
+    """Persist final H1 decisions and mature them from real closed candles."""
 
-    def __init__(self, db_path: str = "memoria.db"):
-        self.db_path = db_path
-        self._init_db()
+    def __init__(
+        self,
+        db_path: str | Path | None = None,
+        *,
+        database: SQLiteDatabase | None = None,
+    ):
+        if database is not None and db_path is not None:
+            raise ValueError("provide database or db_path, not both")
+        self.database = database or SQLiteDatabase(str(db_path) if db_path else None)
+        self.db_path = self.database.db_path
 
-    def _init_db(self):
-        try:
-            conn = sqlite3.connect(self.db_path)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS outcome_predictions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    pair TEXT,
-                    timeframe TEXT,
-                    signal TEXT,
-                    entry_price REAL,
-                    reliability_score REAL,
-                    regime TEXT,
-                    mtf_coherent INTEGER,
-                    news_active INTEGER,
-                    timestamp TEXT,
-                    evaluated INTEGER DEFAULT 0,
-                    actual_price REAL DEFAULT 0,
-                    outcome TEXT DEFAULT '',
-                    price_change REAL DEFAULT 0,
-                    direction_correct INTEGER DEFAULT 0,
-                    evaluation_time TEXT
-                )
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_outcome_pair ON outcome_predictions(pair)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_outcome_evaluated ON outcome_predictions(evaluated)
-            """)
-            conn.commit()
-            conn.close()
-        except Exception:
-            pass
-
-    # ── Record a prediction ──
     def record_prediction(
         self,
         pair: str,
@@ -128,237 +115,263 @@ class OutcomeTracker:
         regime: str = "",
         mtf_coherent: bool = False,
         news_active: bool = False,
-    ) -> int:
-        ts = datetime.utcnow().isoformat()
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.execute("""
-                INSERT INTO outcome_predictions
-                (pair, timeframe, signal, entry_price, reliability_score,
-                 regime, mtf_coherent, news_active, timestamp, evaluated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-            """, (
-                pair, timeframe, signal, entry_price, reliability_score,
-                regime, int(mtf_coherent), int(news_active), ts,
-            ))
-            pred_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
-            return pred_id
-        except Exception:
-            return -1
+        *,
+        candle_timestamp: Any | None = None,
+        prediction_timestamp: Any | None = None,
+        raw_action: str | None = None,
+        horizon_candles: int | None = None,
+        model_identity: str | None = None,
+        dataset_provenance: dict | None = None,
+        prediction_id: str | None = None,
+    ) -> str:
+        action = str(signal).upper().strip()
+        if action not in _TRADE_ACTIONS:
+            raise ValueError("only final BUY/SELL actions can enter the outcome loop")
+        symbol = str(pair).upper().strip()
+        tf = str(timeframe).upper().strip()
+        if tf != "H1":
+            raise ValueError("only final H1 predictions can enter the outcome loop")
+        if not symbol or float(entry_price) <= 0:
+            raise ValueError("prediction requires a symbol and positive entry price")
+        if candle_timestamp is None:
+            candle_timestamp = prediction_timestamp
+        if candle_timestamp is None:
+            raise ValueError("prediction requires its closed candle identity")
+        candle_iso = _utc_iso(candle_timestamp)
+        if horizon_candles is None:
+            from .dataset_builder import get_pair_config
 
-    # ── Evaluate a prediction ──
-    def evaluate_prediction(
-        self,
-        pred_id: int,
-        actual_price: float,
-    ) -> PredictionRecord | None:
-        try:
-            conn = sqlite3.connect(self.db_path)
-            row = conn.execute(
-                "SELECT * FROM outcome_predictions WHERE id=?",
-                (pred_id,),
-            ).fetchone()
-            if not row:
-                conn.close()
-                return None
+            horizon_candles = int(get_pair_config(symbol)["horizon"])
+        if int(horizon_candles) <= 0:
+            raise ValueError("outcome horizon must be a positive candle count")
+        uid = prediction_id or stable_prediction_id(symbol, tf, candle_iso, action)
+        saved = self.database.save_prediction({
+            "prediction_id": uid,
+            "symbol": symbol,
+            "pair": symbol,
+            "timeframe": tf,
+            "action": action,
+            "direction": action,
+            "raw_action": raw_action,
+            "confidence": float(reliability_score) / 100.0,
+            "reliability_score": float(reliability_score),
+            "entry_price": float(entry_price),
+            "predicted_at": _utc_iso(prediction_timestamp or datetime.now(timezone.utc)),
+            "candle_timestamp": candle_iso,
+            "horizon_candles": int(horizon_candles),
+            "model_identity": model_identity,
+            "dataset_provenance": {
+                **(dataset_provenance or {}),
+                "regime": regime,
+                "mtf_coherent": bool(mtf_coherent),
+                "news_active": bool(news_active),
+            },
+            "status": "PENDING",
+        })
+        return str(saved["prediction_id"])
 
-            signal = row[3]
-            entry_price = row[4]
-            price_change = actual_price - entry_price
-
-            if signal == "BUY":
-                direction_correct = price_change > 0
-                outcome = "win" if direction_correct else "loss"
-            elif signal == "SELL":
-                direction_correct = price_change < 0
-                outcome = "win" if direction_correct else "loss"
-            else:
-                direction_correct = abs(price_change) < 0.0001
-                outcome = "neutral"
-
-            eval_time = datetime.utcnow().isoformat()
-            conn.execute("""
-                UPDATE outcome_predictions
-                SET evaluated=1, actual_price=?, outcome=?, price_change=?,
-                    direction_correct=?, evaluation_time=?
-                WHERE id=?
-            """, (actual_price, outcome, price_change, int(direction_correct), eval_time, pred_id))
-            conn.commit()
-            conn.close()
-
-            return PredictionRecord(
-                id=pred_id,
-                pair=row[1],
-                timeframe=row[2],
-                signal=signal,
-                entry_price=entry_price,
-                reliability_score=row[5],
-                regime=row[6],
-                mtf_coherent=bool(row[7]),
-                news_active=bool(row[8]),
-                timestamp=row[9],
-                evaluated=True,
-                actual_price=actual_price,
-                outcome=outcome,
-                price_change=price_change,
-                direction_correct=direction_correct,
-                evaluation_time=eval_time,
+    @staticmethod
+    def _closed_future_candles(
+        candles: pd.DataFrame,
+        *,
+        after: str,
+        timeframe: str,
+        available_at: Any,
+    ) -> pd.DataFrame:
+        if not isinstance(candles, pd.DataFrame):
+            candles = pd.DataFrame(candles)
+        required = {"timestamp", "close"}
+        if not required.issubset(candles.columns):
+            raise ValueError("outcome evidence requires timestamp and close columns")
+        duration = _TIMEFRAME_DURATION.get(timeframe.upper())
+        if duration is None:
+            raise ValueError(f"unsupported outcome timeframe: {timeframe}")
+        frame = candles.loc[:, ["timestamp", "close"]].copy()
+        frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+        frame["close"] = pd.to_numeric(frame["close"], errors="coerce")
+        frame = frame.dropna().drop_duplicates("timestamp", keep="last")
+        frame = frame.loc[
+            frame["close"].map(
+                lambda value: math.isfinite(float(value)) and float(value) > 0.0
             )
-        except Exception:
-            return None
+        ]
+        frame = frame.sort_values("timestamp")
+        prediction_candle = pd.Timestamp(after)
+        if prediction_candle.tzinfo is None:
+            prediction_candle = prediction_candle.tz_localize("UTC")
+        else:
+            prediction_candle = prediction_candle.tz_convert("UTC")
+        cutoff = pd.Timestamp(available_at)
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.tz_localize("UTC")
+        else:
+            cutoff = cutoff.tz_convert("UTC")
+        return frame.loc[
+            (frame["timestamp"] > prediction_candle)
+            & (frame["timestamp"] + duration <= cutoff)
+        ]
 
-    # ── Get pending predictions ──
+    def evaluate_pending(
+        self,
+        candles: pd.DataFrame | Iterable[dict],
+        *,
+        pair: str = "",
+        timeframe: str = "H1",
+        available_at: Any | None = None,
+        limit: int = 100,
+    ) -> int:
+        """Finalize mature predictions once their complete real horizon exists."""
+        available_at = available_at or datetime.now(timezone.utc)
+        finalized = 0
+        for prediction in self.database.get_pending_predictions(pair or None, limit=limit):
+            if prediction["timeframe"] != timeframe.upper():
+                continue
+            action = str(prediction.get("action") or prediction.get("direction") or "").upper()
+            if action not in _TRADE_ACTIONS:
+                continue
+            horizon = prediction.get("horizon_candles")
+            if not isinstance(horizon, int) or horizon <= 0:
+                continue
+            future = self._closed_future_candles(
+                candles,
+                after=prediction["candle_timestamp"],
+                timeframe=prediction["timeframe"],
+                available_at=available_at,
+            )
+            duration = _TIMEFRAME_DURATION[prediction["timeframe"]]
+            prediction_candle = pd.Timestamp(prediction["candle_timestamp"])
+            if prediction_candle.tzinfo is None:
+                prediction_candle = prediction_candle.tz_localize("UTC")
+            else:
+                prediction_candle = prediction_candle.tz_convert("UTC")
+            expected_timestamps = pd.DatetimeIndex(
+                prediction_candle + step * duration
+                for step in range(1, horizon + 1)
+            )
+            horizon_rows = future.set_index("timestamp").reindex(expected_timestamps)
+            if horizon_rows["close"].isna().any():
+                continue
+            observed_row = horizon_rows.iloc[-1]
+            entry_price = float(prediction["entry_price"])
+            observed_price = float(observed_row["close"])
+            price_change = observed_price - entry_price
+            observed_return = price_change / entry_price
+            correct = price_change > 0 if action == "BUY" else price_change < 0
+            actual_direction = "BUY" if price_change > 0 else "SELL" if price_change < 0 else "HOLD"
+            evaluation_time = expected_timestamps[-1] + duration
+            self.database.save_outcome({
+                "prediction_id": prediction["prediction_id"],
+                "outcome_key": prediction["prediction_id"],
+                "symbol": prediction["symbol"],
+                "timeframe": prediction["timeframe"],
+                "actual_direction": actual_direction,
+                "prediction_timestamp": prediction["candle_timestamp"],
+                "evaluation_timestamp": evaluation_time.isoformat(),
+                "resolved_at": evaluation_time.isoformat(),
+                "action": action,
+                "entry_price": entry_price,
+                "observed_price": observed_price,
+                "observed_return": observed_return,
+                "result": "win" if correct else "loss",
+                "status": "FINALIZED",
+                "model_identity": prediction.get("model_identity"),
+                "dataset_provenance": _decode_json(prediction.get("dataset_provenance")),
+            })
+            finalized += 1
+        return finalized
+
+    def evaluate_from_csv(
+        self,
+        csv_path: str | Path,
+        *,
+        pair: str,
+        timeframe: str = "H1",
+        available_at: Any | None = None,
+    ) -> int:
+        path = Path(csv_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"outcome dataset does not exist: {path}")
+        candles = pd.read_csv(path, usecols=["timestamp", "close"])
+        return self.evaluate_pending(
+            candles,
+            pair=pair,
+            timeframe=timeframe,
+            available_at=available_at,
+        )
+
+    def evaluate_prediction(self, *_args, **_kwargs):
+        raise RuntimeError(
+            "spot-price evaluation is disabled; provide persisted future candles "
+            "through evaluate_pending()"
+        )
+
+    def auto_evaluate(self, *_args, **_kwargs):
+        raise RuntimeError(
+            "price_func evaluation is disabled; use evaluate_from_csv() with closed candles"
+        )
+
     def get_pending(self, pair: str = "", limit: int = 50) -> list[dict]:
-        try:
-            conn = sqlite3.connect(self.db_path)
-            if pair:
-                rows = conn.execute(
-                    "SELECT * FROM outcome_predictions WHERE evaluated=0 AND pair=? ORDER BY id DESC LIMIT ?",
-                    (pair, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM outcome_predictions WHERE evaluated=0 ORDER BY id DESC LIMIT ?",
-                    (limit,),
-                ).fetchall()
-            conn.close()
-            cols = ["id", "pair", "timeframe", "signal", "entry_price",
-                    "reliability_score", "regime", "mtf_coherent", "news_active",
-                    "timestamp", "evaluated", "actual_price", "outcome",
-                    "price_change", "direction_correct", "evaluation_time"]
-            return [dict(zip(cols, r)) for r in rows]
-        except Exception:
-            return []
+        return self.database.get_pending_predictions(pair or None, limit=limit)
 
-    # ── Get stats ──
     def get_stats(self, pair: str = "") -> OutcomeStats:
-        stats = OutcomeStats(pair=pair)
-        try:
-            conn = sqlite3.connect(self.db_path)
-            if pair:
-                rows = conn.execute(
-                    "SELECT signal, reliability_score, evaluated, direction_correct, price_change FROM outcome_predictions WHERE pair=?",
-                    (pair,),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT signal, reliability_score, evaluated, direction_correct, price_change FROM outcome_predictions",
-                ).fetchall()
-            conn.close()
-
-            stats.total_predictions = len(rows)
-            evaluated = [r for r in rows if r[2]]
-            stats.evaluated = len(evaluated)
-            stats.correct = sum(1 for r in evaluated if r[3])
-            stats.incorrect = stats.evaluated - stats.correct
-            stats.win_rate = stats.correct / stats.evaluated if stats.evaluated > 0 else 0.0
-
-            if rows:
-                rels = [r[1] for r in rows if r[1] is not None]
-                if rels:
-                    stats.avg_reliability = sum(rels) / len(rels)
-                    stats.best_reliability = max(rels)
-                    stats.worst_reliability = min(rels)
-
-                changes = [r[4] for r in evaluated if r[4] is not None]
-                if changes:
-                    stats.avg_price_change = sum(changes) / len(changes)
-
-        except Exception:
-            pass
+        predictions = [
+            row for row in self.database.get_predictions(symbol=pair or None, limit=100000)
+            if (row.get("action") or row.get("direction")) in _TRADE_ACTIONS
+        ]
+        performance = self.database.get_outcome_performance(pair or None, "H1")
+        reliabilities = [
+            float(row["confidence"]) * 100.0
+            for row in predictions
+            if row.get("confidence") is not None
+        ]
+        stats = OutcomeStats(
+            pair=pair,
+            total_predictions=len(predictions),
+            evaluated=performance["evaluated"],
+            correct=performance["correct"],
+            incorrect=performance["incorrect"],
+            win_rate=performance["win_rate"],
+            avg_price_change=performance["avg_return"],
+        )
+        if reliabilities:
+            stats.avg_reliability = sum(reliabilities) / len(reliabilities)
+            stats.best_reliability = max(reliabilities)
+            stats.worst_reliability = min(reliabilities)
         return stats
 
-    # ── Get history ──
-    def get_history(self, pair: str = "", limit: int = 50, evaluated_only: bool = False) -> list[dict]:
-        try:
-            conn = sqlite3.connect(self.db_path)
-            query = "SELECT * FROM outcome_predictions"
-            conditions = []
-            params = []
-            if pair:
-                conditions.append("pair=?")
-                params.append(pair)
-            if evaluated_only:
-                conditions.append("evaluated=1")
-            if conditions:
-                query += " WHERE " + " AND ".join(conditions)
-            query += " ORDER BY id DESC LIMIT ?"
-            params.append(limit)
-            rows = conn.execute(query, params).fetchall()
-            conn.close()
-            cols = ["id", "pair", "timeframe", "signal", "entry_price",
-                    "reliability_score", "regime", "mtf_coherent", "news_active",
-                    "timestamp", "evaluated", "actual_price", "outcome",
-                    "price_change", "direction_correct", "evaluation_time"]
-            return [dict(zip(cols, r)) for r in rows]
-        except Exception:
-            return []
-
-    # ── Auto-evaluate old predictions (called by scheduler) ──
-    def auto_evaluate(self, price_func: callable, max_age_hours: int = 24) -> int:
-        pending = self.get_pending(limit=100)
-        evaluated = 0
-        for p in pending:
-            ts = datetime.fromisoformat(p["timestamp"].replace("Z", "+00:00")) if p["timestamp"] else None
-            if ts and (datetime.utcnow() - ts.replace(tzinfo=None)) >= timedelta(hours=max_age_hours):
-                try:
-                    actual = price_func(p["pair"])
-                    if actual and self.evaluate_prediction(p["id"], actual):
-                        evaluated += 1
-                except Exception:
-                    pass
-        return evaluated
+    def get_history(
+        self, pair: str = "", limit: int = 50, evaluated_only: bool = False
+    ) -> list[dict]:
+        if evaluated_only:
+            rows = self.database.get_finalized_outcomes(pair or None, "H1")
+        else:
+            rows = self.database.get_predictions(symbol=pair or None, limit=limit)
+        return list(reversed(rows[-limit:]))
 
 
-# ── CLI ──
 def cmd_outcome_stats(args: str = "") -> str:
-    """Comando CLI: outcome_stats [pair]"""
-    parts = args.strip().split()
-    pair = parts[0].upper() if parts else ""
-    tracker = OutcomeTracker()
-    stats = tracker.get_stats(pair=pair)
-    lines = [
-        f"{_C('Outcome Stats')} — {pair or 'ALL'}",
-        f"  Total predicciones: {stats.total_predictions}",
-        f"  Evaluadas: {stats.evaluated}",
-        f"  Correctas: {_G(str(stats.correct))} / Incorrectas: {_R(str(stats.incorrect))}",
-        f"  Win Rate: {_G(f'{stats.win_rate:.1%}') if stats.win_rate >= 0.5 else _R(f'{stats.win_rate:.1%}')}",
-        f"  Avg Reliability: {stats.avg_reliability:.1f}",
-        f"  Avg Price Change: {stats.avg_price_change:.5f}",
-    ]
-    return "\n".join(lines)
+    pair = args.strip().split()[0].upper() if args.strip() else ""
+    stats = OutcomeTracker().get_stats(pair=pair)
+    return (
+        f"Outcome Stats — {pair or 'ALL'}\n"
+        f"  Operational predictions: {stats.total_predictions}\n"
+        f"  Finalized: {stats.evaluated}\n"
+        f"  Wins/Losses: {stats.correct}/{stats.incorrect}\n"
+        f"  Win Rate: {stats.win_rate:.1%}"
+    )
 
 
 def cmd_outcome_history(args: str = "") -> str:
-    """Comando CLI: outcome_history [pair] [limit]"""
     parts = args.strip().split()
     pair = parts[0].upper() if parts else ""
     limit = int(parts[1]) if len(parts) > 1 else 20
-    tracker = OutcomeTracker()
-    history = tracker.get_history(pair=pair, limit=limit, evaluated_only=True)
+    history = OutcomeTracker().get_history(pair=pair, limit=limit, evaluated_only=True)
     if not history:
-        return f"{_Y('Sin predicciones evaluadas')}"
-    lines = [f"{_C('Outcome History')} ({len(history)})"]
-    for h in history:
-        icon = _G("WIN") if h["outcome"] == "win" else _R("LOSS") if h["outcome"] == "loss" else _Y("NEUTRAL")
+        return "Sin outcomes finalizados"
+    lines = [f"Outcome History ({len(history)})"]
+    for row in history:
         lines.append(
-            f"  {h['timestamp'][:19]} | {h['pair']} {h['timeframe']} | "
-            f"{h['signal']} | {icon} | R={h['reliability_score']:.1f} | "
-            f"entry={h['entry_price']:.5f} → actual={h['actual_price']:.5f} | "
-            f"Δ={h['price_change']:.5f}"
+            f"  {row['evaluation_timestamp']} | {row['symbol']} {row['timeframe']} | "
+            f"{row['action']} | {str(row['result']).upper()}"
         )
     return "\n".join(lines)
-
-
-if __name__ == "__main__":
-    tracker = OutcomeTracker()
-    pid = tracker.record_prediction("EURUSD", "H1", "BUY", 1.0850, reliability_score=82.0, regime="trending_bullish")
-    print(f"Recorded prediction id={pid}")
-    result = tracker.evaluate_prediction(pid, actual_price=1.0900)
-    if result:
-        print(f"Evaluated: outcome={result.outcome}, correct={result.direction_correct}, change={result.price_change:.5f}")
-    print(cmd_outcome_stats("EURUSD"))
-    print()
-    print(cmd_outcome_history("EURUSD"))

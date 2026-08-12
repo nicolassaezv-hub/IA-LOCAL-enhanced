@@ -380,6 +380,18 @@ def run_prediction(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict:
 
         from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
         pipeline = ForexIntegratedPipeline()
+        pipeline.closed_loop_database = db
+        h1_registry = db.get_dataset_registry(symbol, timeframe)
+        if h1_registry:
+            entry = h1_registry[0]
+            pipeline.closed_loop_dataset_provenance = {
+                "registry_id": entry.get("id"),
+                "blob_path": entry.get("blob_path"),
+                "candle_count": entry.get("candle_count"),
+                "rolling_window_size": entry.get("rolling_window_size"),
+                "last_candle_timestamp": entry.get("last_candle_timestamp"),
+                "last_updated": entry.get("last_updated"),
+            }
         result = pipeline.predict(
             filepath=filepath,
             pair=symbol,
@@ -417,21 +429,115 @@ def run_prediction(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict:
             "timeframe": timeframe,
             "action": final_action,
             "direction": final_action,
+            "raw_action": result.get("raw_action"),
+            "prediction_id": result.get("prediction_id"),
             "confidence": confidence,
             "reliability_score": result.get("reliability_score"),
             "entry_price": float(result.get("entry_price", 0)),
             "stop_loss": float(result.get("stop_loss", 0)),
             "take_profit": float(result.get("take_profit", 0)),
             "features_snapshot": result.get("features", {}),
-            "pipeline_version": "v6.0.1",
-            "predicted_at": datetime.now().isoformat()
+            "pipeline_version": "v7.1.0",
+            "predicted_at": datetime.now().isoformat(),
+            "candle_timestamp": result.get("candle_timestamp"),
+            "horizon_candles": result.get("horizon_candles"),
+            "model_identity": result.get("model_identity"),
         }
-        saved = db.save_prediction(pred)
+        registry = db.get_dataset_registry(symbol, timeframe)
+        if registry:
+            dataset_entry = registry[0]
+            pred["candle_timestamp"] = (
+                pred["candle_timestamp"]
+                or dataset_entry.get("last_candle_timestamp")
+                or pred["predicted_at"]
+            )
+            pred["dataset_provenance"] = {
+                "registry_id": dataset_entry.get("id"),
+                "blob_path": dataset_entry.get("blob_path"),
+                "candle_count": dataset_entry.get("candle_count"),
+                "rolling_window_size": dataset_entry.get("rolling_window_size"),
+                "last_candle_timestamp": dataset_entry.get("last_candle_timestamp"),
+                "last_updated": dataset_entry.get("last_updated"),
+            }
+        else:
+            pred["candle_timestamp"] = pred["candle_timestamp"] or pred["predicted_at"]
+        saved = None
+        if pred.get("prediction_id") and hasattr(db, "get_prediction"):
+            saved = db.get_prediction(pred["prediction_id"])
+        if saved is None:
+            saved = db.save_prediction(pred)
         logger.info(f"  PREDICT {symbol} {timeframe} → {pred['direction']} conf={pred['confidence']:.2f}")
         return {"action": "predicted", "prediction": saved}
     except Exception as e:
         logger.error(f"  PREDICT FAILED {symbol} {timeframe}: {e}")
         return {"action": "error", "error": str(e)}
+
+
+def run_closed_loop_maintenance(
+    db: DatabaseAdapter,
+    symbol: str,
+    timeframe: str,
+) -> dict:
+    """Mature outcomes and persist retrain eligibility from the H1 dataset."""
+    if timeframe != PREDICTION_TIMEFRAME:
+        return {"action": "skip", "reason": "closed_loop_is_h1_only"}
+    required_methods = (
+        "get_pending_predictions",
+        "get_finalized_outcomes",
+        "get_retrain_runs",
+    )
+    if not all(hasattr(db, method) for method in required_methods):
+        return {"action": "skip", "reason": "database_has_no_closed_loop_contract"}
+    registry = db.get_dataset_registry(symbol, timeframe)
+    if not registry:
+        return {"action": "error", "error": "dataset registry entry is missing"}
+    entry = registry[0]
+    if entry.get("status") != "ready":
+        return {"action": "skip", "reason": "dataset_is_not_ready"}
+    path = _dataset_path(symbol, timeframe, entry)
+    try:
+        from forex.prediction.outcome_tracker import OutcomeTracker
+        from forex.prediction.model_storage import ModelStorage
+        from forex.prediction.retrain_manager import RetrainManager
+
+        manager = RetrainManager(
+            database=db,
+            storage=ModelStorage(PROJECT_ROOT / "models" / "forex"),
+        )
+        reconciliation = manager.reconcile()
+        symbol_issues = [
+            issue for issue in reconciliation["issues"]
+            if issue.get("symbol") == symbol
+        ]
+        if symbol_issues:
+            return {
+                "action": "error",
+                "error": "model provenance reconciliation failed",
+                "issues": symbol_issues,
+            }
+        finalized = OutcomeTracker(database=db).evaluate_from_csv(
+            path, pair=symbol, timeframe=timeframe
+        )
+        provenance = {
+            "registry_id": entry.get("id"),
+            "blob_path": entry.get("blob_path"),
+            "candle_count": entry.get("candle_count"),
+            "rolling_window_size": entry.get("rolling_window_size"),
+            "last_candle_timestamp": entry.get("last_candle_timestamp"),
+            "last_updated": entry.get("last_updated"),
+        }
+        pending = manager.ensure_pending_from_outcomes(
+            symbol, timeframe=timeframe, dataset_provenance=provenance
+        )
+        return {
+            "action": "maintained",
+            "outcomes_finalized": finalized,
+            "retrain_run_id": pending.get("run_id") if pending else None,
+            "retrain_status": pending.get("status") if pending else None,
+        }
+    except Exception as exc:
+        logger.error("  CLOSED LOOP FAILED %s %s: %s", symbol, timeframe, exc)
+        return {"action": "error", "error": str(exc)}
 
 
 def detect_new_symbols(db: DatabaseAdapter) -> list:
@@ -463,6 +569,32 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
 
     symbols = db.get_supported_symbols()
     symbols_processed = 0
+
+    # A promoted model is executable only while DB provenance and both file
+    # identities reconcile.  Ambiguous crash states block that symbol.
+    if timeframe == PREDICTION_TIMEFRAME and hasattr(db, "get_retrain_runs"):
+        try:
+            from forex.prediction.retrain_manager import RetrainManager
+            from forex.prediction.model_storage import ModelStorage
+
+            recovery = RetrainManager(
+                database=db,
+                storage=ModelStorage(PROJECT_ROOT / "models" / "forex"),
+            ).reconcile()
+            blocked = {
+                issue["symbol"]
+                for issue in recovery["issues"]
+                if issue.get("symbol")
+            }
+            if blocked:
+                logger.error(
+                    "Model provenance mismatch — blocking H1 prediction for %s",
+                    sorted(blocked),
+                )
+                symbols = [s for s in symbols if s["symbol_code"] not in blocked]
+        except Exception as exc:
+            logger.error("Model provenance reconciliation failed closed: %s", exc)
+            symbols = []
 
     # ── Model integrity check before executable prediction cycles ──
     if timeframe == PREDICTION_TIMEFRAME:
@@ -501,6 +633,10 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
             timeframe == PREDICTION_TIMEFRAME
             and update_result.get("action") in ("updated", "generated")
         ):
+            closed_loop_result = run_closed_loop_maintenance(db, code, timeframe)
+            results.append({"symbol": code, "closed_loop": closed_loop_result})
+            if closed_loop_result.get("action") == "error":
+                errors_count += 1
             pred_result = run_prediction(db, code, timeframe)
             results.append({"symbol": code, "predict": pred_result})
             if pred_result.get("action") == "predicted":
