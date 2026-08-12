@@ -1,4 +1,5 @@
 ESTETICA:
+
 Ver independencia de procesos en base del rendimiento del sistema y que ASTRA se adapte a ello:
 Quiero decir, que ASTRA pueda leer la info del sistema en el que corre y diga si puede correr por ejemplo la rama forex y lectura de pdf al mismo tiempo explicandolo ojala de forma numerica (ej: ASTRA puede correr 5 procesos simultaneos como max) y que tambien sea consciente de ello y en caso de llegar a ese limite de procesos tire un mensaje y evite que el usuario haga mas procesos
 
@@ -6,7 +7,9 @@ La barra de personalizacion (el setting del glow button, color de la interfaz y 
 
 
 FUNCIONAL:
+
 ✅ ## Kernel Lab
+
 El Prediction Lab debe revisar que el prompt (de prediccion) se cumple usando la variable propuesta y que  se añade Clasificacion Binaria por Kernalizacion si el sistema de prediccion es valido
 En el caso que el dataset y el prompt sean validos, se procede con la Clasificacion binaria y la muestra que avalen los resultados (graficos de Kernels, Matriz de confusion y fiabilidad del sistema de prediccion)
  Aquellos que pasaron y tienen todo listo tienen una seccion dentro de la barra del Prediction Lab)
