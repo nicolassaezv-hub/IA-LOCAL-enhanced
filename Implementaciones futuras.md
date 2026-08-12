@@ -29,7 +29,7 @@ Tanto Prediction Lab como la rama Forex tratan con datos REALES, en caso de hace
 El Evolution Engine esta diseñado para el proyecto ASTRA en general...NO limitado a la rama forex
 Se selecciona que rama se quiere evolucionar (por ahora Forex,Chat, Barra de Personalizacion)
 
-## Resaltar código, comandos y rutas de archivo con estilos distintos.
+## ■ Resaltar código, comandos y rutas de archivo con estilos distintos.
 
 ## ■ Pantalla de inicio con animacion
 
