@@ -60,6 +60,29 @@ class PredictionContextSafeguardTests(unittest.TestCase):
         self.assertEqual(payload["protection_errors"][0]["error"], "mtf exploded")
         self.assertFalse(payload["protection_errors"][1]["critical"])
 
+    def test_invalid_risk_reasons_remain_serializable_under_risk_engine(self):
+        context = prediction_context.PredictionContext(pair="EURUSD")
+        context.risk = types.SimpleNamespace(
+            to_dict=lambda: {
+                "valid": False,
+                "blocking_reasons": ["missing_account_equity"],
+            }
+        )
+        context.record_protection_error(
+            "risk_engine",
+            "risk_result_invalid",
+            "Risk sizing failed closed.",
+            critical=True,
+        )
+
+        payload = context.to_dict()
+        self.assertFalse(payload["risk_engine"]["valid"])
+        self.assertEqual(
+            payload["risk_engine"]["blocking_reasons"],
+            ["missing_account_equity"],
+        )
+        self.assertEqual(payload["risk"], payload["risk_engine"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -106,6 +106,8 @@ class PredictionContext:
                     out[key] = obj.to_dict()
                 except Exception as exc:  # pragma: no cover - defensivo
                     logger.warning("No se pudo serializar %s: %s", key, exc)
+        if "risk" in out:
+            out["risk_engine"] = out["risk"]
         return out
 
 
@@ -224,6 +226,8 @@ def _valid_mtf_result(mtf: Any) -> bool:
 
 
 def _valid_risk_result(risk: Any, signal: str) -> bool:
+    if risk is None or getattr(risk, "valid", True) is not True:
+        return False
     try:
         values = {
             "entry_price": float(risk.entry_price),
@@ -267,6 +271,7 @@ def build_context(
     path_d1: Optional[str] = None,
     entry_price: Optional[float] = None,
     rr_ratio: Optional[float] = None,
+    risk_config: Optional[dict] = None,
 ) -> PredictionContext:
     """
     Ejecuta V.4 (regime), V.3 (MTF), V.8 (reliability) y V.2 (risk) sobre el
@@ -413,14 +418,16 @@ def build_context(
                 pair=pair,
                 timeframe=timeframe,
                 rr_ratio=rr_ratio,
+                config=risk_config,
                 verbose=False,
             )
             if not _valid_risk_result(ctx.risk, signal):
-                ctx.risk = None
+                reasons = getattr(ctx.risk, "blocking_reasons", []) or []
+                detail = f" Motivos: {', '.join(map(str, reasons))}." if reasons else ""
                 ctx.record_protection_error(
                     "risk_engine",
                     "risk_result_invalid",
-                    "V.2 Risk Engine devolvió datos de riesgo inválidos.",
+                    f"V.2 Risk Engine devolvió datos de riesgo inválidos.{detail}",
                     critical=True,
                 )
         except Exception as exc:

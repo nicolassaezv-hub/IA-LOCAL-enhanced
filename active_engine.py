@@ -36,10 +36,9 @@ from typing import Callable, Dict, List, Optional
 
 from colorama import Fore, Style
 
-# Circuit breaker y position sizing
+# Circuit breaker
 try:
     from forex.prediction.circuit_breaker import get_circuit_breaker
-    from forex.prediction.position_sizing import PositionSizer
     _HAS_RISK_MODULES = True
 except ImportError:
     _HAS_RISK_MODULES = False
@@ -169,14 +168,19 @@ class ActiveEngine:
                     sizing_info = ""
                     if _HAS_RISK_MODULES and action in ("BUY", "SELL"):
                         try:
-                            from signal_tracker import get_signals as _gs
-                            hist = _gs(pair=clean, limit=200)
-                            trade_hist = [{"pnl": h.get("pnl", 0)} for h in hist if "pnl" in h]
-                            sizing = PositionSizer(account_balance=10_000).calculate(result, trade_hist)
-                            sizing_info = f"  Risk={sizing['risk_pct']:.2f}%  ${sizing['risk_usd']:.0f}  [{sizing['method']}]"
+                            sizing = (
+                                result.get("roadmap_v_context", {})
+                                .get("risk_engine", {})
+                            )
+                            if sizing.get("valid"):
+                                sizing_info = (
+                                    f"  Risk={sizing['risk_pct']:.2f}%  "
+                                    f"{sizing['risk_amount']:.0f} "
+                                    f"{sizing['account_currency']}"
+                                )
                         except Exception as _e:
                             import logging as _l
-                            _l.getLogger("astra.engine").debug("PositionSizer error: %s", _e)
+                            _l.getLogger("astra.engine").debug("Risk display error: %s", _e)
 
                     # Guardar en historial
                     try:

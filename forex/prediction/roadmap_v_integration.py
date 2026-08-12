@@ -482,6 +482,19 @@ def run_risk_engine(
     rr_ratio: float | None = None,
     config: dict | None = None,
     verbose: bool = True,
+    *,
+    stop_loss: float | None = None,
+    instrument_metadata=None,
+    account_currency: str | None = None,
+    conversion_rate: float | None = None,
+    currency_converter=None,
+    leverage: float | None = None,
+    available_margin: float | None = None,
+    require_margin_validation: bool | None = None,
+    commission_per_lot: float | None = None,
+    spread_price: float | None = None,
+    slippage_price: float | None = None,
+    costs_in_entry_stop: bool | None = None,
 ) -> RiskAssessment:
     """Calcula el analisis de riesgo para una señal."""
     engine = RiskEngine(config=config)
@@ -496,6 +509,18 @@ def run_risk_engine(
         timeframe=timeframe,
         capital=capital,
         rr_ratio=rr_ratio,
+        stop_loss=stop_loss,
+        instrument_metadata=instrument_metadata,
+        account_currency=account_currency,
+        conversion_rate=conversion_rate,
+        currency_converter=currency_converter,
+        leverage=leverage,
+        available_margin=available_margin,
+        require_margin_validation=require_margin_validation,
+        commission_per_lot=commission_per_lot,
+        spread_price=spread_price,
+        slippage_price=slippage_price,
+        costs_in_entry_stop=costs_in_entry_stop,
     )
     if verbose:
         print(cmd_risk_report(risk))

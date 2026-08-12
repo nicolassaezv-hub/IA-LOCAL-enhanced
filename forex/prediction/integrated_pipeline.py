@@ -67,6 +67,8 @@ def _valid_mtf_result(mtf) -> bool:
 
 
 def _valid_risk_result(risk, action: str) -> bool:
+    if risk is None or getattr(risk, "valid", True) is not True:
+        return False
     try:
         values = {
             "entry_price": float(risk.entry_price),
@@ -155,12 +157,23 @@ class ForexIntegratedPipeline:
         rr_ratio: float       = None,
         min_confidence: float = 0.65,
         min_adx: float        = 22.0,
+        *,
+        risk_config: dict | None = None,
+        risk_config_resolver=None,
     ):
         from .model_storage import ModelStorage
+        from .risk_config_resolver import RiskConfigResolver
         self._horizon        = horizon
         self._rr_ratio       = rr_ratio
         self.min_confidence  = min_confidence
         self.min_adx         = min_adx
+        self.risk_config     = risk_config
+        self._risk_config_override_supplied = risk_config is not None
+        self.risk_config_resolver = (
+            None
+            if self._risk_config_override_supplied
+            else risk_config_resolver or RiskConfigResolver.from_environment()
+        )
         self.storage         = ModelStorage()
         self.predictor       = ForexPredictor(
             min_confidence=min_confidence,
@@ -174,6 +187,17 @@ class ForexIntegratedPipeline:
             self._horizon  if self._horizon  is not None else cfg["horizon"],
             self._rr_ratio if self._rr_ratio is not None else cfg["rr_ratio"],
         )
+
+    def _resolve_risk_config(self, pair: str) -> dict | None:
+        """Return the explicit override or the canonical per-pair resolution."""
+        if getattr(self, "_risk_config_override_supplied", False):
+            return self.risk_config
+        resolver = getattr(self, "risk_config_resolver", None)
+        if resolver is None:
+            # Compatibility for tests and advanced objects created without
+            # running __init__; production instances always have a resolver.
+            return getattr(self, "risk_config", None)
+        return resolver.resolve(pair).to_engine_config()
 
     # ─────────────────────────────────────────────────────────
     # TRAIN — con WFV deslizante + MTF opcional
@@ -344,6 +368,7 @@ class ForexIntegratedPipeline:
                 path_h4=path_h4,
                 path_d1=path_d1,
                 rr_ratio=_rr,
+                risk_config=self._resolve_risk_config(pair),
             )
         except Exception as exc:
             failure = _protection_failure(

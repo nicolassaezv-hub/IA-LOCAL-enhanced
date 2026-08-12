@@ -58,6 +58,7 @@ def _valid_mtf():
 
 def _valid_risk(action: str):
     return types.SimpleNamespace(
+        valid=True,
         decision=action,
         entry_price=1.085,
         stop_loss=1.080 if action == "BUY" else 1.090,
@@ -182,6 +183,9 @@ class FailClosedSafeguardTests(unittest.TestCase):
         if context_mode == "risk_invalid":
             ctx.risk = _valid_risk(raw_action)
             ctx.risk.position_size = 0.0
+        if context_mode == "risk_contract_invalid":
+            ctx.risk = _valid_risk(raw_action)
+            ctx.risk.valid = False
         ctx.to_dict = lambda: {
             "protection_errors": ctx.protection_errors,
             "circuit_breaker_active": ctx.circuit_breaker_active,
@@ -291,9 +295,10 @@ class FailClosedSafeguardTests(unittest.TestCase):
         self.assertEqual(result["protection_errors"][-1]["error"], "decision exploded")
 
     def test_missing_or_invalid_risk_protection_blocks_trade(self):
-        for mode in ("risk_failure", "risk_invalid"):
+        for mode in ("risk_failure", "risk_invalid", "risk_contract_invalid"):
             with self.subTest(mode=mode):
                 result, tracker = self._predict("BUY", context_mode=mode)
+                self.assertEqual(result["raw_action"], "BUY")
                 self.assert_blocked(result, tracker, "risk_engine")
                 self.assertEqual(
                     result["safeguard_failures"][0]["code"],

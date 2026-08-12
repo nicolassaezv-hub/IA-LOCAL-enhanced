@@ -62,6 +62,29 @@
 |---------|-----|-------------|
 | `risk` | `risk <BUY\|SELL> <entry_price> <atr> [reliability] [regime] [pair]` | Calcula análisis de riesgo |
 
+El sizing monetario V.2 usa `RiskConfigResolver` como frontera canónica. Un
+`ForexIntegratedPipeline()` normal consulta por par el JSON indicado por
+`ASTRA_RISK_CONFIG_PATH`; el archivo se vuelve a leer en cada resolución para
+que el estado de cuenta pueda actualizarse sin codificarlo en el repositorio.
+También se puede inyectar un `account_state_provider` o `currency_converter`.
+
+Son obligatorios `account.account_equity`, `account.account_currency` y, bajo
+`instruments.<pair>`, `symbol`, `asset_class`, `base_currency`,
+`quote_currency`, `pip_size` y `contract_size`. Para un cross también debe
+existir una tasa explícita en `conversion_rates` o un conversor. Son opcionales
+`available_margin`, `leverage`, `min_lot`, `max_lot`, `lot_step` y los costos
+declarados (`commission_per_lot`, `spread_price`, `slippage_price`,
+`costs_in_entry_stop`). No se reutiliza `supported_symbols.pip_value` como
+metadata contractual.
+
+Si falta información obligatoria, el resultado es inválido y la acción final
+queda en `HOLD`; no se supone equity, moneda, contract size, apalancamiento ni
+tasa 1:1. `ForexIntegratedPipeline(risk_config=...)` se conserva como override
+explícito y tiene prioridad sobre el resolver automático. Los costos se marcan
+por componente como `embedded`, `explicitly_declared` o
+`unknown/not_included`; `costs_included=True` sólo significa cobertura completa
+de los componentes declarables, no una suposición implícita de riesgo all-in.
+
 ### V.11 — Dataset Update
 
 | Comando | Uso | Descripción |

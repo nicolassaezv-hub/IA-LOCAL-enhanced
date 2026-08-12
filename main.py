@@ -960,7 +960,7 @@ def _ayuda():
 {Fore.CYAN}── RISK MANAGEMENT ────────────────────────────────────────{Style.RESET_ALL}
   circuit status                 Estado del circuit breaker (pérdida diaria/semanal/drawdown)
   circuit reset                  Resetear manualmente el circuit breaker
-  position size <par> [balance]  Calcular position sizing con Kelly (ej: position size EURUSD 10000)
+  position size <par> <balance>  Calcular position sizing con equity explícito (ej: position size EURUSD 10000)
 {Fore.CYAN}── FOREX WATCHER Y SEÑALES (FASE 2) ──────────────────────{Style.RESET_ALL}
   watch forex <par> <csv> [seg]  Monitoreo continuo de un par (thread background)
   watch stop <par>               Detener monitoreo de un par
@@ -1207,11 +1207,14 @@ def dispatch_command(user_input: str) -> str:
         elif user_input.lower() in ["circuit reset", "resetear circuit"]:
             respuesta = cmd_circuit_reset() if _HAS_RISK else "Módulo risk no disponible."
         elif user_input.lower().startswith("position size ") or user_input.lower().startswith("sizing "):
-            # uso: position size <par> [balance]
+            # uso: position size <par> <balance>
             parts = user_input.strip().split()
             pair_ps  = parts[2] if len(parts) > 2 else "EURUSD"
-            bal_ps   = float(parts[3]) if len(parts) > 3 else 10_000
-            respuesta = _cmd_position_size(pair_ps, bal_ps) if _HAS_RISK else "Módulo risk no disponible."
+            if len(parts) <= 3:
+                respuesta = "Uso: position size <par> <balance>"
+            else:
+                bal_ps = float(parts[3])
+                respuesta = _cmd_position_size(pair_ps, bal_ps) if _HAS_RISK else "Módulo risk no disponible."
         # ── BUSINESS INTELLIGENCE ─────────────────────────
         elif user_input.startswith("consulta negocio ") or user_input.startswith("consultar negocio "):
             csv_path = user_input.split(" ", 2)[-1].strip()
