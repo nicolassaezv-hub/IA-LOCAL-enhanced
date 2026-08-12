@@ -21,6 +21,7 @@
    - ### Claude (solo de diagnostico)
 
 - Para comprobaciones de calidad de usuario (UX) o estetica consulta con Base44, asegurate de mencionar que la estetica es propia del Workspace en servidor (modificar HTML constantemente)
+  
    -Aplicar [Ir a mi guia] (Implementaciones futuras.md) una vez completado los test End-to-End de produccion
 
 ## Informacion General
