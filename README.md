@@ -22,7 +22,7 @@
 
 - Para comprobaciones de calidad de usuario (UX) o estetica consulta con Base44, asegurate de mencionar que la estetica es propia del Workspace en servidor (modificar HTML constantemente)
   
-[Ir a mi guía](Implementaciones%20futuras.md) una vez completado los test End-to-End de produccion
+[Ir a integrar las nuevas implemetaciones listadas](Implementaciones%20futuras.md) una vez completado los test End-to-End de produccion
 
 ## Informacion General
 
