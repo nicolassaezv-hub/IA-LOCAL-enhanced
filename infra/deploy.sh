@@ -150,7 +150,7 @@ system_dependencies() {
 
 configure_service_environment() {
     run_privileged install -d -m 0750 -o root -g "$ASTRA_GROUP" "$(dirname "$ASTRA_ENV_FILE")"
-    if [[ ! -e "$ASTRA_ENV_FILE" ]]; then
+    if ! run_privileged test -e "$ASTRA_ENV_FILE"; then
         local generated
         generated="$(mktemp)"
         sed -e "s|/opt/astra|$ASTRA_HOME|g" \

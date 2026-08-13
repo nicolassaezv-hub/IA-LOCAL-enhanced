@@ -215,6 +215,43 @@ def test_deploy_validates_paths_before_any_install_or_recursive_permission_chang
     assert 'chmod 0640 "$ASTRA_ENV_FILE"' in deploy
 
 
+def test_deploy_checks_environment_file_existence_with_privilege():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    configure = deploy.split("configure_service_environment() {", 1)[1].split(
+        "\n}", 1
+    )[0]
+
+    assert 'if ! run_privileged test -e "$ASTRA_ENV_FILE"; then' in configure
+    assert '[[ ! -e "$ASTRA_ENV_FILE" ]]' not in configure
+
+
+def test_deploy_only_installs_environment_template_when_file_is_missing():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    configure = deploy.split("configure_service_environment() {", 1)[1].split(
+        "\n}", 1
+    )[0]
+    missing_branch, existing_branch = configure.split("\n    else\n", 1)
+
+    assert "infra/config/astra.env.example" in missing_branch
+    assert (
+        'install -m 0640 -o root -g "$ASTRA_GROUP" "$generated" '
+        '"$ASTRA_ENV_FILE"'
+    ) in missing_branch
+    assert "infra/config/astra.env.example" not in existing_branch
+    assert '"$generated" "$ASTRA_ENV_FILE"' not in existing_branch
+
+
+def test_existing_environment_file_keeps_restrictive_service_ownership():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    configure = deploy.split("configure_service_environment() {", 1)[1].split(
+        "\n}", 1
+    )[0]
+    _, existing_branch = configure.split("\n    else\n", 1)
+
+    assert 'run_privileged chown root:"$ASTRA_GROUP" "$ASTRA_ENV_FILE"' in existing_branch
+    assert 'run_privileged chmod 0640 "$ASTRA_ENV_FILE"' in existing_branch
+
+
 def test_deploy_precheck_does_not_use_interactive_sudo_validation():
     deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
     precheck = deploy.split("precheck() {", 1)[1].split("\n}", 1)[0]
@@ -290,7 +327,7 @@ def test_deploy_is_idempotent_by_contract_and_does_not_reset_env():
     deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
     assert 'if ! getent group "$ASTRA_GROUP"' in deploy
     assert 'if ! id "$ASTRA_USER"' in deploy
-    assert 'if [[ ! -e "$ASTRA_ENV_FILE" ]]' in deploy
+    assert 'if ! run_privileged test -e "$ASTRA_ENV_FILE"; then' in deploy
     assert "systemctl enable" in deploy
     assert "crontab" not in deploy
     assert "--delete" not in deploy
