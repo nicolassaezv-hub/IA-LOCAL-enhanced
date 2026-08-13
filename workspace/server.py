@@ -106,6 +106,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from astra_version import ASTRA_VERSION
 from runtime_security import AuthResult, authenticate_headers, configured_bind_host
 from workspace.path_safety import UnsafePathError, resolve_user_path_in_roots
 from workspace.upload_storage import store_upload
@@ -1752,19 +1753,6 @@ def get_config() -> JSONResponse:
     has_groq = bool(os.environ.get("GROQ_API_KEY"))
     has_openai = bool(os.environ.get("OPENAI_API_KEY"))
 
-    # Versión desde CHANGELOG si existe
-    version = "7.0.0"
-    changelog = os.path.join(_ROOT, "CHANGELOG.md")
-    if os.path.isfile(changelog):
-        try:
-            with open(changelog) as f:
-                for line in f:
-                    if line.startswith("## ["):
-                        version = line.split("[")[1].split("]")[0]
-                        break
-        except Exception:
-            pass
-
     uptime_s = round(time.time() - _SERVER_START, 0)
     h, rem = divmod(int(uptime_s), 3600)
     m, s = divmod(rem, 60)
@@ -1786,7 +1774,7 @@ def get_config() -> JSONResponse:
 
     return JSONResponse({
         "ok": True,
-        "version": version,
+        "version": ASTRA_VERSION,
         "astra_status": "online",
         "connected": connected,
         "api_keys": {

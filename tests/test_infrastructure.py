@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ASTRA Infrastructure Test Suite (v6.0.1-prod)
+ASTRA Infrastructure Test Suite
 10 tests that validate the full infrastructure without Base44 dependency.
 Run: python3 tests/test_infrastructure.py
 """
@@ -285,8 +285,10 @@ def test_decoupled_persistence():
         assert isinstance(get_database(), SQLiteDatabase)
 
 if __name__ == "__main__":
+    from astra_version import ASTRA_VERSION
+
     print("\n" + "="*60)
-    print("  ASTRA v6.0.1-prod - Infrastructure Test Suite")
+    print(f"  ASTRA v{ASTRA_VERSION} - Infrastructure Test Suite")
     print("="*60 + "\n")
     _run_test("1. Database abstraction layer", test_database)
     _run_test("2. First-run detection (init)", test_init_first_run)

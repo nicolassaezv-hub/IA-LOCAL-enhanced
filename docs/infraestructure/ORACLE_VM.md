@@ -1,101 +1,44 @@
-# ASTRA — Oracle Cloud VM
+# ASTRA — perfil de la VM Oracle
 
-## 1. Información general
+Este documento registra únicamente los hechos estables que condicionan el
+target productivo. Las IPs, OCIDs, hostnames, nombres de instancia, usuarios
+administrativos y nombres/rutas de llaves SSH son metadata operacional: se
+mantienen en el inventario privado del operador y no en el repositorio.
 
-Servidor principal utilizado para ejecutar ASTRA de forma autónoma 24/7.
+No es evidencia de que ASTRA esté desplegado o production-ready. La autoridad
+del procedimiento y de sus resultados es
+[`DEPLOYMENT.md`](DEPLOYMENT.md); readiness se calcula desde evidencia real en
+cada ejecución.
 
-Fecha de creación:
-- 08-08-2026
+## Perfil productivo actual
 
-Proveedor:
-- Oracle Cloud Infrastructure (OCI)
+- Proveedor: Oracle Cloud Infrastructure (OCI).
+- Shape: `VM.Standard.A1.Flex` (Oracle Ampere A1).
+- Arquitectura: ARM64 / `aarch64`.
+- Recursos asignados: 2 OCPU y 12 GB RAM.
+- Sistema operativo: Ubuntu 24.04 LTS.
+- Python: 3.12.
+- Directorio de instalación por defecto: `/opt/astra`.
+- Usuario de servicio: `astra` no-root, administrado por systemd.
+- EnvironmentFile: `/etc/astra/astra.env`, protegido y fuera del repositorio.
+- Bind HTTP por defecto: `127.0.0.1:8000`.
+- Backup root dedicado: `/var/backups/astra`.
 
-Región:
-- Chile West / Valparaíso
-- `sa-valparaiso-1`
+El instalador también admite `x86_64`, pero ARM64/aarch64 es el target primario.
+El tamaño de esta VM describe la instancia objetivo; no es un requisito
+universal para todo entorno de desarrollo.
 
-Nombre de instancia:
-- `astra-server`
+## Red y acceso
 
-Hostname observado mediante SSH:
-- `astra-vnic`
+ASTRA no publica `:8000` por defecto. Cualquier acceso desde Internet requiere
+que el operador configure por separado reverse proxy HTTPS, DNS e ingress; el
+repositorio no afirma que esos componentes estén implementados.
 
-Estado inicial:
-- En ejecución
+Ejemplo deliberadamente no operacional:
 
+```bash
+ssh -i <private-key-path> <admin-user>@<server-ip>
+```
 
-## 2. Hardware
-
-Shape:
-- `VM.Standard.A1.Flex`
-
-Arquitectura:
-- ARM64 / aarch64
-- Oracle Ampere A1
-
-OCPU:
-- 2
-
-RAM:
-- 12 GB
-
-Dominio de disponibilidad:
-- AD-1
-
-Dominio de errores:
-- FD-1
-
-
-## 3. Sistema operativo
-
-Distribución:
-- Ubuntu 24.04.4 LTS
-
-Codename:
-- `noble`
-
-Arquitectura:
-- `aarch64`
-
-Kernel original:
-- `6.17.0-1018-oracle`
-
-Kernel instalado durante actualización inicial:
-- `6.17.0-1019-oracle`
-
-Imagen OCI:
-- Canonical Ubuntu 24.04 Minimal aarch64
-
-Build de imagen utilizado:
-- `2026.07.17-0`
-
-
-## 4. Red
-
-IP pública inicial:
-- `147.224.238.55`
-
-IP privada:
-- `10.0.0.171`
-
-VCN:
-- `astra-vcn`
-
-La instancia utiliza:
-- IPv4 privada automática
-- IPv4 pública
-- Sin IPv6
-
-Acceso administrativo:
-- SSH
-
-
-## 5. Acceso SSH
-
-Usuario:
-- `ubuntu`
-
-Comando utilizado desde Windows PowerShell:
-
-```powershell
-ssh -i ".\ssh-key-2026-08-08 (2).key" ubuntu@147.224.238.55
+Nunca deben copiarse llaves privadas, credenciales o valores del EnvironmentFile
+a este documento.

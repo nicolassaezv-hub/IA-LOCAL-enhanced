@@ -222,6 +222,12 @@ TOOL_REGISTRY = {
 
 ## Generación masiva de CSVs (nuevo)
 
+> **Sólo desarrollo/pruebas.** Este generador histórico puede crear datos
+> sintéticos y no forma parte de la ruta productiva. Producción adquiere datos
+> reales mediante `DataRouter`; un fallo de provider termina en error y nunca
+> habilita fallback sintético. No promuevas CSVs sintéticos a rolling datasets o
+> modelos productivos.
+
 ```
 generar csvs forex                          # majors × H1,H4,D1 · 500 velas · Yahoo→sintético
 generar csvs forex H1,H4 800                # solo H1 y H4, 800 velas

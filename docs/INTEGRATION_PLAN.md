@@ -1,5 +1,8 @@
 # 🚀 Full 387 Package Integration Plan
 
+> **Plan histórico.** Los estados `Working`/`In Progress` son el snapshot de la
+> fecha indicada y no afirman disponibilidad operacional actual.
+
 **Status:** In Progress  
 **Started:** 2025-01-08  
 **Target:** Integrate all 387 packages into IA-LOCAL-enhanced

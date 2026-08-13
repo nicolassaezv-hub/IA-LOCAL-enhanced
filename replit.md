@@ -1,4 +1,4 @@
-# ASTRA v7.0 — Workspace Edition
+# ASTRA v7.1.0 — Workspace Edition
 **Sistema AI Modular · Consultor PYME · Forex Intelligence**
 
 Este archivo es la copia del `replit.md` raíz dentro del proyecto ASTRA.
@@ -46,6 +46,6 @@ python astra_doctor.py      # completo (10 categorías)
 Chat · Forex Lab · Prediction Lab · Business Lab · Cognitive Core · Evolution Engine · Activity Center · Dashboard Activo · Configuración
 
 ## Stack
-- Python 3.11 · FastAPI + uvicorn · Groq (Llama-3.3-70B)
+- Python 3.12 · FastAPI + uvicorn · Groq (Llama-3.3-70B)
 - ML: XGBoost + LightGBM + scikit-learn + Optuna
 - Memoria: SQLite (memoria.db + especializados) · Redis/FAISS opcionales

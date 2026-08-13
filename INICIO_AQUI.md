@@ -1,5 +1,8 @@
 # 🎉 IA-LOCAL-enhanced FINAL (Con Arreglos)
 
+> **Registro histórico de la versión 2.0.** “LISTA” y los outputs de tests de
+> este documento no representan el estado ni la readiness actuales de ASTRA.
+
 **Versión**: 2.0 (Evaluada y Corregida)  
 **Fecha**: 27 de Junio 2026  
 **Estado**: ✅ LISTA PARA USAR
@@ -362,4 +365,3 @@ Tiempo para Primera Vez: ~30 minutos
 **Fecha**: 27 de Junio 2026  
 **Status**: ✅ LISTO PARA USAR  
 **Evaluador**: Claude AI
-

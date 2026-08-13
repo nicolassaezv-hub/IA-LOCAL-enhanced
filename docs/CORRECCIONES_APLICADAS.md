@@ -1,5 +1,8 @@
 # ✅ CORRECCIONES APLICADAS - IA-LOCAL-enhanced
 
+> **Registro histórico.** Los estados y resultados pertenecen a la ejecución
+> fechada abajo; no describen el checkout ni la readiness actuales.
+
 **Fecha**: 27 de Junio 2026  
 **Evaluador**: Claude AI  
 **Estado**: ✅ COMPLETADAS
@@ -451,4 +454,3 @@ MONITOREO:
 **Versión**: 1.0 Correcciones Completas  
 **Fecha**: 2026-06-27  
 **Estado**: ✅ LISTO PARA USAR
-

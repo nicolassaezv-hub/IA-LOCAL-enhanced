@@ -1,4 +1,8 @@
 # ASTRA v7.0.2-prod — Reporte de Auditoría Completa
+
+> **Registro histórico de v7.0.2-prod.** No define la versión actual ni prueba
+> readiness/deployment del checkout actual; la versión canónica está en
+> `astra_version.py` y readiness se recalcula desde evidencia real.
 **Fecha:** 2026-08-04  
 **Auditor:** Análisis automatizado con 7 sub-agentes en paralelo  
 **Cobertura:** 338 archivos totales, 175 módulos Python activos, 46,387 líneas de código

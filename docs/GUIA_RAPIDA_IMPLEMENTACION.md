@@ -1,5 +1,8 @@
 # ⚡ GUÍA RÁPIDA DE IMPLEMENTACIÓN
 
+> **Guía histórica.** Los outputs y conteos de tests son ejemplos de una etapa
+> anterior, no resultados permanentes. Usa las validaciones actuales del repo.
+
 **Tiempo estimado**: 15-30 minutos  
 **Complejidad**: Media
 
@@ -403,4 +406,3 @@ Documentación:
 **Tiempo estimado**: 30 minutos  
 **Complejidad**: Media  
 **Requiere**: Python 3.9+, pip, 4GB RAM
-

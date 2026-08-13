@@ -8,7 +8,7 @@
 ## 1. Instalación y Configuración Inicial
 
 ### Requisitos previos
-- Python 3.10+
+- Python 3.12 para el target productivo
 - pip (gestor de paquetes)
 - Conexión a internet (para yfinance y noticias)
 
@@ -170,7 +170,8 @@ sentinel.reset_circuit_breaker()
 
 ## 7. Multi-Timeframe Intelligence (V.3)
 
-ASTRA valida que D1 → H4 → H1 sean coherentes antes de emitir una señal:
+ASTRA produce únicamente la predicción H1. D1 y H4 son contexto de autorización
+alineado temporalmente y no generan predicciones alternativas:
 
 - **D1** → Tendencia principal (peso 40%)
 - **H4** → Confirmación (peso 35%)

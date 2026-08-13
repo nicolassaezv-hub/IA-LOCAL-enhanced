@@ -15,9 +15,13 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Iterator
 
+from astra_version import ASTRA_VERSION
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_SQLITE_DB_PATH = "memory_db/astra_autonomous.db"
+# Release of the ASTRA runtime that generated/persisted the prediction.
+_PIPELINE_VERSION = f"v{ASTRA_VERSION}"
 
 
 class PersistenceConflictError(RuntimeError):
@@ -377,7 +381,7 @@ class SQLiteDatabase(DatabaseAdapter):
             "stop_loss": pred.get("stop_loss", 0),
             "take_profit": pred.get("take_profit", 0),
             "features_snapshot": features_snapshot,
-            "pipeline_version": pred.get("pipeline_version", "v7.1.0"),
+            "pipeline_version": pred.get("pipeline_version", _PIPELINE_VERSION),
             "predicted_at": predicted_at,
             "candle_timestamp": candle_timestamp,
             "horizon_candles": pred.get("horizon_candles"),
@@ -399,7 +403,7 @@ class SQLiteDatabase(DatabaseAdapter):
                 pred.get("confidence", 0), pred.get("entry_price", 0),
                 pred.get("stop_loss", 0), pred.get("take_profit", 0),
                 features_snapshot,
-                pred.get("pipeline_version", "v7.1.0"),
+                pred.get("pipeline_version", _PIPELINE_VERSION),
                 predicted_at,
                 candle_timestamp, pred.get("horizon_candles"),
                 pred.get("model_identity"),

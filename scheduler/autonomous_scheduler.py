@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-ASTRA Autonomous Scheduler (v6.0.1-prod)
-========================================
+ASTRA Autonomous Scheduler
+==========================
 Provider-agnostic scheduler for 24/7 operation on any Linux VM.
 Runs via systemd timers or cron — NO Base44 dependency.
 
@@ -25,6 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from astra_version import ASTRA_VERSION
 from infra.db.database import get_database, DatabaseAdapter
 from forex.data.data_router import DataRouter
 from forex.data.rolling_dataset import (
@@ -437,7 +438,8 @@ def run_prediction(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict:
             "stop_loss": float(result.get("stop_loss", 0)),
             "take_profit": float(result.get("take_profit", 0)),
             "features_snapshot": result.get("features", {}),
-            "pipeline_version": "v7.1.0",
+            # Release of the ASTRA runtime that generated this prediction.
+            "pipeline_version": f"v{ASTRA_VERSION}",
             "predicted_at": datetime.now().isoformat(),
             "candle_timestamp": result.get("candle_timestamp"),
             "horizon_candles": result.get("horizon_candles"),

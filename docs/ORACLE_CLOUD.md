@@ -1,7 +1,11 @@
-# ASTRA en Oracle Cloud Always Free — Guía de Despliegue
+# ASTRA en Oracle Cloud Always Free — guía histórica
 
-> Estado actual: **Preparado** — los módulos están listos para Oracle Cloud.
-> El despliegue en sí es un paso manual del usuario.
+> **Documento archivado, no procedimiento operativo.** Conserva el diseño de una
+> etapa anterior (Ubuntu/Python, puertos, tamaños de VM, nginx y comandos ya no
+> canónicos). No demuestra un deployment ni readiness actuales y no implica que
+> HTTPS, reverse proxy o ingress OCI estén implementados. Para producción usa
+> `docs/infraestructure/DEPLOYMENT.md` y el perfil de
+> `docs/infraestructure/ORACLE_VM.md`.
 
 ---
 

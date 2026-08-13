@@ -1,44 +1,22 @@
 # ASTRA
 
-# Peticiones Personales
+Versión actual: **7.1.0**. La fuente de verdad del runtime es
+`astra_version.py`; los roadmaps y reportes fechados pueden mencionar versiones
+históricas y no sustituyen esa fuente.
 
-- Sube los archivos desde el C:\ASTRA
+ASTRA es una plataforma modular local/cloud con un subsistema de inteligencia
+Forex. El target productivo es Ubuntu 24.04, Python 3.12 y ARM64/aarch64 (también
+se admite x86_64), bajo systemd y con usuario de servicio no-root.
 
-- Sigue avanzando con el [Download File](astra-roadmap-v4.html)
+La guía productiva canónica está en
+[`docs/infraestructure/DEPLOYMENT.md`](docs/infraestructure/DEPLOYMENT.md). Las
+credenciales se configuran mediante variables de entorno; este repositorio no
+documenta identificadores, claves ni rutas personales del operador.
 
-- Usa Base44 para ir completando las ramificaciones/partes del proyecto, de no estar disponible pasa luego a Github Copilot y Replit (ve turnandote como lo veas a tu gusto)
+## Referencia histórica del proyecto
 
-- Para comprobaciones de calidad de usuario (XUA) o estetica consulta con ChatGPT
-
-## Informacion General
-
-Este Workflow IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, ChatGPT y analisis activo de Copilot con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI con fijacion en procesamiento de archivos y analisis intensivo de datasets del area del mercado FOREX (Divisas y Materias Primas).
-
-Todo, en base a un sistema local PC de las siguientes especificaciones
-
-PROCESADOR:
-
-- Intel(R) Core (TM) I5-10300H CPU @2.5GHz
-
-RAM:
-
-- 16GB RAM
-
-Se le asigna un máximo de 10GB de RAM a la IA
-
-GPU:
-
-- NVIDIA 1650ti 8GB VRAM 
-
-# API
-
-Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
-
-- name: copi
-
-- ID: key_3uC3DbwL1KZFUHJa
-
-- model="gpt-3.5-turbo"
+El contenido restante conserva notas de etapas anteriores. No es la autoridad
+para deployment, seguridad, readiness ni requisitos de producción actuales.
 
 # Estructura
 
@@ -364,9 +342,8 @@ if __name__ == "__main__":
 
 ```bat
 @echo off
-cd C:\Users\nicol\copilot_wrapper\venv\Scripts
-call activate.bat
-cd ..\astra
+cd /d "%~dp0"
+call venv\Scripts\activate.bat
 python main.py
 pause
 ```
@@ -1325,4 +1302,3 @@ Aqui el archivo con el listado de modulos Instalados e Integrados
 
 ## Actualizacion de Modulos (Semanal)
 ## Ejemplos de Ejecucion con Dataset
-

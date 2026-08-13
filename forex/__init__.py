@@ -12,6 +12,9 @@ Acceso rápido:
   from forex import adapt_csv, build_features, ForexIntegratedPipeline
 """
 
+from astra_version import ASTRA_VERSION
+
+
 # ── Lazy imports para evitar ciclos y acelerar arranque ──────────────────────
 def __getattr__(name):
     _map = {
@@ -35,7 +38,7 @@ def __getattr__(name):
         return getattr(mod, name)
     raise AttributeError(f"module 'forex' has no attribute {name!r}")
 
-__version__ = "6.0.0"
+__version__ = ASTRA_VERSION
 __all__ = [
     "adapt_csv", "build_features", "DatasetBuilder", "ForexEnsembleTrainer",
     "ForexPredictor", "ForexBacktester", "ForexIntegratedPipeline",

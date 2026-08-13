@@ -95,11 +95,16 @@ csvs activos               ← ver los pares registrados
 
 ## Comando: `generar csvs forex`
 
+> **Sólo desarrollo/pruebas.** Este comando puede producir CSVs sintéticos. La
+> adquisición productiva usa `DataRouter` y falla si no obtiene datos reales; no
+> existe fallback sintético de producción.
+
 Genera en lote todos los CSVs Forex que ASTRA necesita.
 
 - **Pares por defecto:** EURUSD GBPUSD USDJPY USDCHF AUDUSD NZDUSD USDCAD EURGBP EURJPY GBPJPY AUDJPY EURAUD XAUUSD XAGUSD
 - **Timeframes por defecto:** H1 · H4 · D1
-- **Fuente:** YahooProvider (real) con fallback automático a datos sintéticos.
+- **Fuente del comando de prueba:** YahooProvider o datos sintéticos claramente
+  identificados; no es la ruta de ingestión productiva.
 - **Destino:** `CSVs/<TF>/<PAIR>.csv` (crea las carpetas si no existen).
 
 Ejemplos:

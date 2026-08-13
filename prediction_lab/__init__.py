@@ -1,5 +1,5 @@
 """
-prediction_lab — Fase 5 de ASTRA v4.0
+prediction_lab — Fase 5 histórica de ASTRA v4.0 (no es la versión actual del producto)
 
 Sistema Inteligente de Desarrollo de Sistemas Predictivos.
 

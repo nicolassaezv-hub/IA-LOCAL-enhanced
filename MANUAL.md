@@ -1,12 +1,16 @@
 # ASTRA — Manual de Usuario
-**Sistema AI Modular · Forex Intelligence · Despliegue Provider-Agnostic · v7.0.2-prod**
+**Sistema AI Modular · Forex Intelligence · Despliegue Provider-Agnostic · v7.1.0**
+
+La versión del producto se define en `astra_version.py`. Las referencias a
+Roadmap V/VI y los reportes fechados describen hitos históricos, no versiones
+alternativas del producto.
 
 ---
 
 ## GUÍA RÁPIDA — TUS PRIMEROS 10 MINUTOS
 
 ```bash
-# 1. Dependencias (Python 3.11+)
+# 1. Dependencias (Python 3.12)
 pip install -r requirements.txt
 
 # 2. API key de Groq para el chat AI
@@ -15,9 +19,9 @@ export GROQ_API_KEY=gsk_tu_key        # Windows: set GROQ_API_KEY=gsk_tu_key
 # 3. Verificar que todo está en su sitio
 python astra_doctor.py                # o dentro del CLI: astra doctor
 
-# 4. Datos: genera CSVs reales (Yahoo) para probar
+# 4. Datos reales mediante DataRouter (el error de provider no crea sintéticos)
 python main.py
-> generar csvs forex H1 800
+> dataset_update EURUSD H1
 
 # 5. Primer ciclo completo sobre un par
 > full forex CSVs/H1/EURUSD.csv       # entrena + predice + backtest
@@ -33,6 +37,13 @@ bloque **Roadmap V** con régimen de mercado, coherencia multi-timeframe,
 reliability score, circuit breaker y la **decisión final**, que puede ser
 `NO_OPERAR` aunque el modelo diga BUY. Esa decisión final es la que manda para
 el cálculo de SL/TP y el tamaño de posición.
+
+En producción sólo H1 genera predicciones. H4 y D1 aportan contexto sin
+lookahead; `action` es la decisión final canónica y `raw_action` queda como
+diagnóstico. Los datasets rolling mantienen exactamente 2000 velas y una falta
+de datos reales no habilita fallback sintético de producción. El modelo activo
+por símbolo es `latest_<SYMBOL>.pkl`; no hay fallback genérico cross-symbol y
+sólo outcomes finales alimentan métricas de performance.
 
 
 ## PARTE 0 — ASTRA WORKSPACE (interfaz visual)
@@ -52,8 +63,8 @@ python workspace\server.py
 
 El Workspace solicita `ASTRA_API_KEY` al abrirse y la conserva solo durante la
 sesion del navegador. Por defecto escucha en `127.0.0.1`; un bind publico exige
-configurar `ASTRA_HOST` explicitamente y debe desplegarse detras del reverse
-proxy/HTTPS correspondiente.
+configurar `ASTRA_HOST` explicitamente y requiere un reverse proxy/HTTPS operado
+por separado. El repositorio no configura TLS, DNS ni ingress cloud.
 
 ### Paneles del Workspace
 
@@ -74,7 +85,7 @@ proxy/HTTPS correspondiente.
 ## PARTE 1 — INSTALACIÓN Y ARRANQUE
 
 ### Requisitos previos
-- Python 3.11 o superior (3.12 recomendado)
+- Python 3.12 para el target productivo; otros entornos son sólo desarrollo
 - pip actualizado: `python -m pip install --upgrade pip`
 - Una API key de **Groq** (gratis): https://console.groq.com → API Keys → Create API Key
 
@@ -426,7 +437,11 @@ Base de datos SQLite con múltiples bases de datos:
 
 ## PARTE 5 — DESPLIEGUE EN VM LINUX (Provider-Agnostic)
 
-ASTRA esta disenado para ejecutarse en cualquier VM Linux estandar. La capa de infraestructura es desacoplada del proveedor -- no hay codigo especifico de Oracle, GCP, AWS o Azure. El unico requerimiento es una VM con Ubuntu/Debian/RHEL y Python 3.11+.
+El target productivo es Ubuntu 24.04 con Python 3.12 sobre ARM64/aarch64; el
+instalador también acepta x86_64. La instalación canónica usa `/opt/astra`, el
+usuario no-root `astra`, `/etc/astra/astra.env` con modo protegido y systemd como
+autoridad de ejecución. Consulta `docs/infraestructure/DEPLOYMENT.md` para el
+contrato completo y los resultados `SUCCESS`, `FAILED` y `DEPLOYED_NOT_READY`.
 
 > **Que es una VM y por que la necesito?**
 > Una VM (Virtual Machine) es una computadora que vive en la nube. La contratas con un proveedor (Oracle, Google, Amazon, Microsoft) y la usas como si fuera tuya -- pero esta encendida 24/7 sin que tu la dejes prendida. ASTRA necesita esto para que el scheduler corra cada hora automaticamente sin que tu PC este encendido.
@@ -434,8 +449,8 @@ ASTRA esta disenado para ejecutarse en cualquier VM Linux estandar. La capa de i
 ### Arquitectura (identica en cualquier proveedor)
 
 ```
-VM Linux (Ubuntu / Debian / RHEL / Alpine)
-+-- ASTRA Pipeline (Python 3.11+)
+Ubuntu 24.04 (ARM64/aarch64 o x86_64)
++-- ASTRA Pipeline (Python 3.12)
 |   +-- forex/prediction/integrated_pipeline.py  (XGBoost+LightGBM ensemble)
 |   +-- workspace/server.py (FastAPI SPA)
 |   +-- scheduler/autonomous_scheduler.py        (CLI: --init, --timeframe, --status)
@@ -443,25 +458,27 @@ VM Linux (Ubuntu / Debian / RHEL / Alpine)
 +-- infra/
 |   +-- deploy.sh          (despliegue en 1 comando)
 |   +-- db/database.py     (abstraccion SQLite/PostgreSQL)
-|   +-- monitor/supervisor.py (monitor + auto-restart)
-|   +-- backup/backup.sh   (backup automatico diario)
+|   +-- monitor/supervisor.py (diagnóstico; systemd decide reinicios)
+|   +-- backup/create_backup.py (snapshot SQLite y publicación atómica)
 |   +-- systemd/           (services + timers)
 |   +-- logging/logrotate.conf
-|   +-- config/astra.env   (configuracion del entorno)
+|   +-- config/astra.env.example (template; producción: /etc/astra/astra.env)
 +-- systemd timers (H1/H4/D1 -- sin dependencia de proveedor)
 +-- Logs: /var/log/astra/  |  Backups: /var/backups/astra/
 ```
 
-### Configuracion del proveedor
+### Configuración productiva
 
-El proveedor de nube se selecciona solo mediante variables de entorno o el archivo `infra/config/astra.env`. No hay codigo que dependa del proveedor.
+El runtime es provider-agnostic. La cuenta, región, red, ingress, DNS, reverse
+proxy y TLS son responsabilidad del operador y no se infieren desde ASTRA.
 
 ```bash
-# infra/config/astra.env -- editar antes del despliegue
+# /etc/astra/astra.env -- crear desde infra/config/astra.env.example
 ASTRA_DB_ENGINE=sqlite          # sqlite (default) | postgresql (futuro)
+ASTRA_HOST=127.0.0.1
 ASTRA_API_HOST=127.0.0.1
 ASTRA_API_PORT=8000
-ASTRA_API_KEY=REEMPLAZAR_CON_UN_SECRETO_LARGO
+ASTRA_API_KEY=
 ASTRA_SCHEDULER_ENABLED=true
 # Contrato productivo fijo; otros valores se ignoran.
 ASTRA_ROLLING_WINDOW_SIZE=2000
@@ -472,7 +489,16 @@ GROQ_API_KEY=
 
 ---
 
-### 5.1 -- GUIA PASO A PASO: Oracle Cloud (RECOMENDADA)
+### 5.1 -- APÉNDICE HISTÓRICO: guías cloud anteriores a B3
+
+> **No usar como procedimiento de despliegue actual.** Las secciones 5.1 a 5.11
+> se conservan como historial, pero contienen sistemas operativos, tamaños de VM,
+> paths, puertos públicos y protocolos de backup/restore obsoletos. No demuestran
+> un deployment ni readiness actuales. El procedimiento vigente es exclusivamente
+> `docs/infraestructure/DEPLOYMENT.md`: bind loopback, API autenticada, systemd,
+> EnvironmentFile protegido y reverse proxy/HTTPS/ingress operados por separado.
+
+#### Guía Oracle Cloud archivada (no operativa)
 
 > **Por que Oracle Cloud?** Porque su Free Tier es el mas generoso: te dan una VM Ampere A1 con 24 GB de RAM y 4 nucleos ARM -- gratis para siempre, 24/7. Es la mejor opcion para correr ASTRA sin pagar nada.
 
@@ -502,7 +528,7 @@ GROQ_API_KEY=
      - **Guarda estos archivos bien** -- sin la llave privada no puedes entrar a la VM
 5. Haz clic en **Create**
 6. Espera 2-5 minutos a que el estado cambie a **Running** (verde)
-7. Anota la **IP publica** de la instancia (ej: `138.2.1.50`)
+7. Anota la **IP publica** de la instancia (valor privado del inventario operativo)
 
 #### Paso 3: Abrir puertos en el firewall (VCN)
 
@@ -512,7 +538,7 @@ GROQ_API_KEY=
 2. Haz clic en tu VCN (se llama algo como `Default-VCN-...`)
 3. Haz clic en **Security Lists** -> el default security list
 4. Haz clic en **Add Ingress Rules**:
-   - Source CIDR: `0.0.0.0/0`
+   - Source CIDR: `<restricted-source-cidr>`
    - IP Protocol: `TCP`
    - Destination Port Range: `8000`
    - Haz clic en **Add Ingress Rules**
@@ -524,10 +550,10 @@ GROQ_API_KEY=
 # En tu computadora (Linux/Mac) o usando Git Bash / WSL en Windows:
 
 # Cambiar permisos de la llave privada (solo tu puedes leerla)
-chmod 600 ~/Downloads/astra-server.key
+chmod 600 <private-key-path>
 
 # Conectarse por SSH (reemplaza la IP por la de tu VM)
-ssh -i ~/Downloads/astra-server.key ubuntu@138.2.1.50
+ssh -i <private-key-path> <admin-user>@<server-ip>
 
 # La primera vez te pregunta "Are you sure you want to continue connecting?"
 # Escribe: yes
@@ -558,7 +584,7 @@ python3 --version
 
 ```bash
 # Opcion A: Subir el ZIP desde tu computadora (en otra terminal, NO en la VM)
-scp -i ~/Downloads/astra-server.key ~/Downloads/ASTRA_v702_FINAL.zip ubuntu@138.2.1.50:~/
+scp -i <private-key-path> <archive-path> <admin-user>@<server-ip>:~/
 
 # Opcion B: Clonar desde git (si tienes el proyecto en GitHub)
 # git clone https://github.com/tu-usuario/astra.git ~/astra
@@ -619,8 +645,7 @@ python test_complete_pipeline.py
 
 # Lanzar el workspace para probarlo
 python workspace/server.py
-# Abre en tu navegador: http://138.2.1.50:8000
-# (reemplaza por la IP de tu VM)
+# Este acceso HTTP público directo quedó obsoleto; usa el procedimiento B3.
 # Deberias ver el dashboard de ASTRA. Ctrl+C para detener.
 ```
 
@@ -653,8 +678,7 @@ sudo journalctl -u astra-api.service -f
 # Ver estado del scheduler
 python scheduler/autonomous_scheduler.py --status
 
-# Abrir el workspace desde tu navegador
-# http://TU_IP_PUBLICA:8000
+# No exponer :8000 directamente; usa el contrato B3 y un proxy HTTPS separado.
 ```
 
 #### Paso 12: Mantenimiento
@@ -702,7 +726,7 @@ sudo systemctl start astra-scheduler-h1.timer astra-scheduler-h4.timer astra-sch
    - **Firewall**: Marca **Allow HTTP traffic** y **Allow HTTPS traffic**
    - **SSH**: GCP usa SSH sin llave manual -- veras un boton "Connect" mas adelante
 3. Click **Create** -> espera 1-2 minutos
-4. Anota la **IP externa** (ej: `35.1.2.3`)
+4. Anota la **IP externa** en el inventario operativo, no en el repositorio
 
 #### Paso 3: Abrir puerto 8000
 
@@ -711,7 +735,7 @@ sudo systemctl start astra-scheduler-h1.timer astra-scheduler-h4.timer astra-sch
    - Name: `astra-allow-8000`
    - Direction: Ingress
    - Target tags: `http-server` (o el tag de tu VM)
-   - Source IP ranges: `0.0.0.0/0`
+   - Source IP ranges: `<restricted-source-cidr>`
    - Protocols and ports: TCP `8000`
 3. Click **Create**
 
@@ -756,7 +780,7 @@ sudo apt install -y python3 python3-pip python3-venv git unzip curl
    - **Network**: Allow SSH traffic from internet. Allow HTTP/HTTPS
 3. Click **Launch instance**
 4. Espera a que el estado sea **Running**
-5. Anota la **Public IPv4** (ej: `54.1.2.3`)
+5. Anota la **Public IPv4** en el inventario operativo, no en el repositorio
 
 #### Paso 3: Abrir puerto 8000
 
@@ -764,17 +788,17 @@ sudo apt install -y python3 python3-pip python3-venv git unzip curl
 2. **Inbound rules** -> **Edit inbound rules** -> **Add rule**:
    - Type: Custom TCP
    - Port range: `8000`
-   - Source: `0.0.0.0/0`
+   - Source: `<restricted-source-cidr>`
    - Click **Save rules**
 
 #### Paso 4: Conectarse por SSH
 
 ```bash
 # Cambiar permisos de la llave
-chmod 600 ~/Downloads/astra-key.pem
+chmod 600 <private-key-path>
 
 # Conectarse (reemplaza IP)
-ssh -i ~/Downloads/astra-key.pem ubuntu@54.1.2.3
+ssh -i <private-key-path> <admin-user>@<server-ip>
 # Escribe: yes la primera vez
 ```
 
@@ -812,14 +836,14 @@ sudo apt install -y python3 python3-pip python3-venv git unzip curl
 3. Click **Review + create** -> **Create**
 4. Se abre una ventana para descargar la llave privada `.pem` -- **DESCARGALA AHORA** (no puedes recuperarla despues)
 5. Espera a que el deployment termine (3-5 minutos)
-6. Anota la **IP publica** (ej: `20.1.2.3`)
+6. Anota la **IP publica** en el inventario operativo, no en el repositorio
 
 #### Paso 3: Abrir puerto 8000
 
 1. En el portal: ve a tu VM -> **Networking** -> **Add inbound port rule**
 2. Configura:
    - Destination port: `8000`
-   - Source: `0.0.0.0/0`
+   - Source: `<restricted-source-cidr>`
    - Protocol: TCP
    - Name: `astra-8000`
 3. Click **Add**
@@ -827,8 +851,8 @@ sudo apt install -y python3 python3-pip python3-venv git unzip curl
 #### Paso 4: Conectarse por SSH
 
 ```bash
-chmod 600 ~/Downloads/astra-ssh.pem
-ssh -i ~/Downloads/astra-ssh.pem azureuser@20.1.2.3
+chmod 600 <private-key-path>
+ssh -i <private-key-path> <admin-user>@<server-ip>
 # Escribe: yes la primera vez
 ```
 
@@ -1071,9 +1095,13 @@ Las reglas operativas viven en el módulo `constitution/` (`constitution_rules.p
 
 ## PARTE 8 — ROADMAP Y ESTADO
 
-### Estado actual (v7.0.2-prod)
+### Snapshot histórico de componentes (v7.0.2-prod)
 
-| Componente | Estado | Notas |
+Esta tabla conserva el inventario declarado por una revisión anterior. No es un
+estado operativo permanente, no prueba que endpoints/providers estén activos y
+no sustituye los comandos actuales de health/readiness.
+
+| Componente | Estado histórico | Notas |
 |---|---|---|
 | Pipeline ML (175 módulos Python) | ✅ Producción | XGBoost+LightGBM, Walk-Forward Validation |
 | Base44 Entities | ✅ Activo | 6 entidades, 5 símbolos, 12+ datasets |
@@ -1270,4 +1298,4 @@ python tests/test_infrastructure.py
 
 ---
 
-*ASTRA v7.0.2-prod · 2026-08-04 · Diego Lopez*
+*ASTRA v7.1.0 · versión canónica: `astra_version.py`*

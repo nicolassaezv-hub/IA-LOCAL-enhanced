@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
+from astra_version import ASTRA_VERSION
 from runtime_security import (
     AuthResult,
     authenticate_headers,
@@ -80,7 +81,7 @@ def _handle_status(_params: dict) -> dict:
     return {
         "ok": True,
         "ts": datetime.now().isoformat(),
-        "version": "6.0.0",
+        "version": ASTRA_VERSION,
         "scheduler_running": scheduler_running,
         "scheduler_jobs": job_count,
         "cpu_pct": cpu,
@@ -214,7 +215,7 @@ def _handle_root(_params: dict) -> dict:
     return {
         "ok": True,
         "name": "ASTRA API",
-        "version": "6.1.1",
+        "version": ASTRA_VERSION,
         "port": _PORT,
         "ts": datetime.now().isoformat(),
         "endpoints": [
@@ -252,7 +253,7 @@ _ROOT_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>ASTRA API — v6.1.1</title>
+  <title>ASTRA API — v__ASTRA_VERSION__</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Courier New',monospace;background:#0d1117;color:#e6edf3;min-height:100vh;padding:40px 20px;display:flex;justify-content:center}
@@ -285,14 +286,14 @@ _ROOT_HTML = """<!DOCTYPE html>
 <body>
 <div class="wrap">
   <div class="logo">ASTRA</div>
-  <div class="sub">Modular AI System &nbsp;&middot;&nbsp; v6.1.1 &nbsp;&middot;&nbsp; Python REST API &nbsp;&middot;&nbsp; puerto 8000</div>
+  <div class="sub">Modular AI System &nbsp;&middot;&nbsp; v__ASTRA_VERSION__ &nbsp;&middot;&nbsp; Python REST API &nbsp;&middot;&nbsp; puerto 8000</div>
   <div class="badge"><div class="dot"></div><span class="badge-text">API Online</span></div>
 
   <div class="section">
     <div class="section-title">Estado del sistema</div>
     <div class="status-box" id="sysbox">
       <div class="status-row"><span class="skey">Servidor</span><span class="sval ok">http://localhost:8000</span></div>
-      <div class="status-row"><span class="skey">Version</span><span class="sval">6.1.1</span></div>
+      <div class="status-row"><span class="skey">Version</span><span class="sval">__ASTRA_VERSION__</span></div>
       <div class="status-row"><span class="skey">CPU</span><span class="sval" id="cpu">cargando...</span></div>
       <div class="status-row"><span class="skey">RAM</span><span class="sval" id="ram">cargando...</span></div>
       <div class="status-row"><span class="skey">Pares activos</span><span class="sval" id="pairs">cargando...</span></div>
@@ -345,7 +346,7 @@ _ROOT_HTML = """<!DOCTYPE html>
   setInterval(refreshStatus, 10000);
 </script>
 </body>
-</html>"""
+</html>""".replace("__ASTRA_VERSION__", ASTRA_VERSION)
 
 
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
