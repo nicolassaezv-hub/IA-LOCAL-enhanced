@@ -215,6 +215,30 @@ def test_deploy_validates_paths_before_any_install_or_recursive_permission_chang
     assert 'chmod 0640 "$ASTRA_ENV_FILE"' in deploy
 
 
+def test_deploy_precheck_does_not_use_interactive_sudo_validation():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    precheck = deploy.split("precheck() {", 1)[1].split("\n}", 1)[0]
+
+    assert "sudo -v" not in precheck
+
+
+def test_deploy_precheck_requires_non_interactive_passwordless_sudo():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    precheck = deploy.split("precheck() {", 1)[1].split("\n}", 1)[0]
+
+    assert "if ! sudo -n true; then" in precheck
+    assert "requires non-interactive passwordless sudo" in precheck
+
+
+def test_run_privileged_uses_non_interactive_sudo_and_preserves_root_execution():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    run_privileged = deploy.split("run_privileged() {", 1)[1].split("\n}", 1)[0]
+
+    assert 'if [[ "$EUID" -eq 0 ]]; then\n        "$@"' in run_privileged
+    assert 'sudo -n "$@"' in run_privileged
+    assert '\n        sudo "$@"' not in run_privileged
+
+
 def test_rsync_excludes_every_real_dot_env_basename_at_any_depth():
     deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
     assert "--exclude='*.env'" in deploy

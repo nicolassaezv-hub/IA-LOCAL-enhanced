@@ -71,7 +71,7 @@ run_privileged() {
     if [[ "$EUID" -eq 0 ]]; then
         "$@"
     else
-        sudo "$@"
+        sudo -n "$@"
     fi
 }
 
@@ -123,7 +123,10 @@ precheck() {
         --environment-file "$ASTRA_ENV_FILE"
     if [[ "$EUID" -ne 0 ]]; then
         command -v sudo >/dev/null || { echo "sudo is required for installation" >&2; return 1; }
-        sudo -v
+        if ! sudo -n true; then
+            echo "ASTRA deployment requires non-interactive passwordless sudo" >&2
+            return 1
+        fi
     fi
 }
 
