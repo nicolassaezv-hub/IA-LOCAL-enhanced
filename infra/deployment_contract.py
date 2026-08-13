@@ -18,6 +18,11 @@ from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping, Sequence
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
 SUPPORTED_ARCHITECTURES = frozenset({"aarch64", "arm64", "x86_64", "amd64"})
 REQUIRED_PYTHON = (3, 12)
 VALID_PHASE_STATUSES = frozenset({"PASS", "FAIL", "SKIP", "PENDING"})

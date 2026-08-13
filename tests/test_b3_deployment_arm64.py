@@ -8,6 +8,8 @@ import json
 import os
 import shutil
 import sqlite3
+import subprocess
+import sys
 import tarfile
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
@@ -342,6 +344,36 @@ def test_ubuntu_arm64_and_python_312_are_supported():
     assert not validate_platform(
         system_name="Linux", machine="aarch64", python_version=(3, 12, 6)
     )
+
+
+def test_deployment_contract_direct_readiness_imports_sibling_from_external_cwd(
+    tmp_path: Path,
+):
+    external_cwd = tmp_path / "external-cwd"
+    external_cwd.mkdir()
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(ROOT / "infra" / "deployment_contract.py"),
+            "readiness",
+            "--project-root",
+            str(ROOT),
+        ],
+        cwd=external_cwd,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+
+    assert result.returncode == 2, result.stderr
+    assert result.stdout.strip() == "NOT_READY"
+    assert "ModuleNotFoundError" not in result.stderr
 
 
 def test_unsupported_architecture_and_python_fail_explicitly():
