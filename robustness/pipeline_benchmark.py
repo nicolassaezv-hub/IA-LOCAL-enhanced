@@ -16,6 +16,7 @@ import statistics
 from datetime import datetime
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 # Standard pipeline stages for reference
@@ -30,6 +31,9 @@ STAGES = [
     "storage",
     "total",
 ]
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_DEFAULT_DB_PATH = _PROJECT_ROOT / "memory_db" / "benchmarks.db"
 
 
 @dataclass
@@ -60,9 +64,9 @@ class PipelineBenchmark:
     and formats reports.
     """
 
-    def __init__(self, db_path: str = "memory_db/benchmarks.db"):
-        self.db_path = db_path
-        parent_dir = os.path.dirname(os.path.abspath(db_path))
+    def __init__(self, db_path: str | os.PathLike[str] = _DEFAULT_DB_PATH):
+        self.db_path = str(Path(db_path).resolve())
+        parent_dir = os.path.dirname(self.db_path)
         if parent_dir:
             os.makedirs(parent_dir, exist_ok=True)
         self._init_db()
@@ -261,9 +265,67 @@ class PipelineBenchmark:
 _benchmark_singleton: Optional[PipelineBenchmark] = None
 
 
-def get_benchmark(db_path: str = "memory_db/benchmarks.db") -> PipelineBenchmark:
+def get_benchmark(db_path: str | os.PathLike[str] = _DEFAULT_DB_PATH) -> PipelineBenchmark:
     """Returns a singleton instance of PipelineBenchmark."""
     global _benchmark_singleton
     if _benchmark_singleton is None:
         _benchmark_singleton = PipelineBenchmark(db_path=db_path)
     return _benchmark_singleton
+
+
+def get_benchmark_evidence(
+    limit: int = 50,
+    pair: str | None = None,
+    stage: str | None = None,
+) -> dict[str, Any]:
+    """Return real benchmark evidence with an explicit command/API status."""
+    try:
+        benchmark = get_benchmark()
+        stats = benchmark.get_stats()
+        history = benchmark.get_history(limit=limit, pair=pair, stage=stage)
+    except Exception as exc:
+        return {"status": "ERROR", "stats": {}, "history": [], "error": str(exc)}
+
+    serialized_history = [item.to_dict() for item in history]
+    status = "SUCCESS" if stats or serialized_history else "UNAVAILABLE"
+    result: dict[str, Any] = {
+        "status": status,
+        "stats": stats,
+        "history": serialized_history,
+    }
+    if status == "UNAVAILABLE":
+        result["reason"] = "No benchmark records are available."
+    return result
+
+
+def cmd_benchmark(argstr: str = "") -> str:
+    """CLI/tool-registry boundary for the pipeline benchmark."""
+    try:
+        limit = int(argstr.strip()) if argstr.strip() else 10
+        if limit < 1 or limit > 1000:
+            raise ValueError
+    except ValueError:
+        return "[ERROR] Uso: robustness benchmark [limit 1..1000]"
+
+    evidence = get_benchmark_evidence(limit=limit)
+    status = evidence["status"]
+    if status == "ERROR":
+        return f"[ERROR] Pipeline benchmark: {evidence.get('error', 'unknown error')}"
+    if status == "UNAVAILABLE":
+        return f"[UNAVAILABLE] Pipeline benchmark: {evidence['reason']}"
+
+    lines = ["[SUCCESS] PIPELINE BENCHMARK", ""]
+    for stage_name, data in sorted(evidence["stats"].items()):
+        lines.append(
+            f"  {stage_name}: avg={data.get('avg', 0):.3f}s | "
+            f"median={data.get('median', 0):.3f}s | max={data.get('max', 0):.3f}s | "
+            f"count={int(data.get('count', 0))}"
+        )
+    if evidence["history"]:
+        lines.append(f"\n  Last {len(evidence['history'])} runs:")
+        for item in evidence["history"]:
+            lines.append(
+                f"  [{item['timestamp']}] {item.get('pair')} {item.get('timeframe')} "
+                f"{item['stage_name']}: {item['duration_seconds']:.3f}s"
+            )
+    return "\n".join(lines)

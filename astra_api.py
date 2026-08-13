@@ -16,7 +16,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
-_BASE = Path(__file__).parent
+from runtime_security import (
+    AuthResult,
+    authenticate_headers,
+    configured_bind_host,
+    configured_cors_origins,
+)
+
+_BASE = Path(__file__).resolve().parent
 _PORT = int(os.environ.get("ASTRA_API_PORT", "8000"))
 
 # ── State helpers ─────────────────────────────────────────────────────────────
@@ -234,7 +241,7 @@ _ROUTES: dict[str, callable] = {
     "/api/astra/datasets":    _handle_datasets,
     "/api/astra/scheduler":   _handle_scheduler,
     "/api/astra/doctor":      _handle_doctor,
-    "/api/astra/health":      lambda p: {"ok": True, "ts": datetime.now().isoformat(), "version": "6.1.1"},
+    "/api/astra/health":      lambda p: {"ok": True},
 }
 
 
@@ -314,9 +321,17 @@ _ROOT_HTML = """<!DOCTYPE html>
   </div>
 </div>
 <script>
+  const apiKeyStorage = 'astra.internal.apiKey';
+  let apiKey = sessionStorage.getItem(apiKeyStorage) || '';
+  if (!apiKey) {
+    apiKey = (window.prompt('ASTRA API key') || '').trim();
+    if (apiKey) sessionStorage.setItem(apiKeyStorage, apiKey);
+  }
   async function refreshStatus() {
     try {
-      const r = await fetch('/api/astra/status');
+      const r = await fetch('/api/astra/status', {
+        headers: apiKey ? {Authorization: `Bearer ${apiKey}`} : {}
+      });
       const d = await r.json();
       if (d.ok !== false) {
         document.getElementById('cpu').textContent  = d.cpu_percent != null ? d.cpu_percent + '%' : '—';
@@ -345,7 +360,7 @@ class AstraAPIHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._send_cors_origin()
         self.end_headers()
         self.wfile.write(body)
 
@@ -354,7 +369,7 @@ class AstraAPIHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._send_cors_origin()
         self.end_headers()
         self.wfile.write(body)
 
@@ -362,17 +377,38 @@ class AstraAPIHandler(BaseHTTPRequestHandler):
         accept = self.headers.get("Accept", "")
         return "text/html" in accept
 
+    def _send_cors_origin(self) -> None:
+        origin = (self.headers.get("Origin") or "").rstrip("/")
+        if origin and origin in configured_cors_origins():
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+
+    def _authorized(self, path: str) -> bool:
+        if path == "/api/astra/health":
+            return True
+        auth = authenticate_headers(self.headers)
+        if auth is AuthResult.OK:
+            return True
+        if auth is AuthResult.NOT_CONFIGURED:
+            self._send_json({"ok": False, "error": "API authentication is not configured"}, 503)
+        else:
+            self._send_json({"ok": False, "error": "Invalid or missing API credentials"}, 401)
+        return False
+
     def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_response(204)
+        self._send_cors_origin()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-API-Key")
         self.end_headers()
 
     def do_GET(self):
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
         path   = parsed.path
+
+        if (path == "/api" or path.startswith("/api/")) and not self._authorized(path):
+            return
 
         # Root path: serve HTML dashboard for browsers, JSON for API clients
         if path == "/" and self._wants_html():
@@ -400,6 +436,9 @@ class AstraAPIHandler(BaseHTTPRequestHandler):
         params = parse_qs(parsed.query)
         path   = parsed.path
 
+        if (path == "/api" or path.startswith("/api/")) and not self._authorized(path):
+            return
+
         if path == "/api/astra/signal":
             _save_state({"live_signals": body.get("signals", [])})
             self._send_json({"ok": True})
@@ -420,12 +459,13 @@ _server_instance: HTTPServer | None = None
 _server_thread:   threading.Thread | None = None
 
 
-def start_api_server(port: int = _PORT, daemon: bool = True) -> bool:
+def start_api_server(port: int = _PORT, daemon: bool = True, host: str | None = None) -> bool:
     global _server_instance, _server_thread
     if _server_instance is not None:
         return False
     try:
-        _server_instance = HTTPServer(("0.0.0.0", port), AstraAPIHandler)
+        bind_host = host if host is not None else configured_bind_host("ASTRA_API_HOST")
+        _server_instance = HTTPServer((bind_host, port), AstraAPIHandler)
         _server_thread = threading.Thread(
             target=_server_instance.serve_forever,
             name="AstraAPIServer",

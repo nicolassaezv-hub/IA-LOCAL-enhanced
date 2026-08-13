@@ -93,16 +93,22 @@ import json
 import threading
 import contextlib
 import datetime
+from pathlib import Path
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_ROOT = str(_PROJECT_ROOT)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 import pandas as pd
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from runtime_security import AuthResult, authenticate_headers, configured_bind_host
+from workspace.path_safety import UnsafePathError, resolve_user_path_in_roots
+from workspace.upload_storage import store_upload
 
 import memory
 import project_memory
@@ -126,10 +132,77 @@ except ImportError:
 
 app = FastAPI(title="ASTRA Workspace")
 
-_STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
-_CSV_BASE = os.path.join(_ROOT, "CSVs")
-os.makedirs(_UPLOAD_DIR, exist_ok=True)
+_WORKSPACE_ROOT = Path(__file__).resolve().parent
+_STATIC_ROOT = _WORKSPACE_ROOT / "static"
+_UPLOAD_ROOT = _WORKSPACE_ROOT / "uploads"
+_CSV_ROOT = _PROJECT_ROOT / "CSVs"
+_STATIC_DIR = str(_STATIC_ROOT)
+_UPLOAD_DIR = str(_UPLOAD_ROOT)
+_CSV_BASE = str(_CSV_ROOT)
+_UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+
+_PUBLIC_MINIMAL_PATHS = frozenset({"/health", "/api/health"})
+_AUTHENTICATED_METADATA_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
+
+
+@app.middleware("http")
+async def require_api_authentication(request: Request, call_next):
+    """Protect every API operation except the deliberately minimal health check."""
+    path = request.url.path
+    protected = path == "/api" or path.startswith("/api/") or path in _AUTHENTICATED_METADATA_PATHS
+    if protected and path not in _PUBLIC_MINIMAL_PATHS:
+        auth = authenticate_headers(request.headers)
+        if auth is AuthResult.NOT_CONFIGURED:
+            return JSONResponse(
+                {"error": "API authentication is not configured"},
+                status_code=503,
+            )
+        if auth is not AuthResult.OK:
+            return JSONResponse(
+                {"error": "Invalid or missing API credentials"},
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    return await call_next(request)
+
+
+def _resolve_client_file(
+    candidate: str,
+    allowed_roots: tuple[Path, ...],
+    suffixes: tuple[str, ...],
+) -> Path:
+    resolved = resolve_user_path_in_roots(
+        _PROJECT_ROOT,
+        candidate,
+        allowed_roots,
+        require_file=True,
+    )
+    if resolved.suffix.lower() not in suffixes:
+        raise UnsafePathError("file type is not allowed for this endpoint")
+    return resolved
+
+
+def _normalized_asset(value: str) -> str:
+    asset = value.upper().strip()
+    if not re.fullmatch(r"[A-Z0-9_-]{2,24}", asset):
+        raise ValueError("asset identifier is invalid")
+    return asset
+
+
+def _normalized_timeframe(value: str) -> str:
+    timeframe = value.upper().strip()
+    if timeframe not in {"H1", "H4", "D1"}:
+        raise ValueError("timeframe is invalid")
+    return timeframe
+
+
+def _cli_result_status(result: object) -> str:
+    text = re.sub(r"\x1b\[[0-9;]*m", "", str(result or "")).strip().upper()
+    if text.startswith("[ERROR]") or text.startswith("ERROR:"):
+        return "ERROR"
+    if text.startswith("[UNAVAILABLE]") or "NO DISPONIBLE" in text:
+        return "UNAVAILABLE"
+    return "SUCCESS"
 
 _SERVER_START = time.time()
 
@@ -311,7 +384,7 @@ def _run_sentinel_scans() -> None:
 @app.get("/health")
 @app.get("/api/health")
 def get_health() -> JSONResponse:
-    return JSONResponse({"status": "ok", "astra_status": "online", "timestamp": datetime.datetime.now().isoformat()})
+    return JSONResponse({"status": "ok"})
 
 
 @app.get("/api/status")
@@ -453,13 +526,19 @@ def get_chat_history(limit: int = 20) -> JSONResponse:
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)) -> JSONResponse:
-    safe_name = os.path.basename(file.filename or "archivo")
-    dest_path = os.path.join(_UPLOAD_DIR, safe_name)
-    content = await file.read()
-    with open(dest_path, "wb") as f:
-        f.write(content)
-    rel_path = os.path.relpath(dest_path, _ROOT)
-    return JSONResponse({"filename": safe_name, "path": rel_path, "size": len(content)})
+    try:
+        destination, original_name, size = await store_upload(file, _UPLOAD_ROOT)
+    except UnsafePathError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception:
+        return JSONResponse({"error": "No se pudo guardar el archivo."}, status_code=500)
+    rel_path = destination.relative_to(_PROJECT_ROOT).as_posix()
+    return JSONResponse({
+        "filename": destination.name,
+        "original_filename": original_name,
+        "path": rel_path,
+        "size": size,
+    })
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -499,7 +578,10 @@ def forex_pairs() -> JSONResponse:
 # ── 4 (Gestión de CSV) ──────────────────────────────────────────────
 @app.get("/api/forex/csvs")
 def list_csvs(timeframe: str = "H1") -> JSONResponse:
-    tf_dir = os.path.join(_CSV_BASE, timeframe.upper())
+    normalized_timeframe = timeframe.upper()
+    if normalized_timeframe not in {"H1", "H4", "D1"}:
+        return JSONResponse({"error": "Timeframe no permitido"}, status_code=400)
+    tf_dir = os.path.join(_CSV_BASE, normalized_timeframe)
     files = []
     if os.path.isdir(tf_dir):
         for f in sorted(os.listdir(tf_dir)):
@@ -510,7 +592,7 @@ def list_csvs(timeframe: str = "H1") -> JSONResponse:
                     "path": os.path.relpath(full, _ROOT),
                     "size_kb": round(os.path.getsize(full) / 1024, 1),
                 })
-    return JSONResponse({"timeframe": timeframe.upper(), "files": files})
+    return JSONResponse({"timeframe": normalized_timeframe, "files": files})
 
 
 _REQUIRED_OHLC = ["open", "high", "low", "close"]
@@ -518,8 +600,11 @@ _REQUIRED_OHLC = ["open", "high", "low", "close"]
 
 @app.get("/api/forex/csv/info")
 def csv_info(path: str) -> JSONResponse:
-    full = os.path.normpath(os.path.join(_ROOT, path))
-    if not full.startswith(_ROOT) or not os.path.isfile(full):
+    try:
+        full = _resolve_client_file(path, (_CSV_ROOT, _UPLOAD_ROOT), (".csv",))
+    except UnsafePathError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except FileNotFoundError:
         return JSONResponse({"error": "Archivo no encontrado"}, status_code=404)
     try:
         df = pd.read_csv(full)
@@ -562,8 +647,11 @@ def csv_info(path: str) -> JSONResponse:
 
 @app.get("/api/forex/csv/ohlc")
 def csv_ohlc(path: str, limit: int = 400) -> JSONResponse:
-    full = os.path.normpath(os.path.join(_ROOT, path))
-    if not full.startswith(_ROOT) or not os.path.isfile(full):
+    try:
+        full = _resolve_client_file(path, (_CSV_ROOT, _UPLOAD_ROOT), (".csv",))
+    except UnsafePathError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except FileNotFoundError:
         return JSONResponse({"error": "Archivo no encontrado"}, status_code=404)
     try:
         df = pd.read_csv(full)
@@ -594,7 +682,10 @@ def csv_ohlc(path: str, limit: int = 400) -> JSONResponse:
 # ── 4 (Dashboard multi-timeframe) ───────────────────────────────────
 @app.get("/api/forex/dashboard")
 def forex_dashboard(pair: str) -> JSONResponse:
-    pair_u = pair.upper()
+    try:
+        pair_u = _normalized_asset(pair)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
     result = {"pair": pair_u, "market_type": get_market_type(pair_u), "timeframes": {}, "model": None}
 
     for tf in ("H1", "H4", "D1"):
@@ -811,10 +902,13 @@ def start_training(req: TrainRequest) -> JSONResponse:
     with _train_lock:
         if _train_state["running"]:
             return JSONResponse({"error": "Ya hay un entrenamiento en curso."}, status_code=409)
-    full = os.path.normpath(os.path.join(_ROOT, req.csv_path))
-    if not full.startswith(_ROOT) or not os.path.isfile(full):
+    try:
+        full = _resolve_client_file(req.csv_path, (_CSV_ROOT, _UPLOAD_ROOT), (".csv",))
+    except UnsafePathError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except FileNotFoundError:
         return JSONResponse({"error": "CSV no encontrado."}, status_code=404)
-    thread = threading.Thread(target=_run_training_job, args=(req.csv_path,), daemon=True)
+    thread = threading.Thread(target=_run_training_job, args=(str(full),), daemon=True)
     thread.start()
     return JSONResponse({"started": True})
 
@@ -937,12 +1031,15 @@ def lab_run(req: LabRunRequest) -> JSONResponse:
     with _lab_lock:
         if _lab_state["running"]:
             return JSONResponse({"error": "Ya hay un análisis del Prediction Lab en curso."}, status_code=409)
-    full = os.path.normpath(os.path.join(_ROOT, req.csv_path)) if not os.path.isabs(req.csv_path) else req.csv_path
-    if not os.path.isfile(full):
+    try:
+        full = _resolve_client_file(req.csv_path, (_CSV_ROOT, _UPLOAD_ROOT), (".csv",))
+    except UnsafePathError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except FileNotFoundError:
         return JSONResponse({"error": "CSV no encontrado."}, status_code=404)
     if not req.idea or not req.idea.strip():
         return JSONResponse({"error": "Falta describir la idea/problema a resolver."}, status_code=400)
-    thread = threading.Thread(target=_run_lab_job, args=(req.csv_path, req.idea, req.target_variable), daemon=True)
+    thread = threading.Thread(target=_run_lab_job, args=(str(full), req.idea, req.target_variable), daemon=True)
     thread.start()
     return JSONResponse({"started": True})
 
@@ -1022,10 +1119,11 @@ def business_csvs() -> JSONResponse:
 
 
 def _business_resolve_path(path: str) -> str | None:
-    full = os.path.normpath(os.path.join(_ROOT, path)) if not os.path.isabs(path) else path
-    if not full.startswith(_ROOT) or not os.path.isfile(full):
+    try:
+        full = _resolve_client_file(path, (_UPLOAD_ROOT,), (".csv", ".xlsx", ".xls"))
+    except (UnsafePathError, FileNotFoundError):
         return None
-    return full
+    return str(full)
 
 
 @app.get("/api/business/csv/info")
@@ -1543,9 +1641,10 @@ class _SentinelPairBody(BaseModel):
 @app.post("/api/sentinel/add")
 def sentinel_add(body: _SentinelPairBody) -> JSONResponse:
     """Añade un par al Market Sentinel (V.10)."""
-    pair = body.pair.upper().strip()
-    if not pair:
-        return JSONResponse({"ok": False, "error": "Par vacío"}, status_code=400)
+    try:
+        pair = _normalized_asset(body.pair)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     if pair not in _sentinel_state["assets"]:
         _sentinel_state["assets"][pair] = {
             "last_signal": "HOLD",
@@ -1561,7 +1660,10 @@ def sentinel_add(body: _SentinelPairBody) -> JSONResponse:
 @app.post("/api/sentinel/remove")
 def sentinel_remove(body: _SentinelPairBody) -> JSONResponse:
     """Quita un par del Market Sentinel (V.10)."""
-    pair = body.pair.upper().strip()
+    try:
+        pair = _normalized_asset(body.pair)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     _sentinel_state["assets"].pop(pair, None)
     _sentinel_state["assets_monitored"] = len(_sentinel_state["assets"])
     if not _sentinel_state["assets"]:
@@ -1594,8 +1696,11 @@ class _DatasetUpdateBody(BaseModel):
 @app.post("/api/datasets/force_update")
 def datasets_force_update(body: _DatasetUpdateBody) -> JSONResponse:
     """Fuerza actualización incremental de un dataset (V.11)."""
-    pair = body.pair.upper().strip()
-    tf = body.timeframe.upper().strip()
+    try:
+        pair = _normalized_asset(body.pair)
+        tf = _normalized_timeframe(body.timeframe)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     try:
         result = dispatch_command(f"actualizar csv {pair} {tf}")
         return JSONResponse({"ok": True, "pair": pair, "timeframe": tf,
@@ -1612,12 +1717,19 @@ class _RetrainBody(BaseModel):
 @app.post("/api/retrain/force")
 def retrain_force(body: _RetrainBody) -> JSONResponse:
     """Fuerza reentrenamiento de un par en background (V.13)."""
-    pair = body.pair.upper().strip()
-    tf = body.timeframe.upper().strip()
-    csv_path = os.path.join(_CSV_BASE, tf, f"{pair}.csv")
-    if not os.path.exists(csv_path):
-        return JSONResponse({"ok": False, "error": f"CSV no encontrado: {csv_path}"},
-                            status_code=404)
+    try:
+        pair = _normalized_asset(body.pair)
+        tf = _normalized_timeframe(body.timeframe)
+        csv_path = resolve_user_path_in_roots(
+            _CSV_ROOT,
+            f"{tf}/{pair}.csv",
+            (_CSV_ROOT,),
+            require_file=True,
+        )
+    except (ValueError, UnsafePathError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except FileNotFoundError:
+        return JSONResponse({"ok": False, "error": "CSV no encontrado"}, status_code=404)
     def _run() -> None:
         try:
             dispatch_command(f"full forex {csv_path}")
@@ -1692,9 +1804,8 @@ def get_config() -> JSONResponse:
         "uptime": uptime_str,
         "uptime_seconds": int(uptime_s),
         "server_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "csv_base": _CSV_BASE,
-        "upload_dir": _UPLOAD_DIR,
-        "root_dir": _ROOT,
+        "csv_base": "CSVs",
+        "upload_dir": "workspace/uploads",
     })
 
 
@@ -1886,8 +1997,13 @@ class _CandlestickBody(BaseModel):
 def roadmap6_candlestick(body: _CandlestickBody) -> JSONResponse:
     """Detecta patrones de vela japonesa (VI.5.D)."""
     try:
-        result_str = dispatch_command(f"candlestick {body.csv_path}")
+        csv_path = _resolve_client_file(body.csv_path, (_CSV_ROOT, _UPLOAD_ROOT), (".csv",))
+        result_str = dispatch_command(f"candlestick {csv_path}")
         return JSONResponse({"ok": True, "text": str(result_str)})
+    except UnsafePathError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except FileNotFoundError:
+        return JSONResponse({"ok": False, "error": "CSV no encontrado"}, status_code=404)
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
@@ -2018,15 +2134,18 @@ def run_command(req: _CommandBody) -> JSONResponse:
         cmd = req.command.strip()
         if not cmd:
             return JSONResponse({"ok": False, "error": "empty command"}, status_code=400)
-        # Route through main dispatcher first, then process_request as fallback
-        try:
-            result = dispatch_command(cmd)
-            if result is not None:
-                return JSONResponse({"ok": True, "result": str(result), "module": "dispatcher"})
-        except Exception:
-            pass
-        result = process_request(cmd)
-        return JSONResponse({"ok": True, "result": str(result), "module": "astra_agent"})
+        result = dispatch_command(cmd)
+        status = _cli_result_status(result)
+        status_code = 500 if status == "ERROR" else (503 if status == "UNAVAILABLE" else 200)
+        return JSONResponse(
+            {
+                "ok": status == "SUCCESS",
+                "status": status,
+                "result": str(result),
+                "module": "dispatcher",
+            },
+            status_code=status_code,
+        )
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
@@ -2132,15 +2251,6 @@ async def deployment_run_readiness():
 
 
 
-app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
-
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    print(f"ASTRA Workspace disponible en http://localhost:{port}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
-
 # ── ROBUSTNESS API ────────────────────────────────────────────────────
 @app.get("/api/robustness/dependency-check")
 async def robustness_dependency():
@@ -2234,22 +2344,23 @@ async def robustness_recovery(limit: int = 20):
 @app.get("/api/robustness/benchmark")
 async def robustness_benchmark(limit: int = 50, pair: str = None, stage: str = None):
     """Estadisticas de benchmark del pipeline."""
-    try:
-        from robustness.pipeline_benchmark import get_benchmark
-        bench = get_benchmark()
-        stats = bench.get_stats()
-        history = bench.get_history(limit=limit, pair=pair, stage=stage)
-        return {
-            "stats": stats,
-            "history": [
-                {
-                    "stage": h.stage_name, "duration": h.duration_seconds,
-                    "pair": h.pair, "timeframe": h.timeframe, "timestamp": h.timestamp
-                } for h in history
-            ]
+    from robustness.pipeline_benchmark import get_benchmark_evidence
+
+    evidence = get_benchmark_evidence(limit=limit, pair=pair, stage=stage)
+    if evidence["status"] == "ERROR":
+        return JSONResponse(evidence, status_code=500)
+    payload = dict(evidence)
+    payload["history"] = [
+        {
+            "stage": item["stage_name"],
+            "duration": item["duration_seconds"],
+            "pair": item.get("pair"),
+            "timeframe": item.get("timeframe"),
+            "timestamp": item["timestamp"],
         }
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        for item in evidence["history"]
+    ]
+    return JSONResponse(payload)
 
 @app.get("/api/robustness/all")
 async def robustness_all():
@@ -2269,9 +2380,36 @@ async def robustness_all():
         results["provider"] = {"name": pv.provider_name, "status": pv.status}
         from robustness.auto_recovery_history import get_recovery_history
         results["recovery"] = get_recovery_history().get_stats()
-        from robustness.pipeline_benchmark import get_benchmark
-        results["benchmark"] = get_benchmark().get_stats()
+        from robustness.pipeline_benchmark import get_benchmark_evidence
+        results["benchmark"] = get_benchmark_evidence(limit=1)
         return results
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+
+@app.api_route(
+    "/api",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    include_in_schema=False,
+)
+@app.api_route(
+    "/api/{unmatched_path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    include_in_schema=False,
+)
+async def api_not_found(unmatched_path: str):
+    """Keep unknown API requests inside the JSON backend boundary."""
+    return JSONResponse({"error": "API endpoint not found"}, status_code=404)
+
+
+# Static/HTML catch-all is deliberately registered after every backend route.
+app.mount("/", StaticFiles(directory=_STATIC_ROOT, html=True), name="static")
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.environ.get("ASTRA_PORT", os.environ.get("PORT", 8000)))
+    host = configured_bind_host("ASTRA_HOST")
+    print(f"ASTRA Workspace disponible en http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port)

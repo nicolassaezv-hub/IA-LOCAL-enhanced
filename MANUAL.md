@@ -23,7 +23,8 @@ python main.py
 > full forex CSVs/H1/EURUSD.csv       # entrena + predice + backtest
 > predict forex CSVs/H1/EURUSD.csv    # señal con Decision Engine (Roadmap V)
 
-# 6. Interfaz visual (opcional)
+# 6. Interfaz visual (opcional; configura una clave propia para la API)
+export ASTRA_API_KEY=REEMPLAZAR_CON_UN_SECRETO_LARGO
 python workspace/server.py            # http://localhost:8000
 ```
 
@@ -48,6 +49,11 @@ pip install fastapi uvicorn python-multipart
 python workspace\server.py
 :: → Abre http://localhost:8000 en el navegador
 ```
+
+El Workspace solicita `ASTRA_API_KEY` al abrirse y la conserva solo durante la
+sesion del navegador. Por defecto escucha en `127.0.0.1`; un bind publico exige
+configurar `ASTRA_HOST` explicitamente y debe desplegarse detras del reverse
+proxy/HTTPS correspondiente.
 
 ### Paneles del Workspace
 
@@ -81,6 +87,10 @@ python workspace\server.py
 | `MT5_ACCOUNT` / `MT5_PASSWORD` / `MT5_SERVER` | No (solo Windows+MT5) | Conexión MetaTrader 5 |
 | `BINANCE_API_KEY` / `BINANCE_SECRET` | No | Datos Binance para cripto |
 | `NEWS_API_KEY` | No | Noticias financieras |
+| `ASTRA_API_KEY` | Si (API/Workspace) | Secreto elegido por el operador; no se genera ni se registra en logs |
+| `ASTRA_HOST` | No | Bind del Workspace; por defecto `127.0.0.1` |
+| `ASTRA_API_HOST` | No | Bind de `astra_api.py`; por defecto `127.0.0.1` |
+| `ASTRA_CORS_ORIGINS` | No | Origins exactos para `astra_api.py`, separados por coma; no admite wildcard |
 | `ASTRA_LOG_LEVEL` | No | `DEBUG` / `INFO` / `WARNING` (por defecto: `INFO`) |
 | `ASTRA_SCHEDULER_ENABLED` | No | `true` / `false` (por defecto: `true`) |
 
@@ -324,7 +334,7 @@ permiten inspeccionar cada pieza por separado.
 | `robustness models` | Carga, features y antigüedad de los modelos |
 | `robustness recovery` | Historial de eventos de recuperación |
 | `robustness provider` | Proveedor cloud detectado |
-| `robustness benchmark` | Rendimiento del pipeline |
+| `robustness benchmark` | Evidencia real del pipeline (`SUCCESS`, `UNAVAILABLE` o `ERROR`) |
 | `robustness wizard` | Asistente de primera ejecución |
 | `robustness all` | Todos los checks |
 
@@ -449,8 +459,9 @@ El proveedor de nube se selecciona solo mediante variables de entorno o el archi
 ```bash
 # infra/config/astra.env -- editar antes del despliegue
 ASTRA_DB_ENGINE=sqlite          # sqlite (default) | postgresql (futuro)
-ASTRA_API_HOST=0.0.0.0
+ASTRA_API_HOST=127.0.0.1
 ASTRA_API_PORT=8000
+ASTRA_API_KEY=REEMPLAZAR_CON_UN_SECRETO_LARGO
 ASTRA_SCHEDULER_ENABLED=true
 # Contrato productivo fijo; otros valores se ignoran.
 ASTRA_ROLLING_WINDOW_SIZE=2000

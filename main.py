@@ -534,7 +534,10 @@ def _forex_full(csv_path: str):
     Pipeline completo: tune -> train -> predict -> backtest.
     Detecta automaticamente H4 y D1 si existen en carpetas hermanas.
     """
-    from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
+    from forex.prediction.integrated_pipeline import (
+        ForexIntegratedPipeline,
+        PREDICTION_TIMEFRAME,
+    )
 
     path_h4, path_d1 = _resolve_mtf_paths(csv_path)
 
@@ -641,16 +644,20 @@ def _forex_full(csv_path: str):
 
     print()
     print(Fore.GREEN + "[ASTRA] ══ FULL PIPELINE COMPLETADO ══" + Style.RESET_ALL)
-    return ""
-
-
-    # Record pipeline benchmark
+    # Record pipeline benchmark before returning so the advertised evidence exists.
     if _bench:
         try:
             _total = _bench_time.time() - _bench_start
-            _bench.record_stage("total_pipeline", _total, _bench_pair, "H4", {"source": "full_forex"})
-        except Exception:
-            pass
+            _bench.record_stage(
+                "total_pipeline",
+                _total,
+                _bench_pair,
+                PREDICTION_TIMEFRAME,
+                {"source": "full_forex"},
+            )
+        except Exception as exc:
+            print(Fore.YELLOW + f"[WARN] Benchmark no registrado: {exc}" + Style.RESET_ALL)
+    return ""
 
 def _forex_analiza(csv_path: str, symbol: str):
     """Technical analytics report (RSI, MACD, EMA, volatility, etc.)."""
@@ -2059,18 +2066,10 @@ def dispatch_command(user_input: str) -> str:
             respuesta = "\n".join(lines)
 
         elif user_input.lower().startswith("robustness benchmark") or user_input.lower().startswith("robustez benchmark"):
-            from robustness.pipeline_benchmark import get_benchmark
-            bench = get_benchmark()
-            stats = bench.get_stats()
-            lines = ["\n[ASTRA] PIPELINE BENCHMARK", ""]
-            for stage, data in sorted(stats.items()):
-                lines.append(f"  {stage}: avg={data.get('avg', 0):.3f}s | median={data.get('median', 0):.3f}s | max={data.get('max', 0):.3f}s | count={data.get('count', 0)}")
-            history = bench.get_history(10)
-            if history:
-                lines.append(f"\n  Last {len(history)} runs:")
-                for h in history:
-                    lines.append(f"  [{h.timestamp}] {h.pair} {h.timeframe} {h.stage_name}: {h.duration_seconds:.3f}s")
-            respuesta = "\n".join(lines)
+            from robustness.pipeline_benchmark import cmd_benchmark
+            command_parts = user_input.split(maxsplit=2)
+            benchmark_args = command_parts[2] if len(command_parts) == 3 else ""
+            respuesta = cmd_benchmark(benchmark_args)
 
         elif user_input.lower().startswith("robustness wizard") or user_input.lower().startswith("robustez wizard"):
             from robustness.first_run_wizard import run_wizard
@@ -2099,9 +2098,12 @@ def dispatch_command(user_input: str) -> str:
             from robustness.auto_recovery_history import get_recovery_history
             hist = get_recovery_history()
             lines.append(f"5. Recovery events: {hist.get_stats().get('total_events', 0)}")
-            from robustness.pipeline_benchmark import get_benchmark
-            bench = get_benchmark()
-            lines.append(f"6. Benchmark stages: {len(bench.get_stats())}")
+            from robustness.pipeline_benchmark import get_benchmark_evidence
+            benchmark = get_benchmark_evidence(limit=1)
+            lines.append(
+                f"6. Benchmark: {benchmark['status']} "
+                f"stages={len(benchmark.get('stats', {}))}"
+            )
             respuesta = "\n".join(lines)
 
         # ── API INTERNA ───────────────────────────────

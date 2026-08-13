@@ -10,8 +10,17 @@ import glob
 from datetime import datetime
 from pathlib import Path
 
+from workspace.path_safety import UnsafePathError, resolve_user_path
+
 _BASE = Path(__file__).resolve().parent.parent
 _REPORT_DIR = _BASE / "reports" / "deployment"
+_REPORT_TYPES = frozenset({"pipeline", "deployment", "readiness"})
+
+
+def _validated_report_type(report_type: str) -> str:
+    if report_type not in _REPORT_TYPES:
+        raise ValueError(f"Unsupported report type: {report_type}")
+    return report_type
 
 
 class ReportManager:
@@ -20,6 +29,7 @@ class ReportManager:
     def __init__(self, report_dir: Path | str | None = None):
         self.report_dir = Path(report_dir) if report_dir else _REPORT_DIR
         self.report_dir.mkdir(parents=True, exist_ok=True)
+        self.report_dir = self.report_dir.resolve(strict=True)
 
     # ─────────────────────────────────────────────────────────
     # Guardar
@@ -35,6 +45,7 @@ class ReportManager:
         report_type: 'pipeline' | 'deployment' | 'readiness'
         Retorna la ruta relativa del archivo guardado.
         """
+        report_type = _validated_report_type(report_type)
         ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         filename = f"{report_type}_{ts}.md"
         filepath = self.report_dir / filename
@@ -64,6 +75,8 @@ class ReportManager:
     # ─────────────────────────────────────────────────────────
     def list_reports(self, report_type: str | None = None) -> list[dict]:
         """Lista todos los informes, opcionalmente filtrados por tipo."""
+        if report_type is not None:
+            report_type = _validated_report_type(report_type)
         pattern = f"{report_type}_*.json" if report_type else "*_*.json"
         metas = []
         for meta_path in sorted(self.report_dir.glob(pattern), reverse=True):
@@ -88,12 +101,18 @@ class ReportManager:
     # ─────────────────────────────────────────────────────────
     def get_report_content(self, filename: str) -> str | None:
         """Lee el contenido Markdown de un informe por nombre de archivo."""
-        filepath = self.report_dir / filename
+        try:
+            filepath = resolve_user_path(self.report_dir, filename)
+        except UnsafePathError:
+            return None
         if not filepath.exists():
             # Intentar con .md
             if not filename.endswith(".md"):
-                filepath = self.report_dir / f"{filename}.md"
-        if filepath.exists():
+                try:
+                    filepath = resolve_user_path(self.report_dir, f"{filename}.md")
+                except UnsafePathError:
+                    return None
+        if filepath.is_file() and filepath.suffix.lower() == ".md":
             return filepath.read_text(encoding="utf-8")
         return None
 
@@ -146,7 +165,13 @@ class ReportManager:
             if len(reports) > keep:
                 for old in reports[keep:]:
                     for ext in (".md", ".json"):
-                        path = self.report_dir / old["filename"].replace(".md", ext)
+                        try:
+                            path = resolve_user_path(
+                                self.report_dir,
+                                old["filename"].replace(".md", ext),
+                            )
+                        except (KeyError, AttributeError, UnsafePathError):
+                            continue
                         if path.exists():
                             path.unlink()
                             deleted += 1

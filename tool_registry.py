@@ -236,6 +236,7 @@ from cognitive_center import (
     cmd_memoria_explorar,
     cmd_memoria_buscar,
 )
+from robustness.pipeline_benchmark import cmd_benchmark
 
 # ==========================================
 # ROADMAP V — Forex Lab Avanzado
@@ -268,6 +269,8 @@ except ImportError as _e:
 TOOLS = {
     # ---------- SELF ANALYSIS --------- #
     "self_analysis": generate_self_analysis,
+    "robustness_benchmark": cmd_benchmark,
+    "robustez_benchmark": cmd_benchmark,
 
     # ---------- BRANCH 4 — SME CONSULTANT --------- #
     "sme_diagnostic": sme_diagnostic,
@@ -504,4 +507,3 @@ def execute_tool(name, *args, **kwargs):
         raise RuntimeError(
             f"Error ejecutando {name}: {e}"
         )
-

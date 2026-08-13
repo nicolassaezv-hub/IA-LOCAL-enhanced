@@ -248,8 +248,9 @@ const folderInput = document.getElementById("folder-input");
 function setAttachment(info) {
   pendingAttachment = info;
   if (info) {
+    const displayName = info.original_filename || info.filename || info.path;
     attachPreview.style.display = "block";
-    attachPreview.textContent = `📎 Adjunto listo: ${info.path} (${info.size} bytes) — se referenciará en tu próximo mensaje`;
+    attachPreview.textContent = `📎 Adjunto listo: ${displayName} (${info.size} bytes) — se referenciará en tu próximo mensaje`;
   } else {
     attachPreview.style.display = "none";
     attachPreview.textContent = "";
