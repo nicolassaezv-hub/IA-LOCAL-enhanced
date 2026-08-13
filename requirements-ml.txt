@@ -1,0 +1,13 @@
+# REQUIRED FOREX/ML — canonical inference, selection, retraining and Linux data route.
+scikit-learn>=1.3
+scipy>=1.11
+xgboost>=2.0
+lightgbm>=4.3
+optuna>=3.6
+joblib>=1.3
+yfinance>=0.2
+imbalanced-learn>=0.12,<1.0
+
+# Feature-importance safeguards import SHAP lazily, but production installs it
+# so the complete Forex validation surface remains available.
+shap>=0.44

@@ -12,8 +12,11 @@ from datetime import datetime
 from forex.data.rolling_dataset import ROLLING_WINDOW
 
 
-_INDEX_PATH = Path(__file__).parent.parent.parent / "astra_csv_index.json"
-_DEFAULT_CSV_ROOT = Path(__file__).parent.parent.parent / "CSVs"
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_INDEX_PATH = Path(os.environ.get("ASTRA_CSV_INDEX_PATH", "astra_csv_index.json"))
+if not _INDEX_PATH.is_absolute():
+    _INDEX_PATH = _PROJECT_ROOT / _INDEX_PATH
+_DEFAULT_CSV_ROOT = _PROJECT_ROOT / "CSVs"
 
 _REQUIRED_COLS = {"timestamp", "open", "high", "low", "close", "volume"}
 _COL_ALIASES = {

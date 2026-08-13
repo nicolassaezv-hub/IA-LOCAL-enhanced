@@ -37,8 +37,15 @@ MAX_WEEKLY_LOSS_PCT   = 0.06   # 6%  del balance inicial de la semana
 MAX_DRAWDOWN_PCT      = 0.10   # 10% desde el pico histórico
 COOLDOWN_HOURS        = 24     # horas de pausa tras activar el circuit breaker
 
-_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "../../circuit_breaker_state.json")
+_PROJECT_ROOT = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "../..")
+)
+_STATE_FILE = os.environ.get(
+    "ASTRA_CIRCUIT_BREAKER_STATE_PATH",
+    os.path.join(_PROJECT_ROOT, "circuit_breaker_state.json"),
+)
+if not os.path.isabs(_STATE_FILE):
+    _STATE_FILE = os.path.join(_PROJECT_ROOT, _STATE_FILE)
 _STATE_FILE = os.path.normpath(_STATE_FILE)
 
 

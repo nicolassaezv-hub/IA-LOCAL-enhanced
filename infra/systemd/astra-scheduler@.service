@@ -1,12 +1,26 @@
 [Unit]
 Description=ASTRA Scheduler Cycle (%i)
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=root
+User=astra
+Group=astra
 WorkingDirectory=/opt/astra
-EnvironmentFile=-/opt/astra/infra/config/astra.env
-ExecStart=/opt/astra/venv/bin/python scheduler/autonomous_scheduler.py --timeframe %i
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/astra/astra.env
+ExecStart=/opt/astra/venv/bin/python /opt/astra/scheduler/autonomous_scheduler.py --timeframe %i
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+ReadWritePaths=/opt/astra/memory_db /opt/astra/models /opt/astra/CSVs /opt/astra/reports /opt/astra/logs /opt/astra/data /opt/astra/prediction/reports /var/log/astra
 StandardOutput=append:/var/log/astra/scheduler-%i.log
 StandardError=append:/var/log/astra/scheduler-%i.log

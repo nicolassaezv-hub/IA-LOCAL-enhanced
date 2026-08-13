@@ -381,7 +381,7 @@ def _existing_sqlite_path(base_dir: Path) -> Path:
 
 def _add_environment_checks(report: ProductionReadinessReport, base_dir: Path) -> None:
     py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    py_ok = sys.version_info >= (3, 10)
+    py_ok = sys.version_info[:2] == (3, 12)
     report.add_check(ReadinessCheck(
         "1. Entorno Python", "Versión de Python", "pass" if py_ok else "fail",
         f"Python {py_version} en {platform.system()} {platform.machine()}",
@@ -405,13 +405,26 @@ def _add_environment_checks(report: ProductionReadinessReport, base_dir: Path) -
             blocking=False,
         ))
 
-    env_path = base_dir / "infra" / "config" / "astra.env"
+    configured_env_path = os.getenv("ASTRA_ENV_FILE")
+    env_path = (
+        Path(configured_env_path)
+        if configured_env_path
+        else base_dir / "infra" / "config" / "astra.env"
+    )
     report.add_check(ReadinessCheck(
         "3. Configuración", "Archivo astra.env",
         "pass" if env_path.is_file() else "warn",
         str(env_path) if env_path.is_file() else "No encontrado",
         "Configure el entorno desde el archivo example; readiness no lo crea",
         blocking=False,
+    ))
+    has_api_key = bool(os.getenv("ASTRA_API_KEY"))
+    report.add_check(ReadinessCheck(
+        "3. Configuración", "Autenticación API",
+        "pass" if has_api_key else "fail",
+        "ASTRA_API_KEY configurada" if has_api_key else "ASTRA_API_KEY ausente",
+        "Configure ASTRA_API_KEY en el EnvironmentFile externo" if not has_api_key else "",
+        blocking=True,
     ))
     has_chat_key = bool(os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY"))
     report.add_check(ReadinessCheck(

@@ -39,8 +39,10 @@ import time
 import os
 from typing import Optional
 
+from runtime_paths import configured_project_path
+
 # Reutiliza la misma memoria.db del proyecto
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "memoria.db")
+DB_PATH = str(configured_project_path("ASTRA_MEMORY_DB_PATH", "memoria.db"))
 
 
 # ══════════════════════════════════════════════════════════════════

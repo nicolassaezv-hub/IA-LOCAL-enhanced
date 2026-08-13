@@ -2,12 +2,12 @@
 """
 ASTRA Process Monitor & Supervisor
 ===================================
-Monitors the health of ASTRA workspace components:
+Monitors the health of ASTRA workspace components without supervising them:
 1. API availability (FastAPI on port 8000 /health)
 2. SQLite database integrity and accessibility
 3. Freshness of scheduled execution cycles (H1, H4, D1)
 
-Auto-recovers services via systemctl when failures occur.
+systemd remains the sole production restart authority.
 """
 
 import sys
@@ -17,7 +17,6 @@ import signal
 import sqlite3
 import urllib.request
 import urllib.error
-import subprocess
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,7 +44,6 @@ SCHEDULER_THRESHOLDS = {
 # Configure logging
 LOG_DIR = Path("/var/log/astra")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-LOG_FILE = LOG_DIR / "monitor.log"
 
 formatter = logging.Formatter(
     fmt="%(asctime)s [%(levelname)s] [supervisor] %(message)s",
@@ -60,14 +58,6 @@ c_handler = logging.StreamHandler(sys.stdout)
 c_handler.setFormatter(formatter)
 logger.addHandler(c_handler)
 
-# File Handler
-try:
-    f_handler = logging.FileHandler(LOG_FILE)
-    f_handler.setFormatter(formatter)
-    logger.addHandler(f_handler)
-except Exception as e:
-    logger.warning(f"Could not attach file handler for {LOG_FILE}: {e}")
-
 _running = True
 
 
@@ -79,27 +69,6 @@ def handle_shutdown(signum, frame):
 
 signal.signal(signal.SIGINT, handle_shutdown)
 signal.signal(signal.SIGTERM, handle_shutdown)
-
-
-def restart_service(service_name: str) -> bool:
-    """Restarts a systemd service using systemctl."""
-    logger.info(f"[recovery] Attempting systemctl restart for {service_name}...")
-    try:
-        res = subprocess.run(
-            ["systemctl", "restart", service_name],
-            capture_output=True,
-            text=True,
-            timeout=15
-        )
-        if res.returncode == 0:
-            logger.info(f"[recovery] Successfully restarted {service_name}.")
-            return True
-        else:
-            logger.error(f"[recovery] Failed to restart {service_name}: {res.stderr.strip()}")
-            return False
-    except Exception as e:
-        logger.error(f"[recovery] Exception restarting {service_name}: {e}")
-        return False
 
 
 def check_api_health() -> bool:
@@ -240,14 +209,18 @@ def run_supervisor():
             # 1. API Health Check
             api_ok = check_api_health()
             if not api_ok:
-                logger.error("[alert] astra-api service appears DOWN or unresponsive.")
-                restart_service("astra-api")
+                logger.error(
+                    "[alert] astra-api appears DOWN or unresponsive; "
+                    "systemd restart policy remains authoritative."
+                )
 
             # 2. Database Health Check
             db_ok = check_database_health()
             if not db_ok:
-                logger.critical("[alert] SQLite database issue detected! Restarting API service to clear locks...")
-                restart_service("astra-api")
+                logger.critical(
+                    "[alert] SQLite database issue detected; no automatic "
+                    "database or service mutation was attempted."
+                )
 
             # 3. Scheduler Freshness Check
             check_scheduler_freshness()

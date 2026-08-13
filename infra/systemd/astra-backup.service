@@ -1,12 +1,25 @@
 [Unit]
-Description=ASTRA Automated Backup Service
-After=network.target
+Description=ASTRA Atomic Backup Service
+After=local-fs.target
 
 [Service]
 Type=oneshot
-User=root
+User=astra
+Group=astra
 WorkingDirectory=/opt/astra
-EnvironmentFile=-/opt/astra/infra/config/astra.env
-ExecStart=/bin/bash infra/backup/backup.sh
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/astra/astra.env
+ExecStart=/opt/astra/venv/bin/python /opt/astra/infra/backup/create_backup.py --project-root /opt/astra
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/backups/astra /var/log/astra
 StandardOutput=append:/var/log/astra/backup.log
 StandardError=append:/var/log/astra/backup.log

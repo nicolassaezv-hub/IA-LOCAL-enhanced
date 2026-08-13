@@ -32,7 +32,9 @@ import datetime
 from datetime import datetime as _dt
 from typing import Optional, List, Dict, Any
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "memoria.db")
+from runtime_paths import configured_project_path
+
+DB_PATH = str(configured_project_path("ASTRA_MEMORY_DB_PATH", "memoria.db"))
 
 _VALID_KINDS = ("info", "success", "warning", "error")
 

@@ -59,7 +59,9 @@ $hardeningCandidates = @(
     "tests/test_a09_risk_sizing.py",
     "tests/test_a13_a14_hardening.py",
     "tests/test_a18_test_isolation.py",
-    "tests/test_infrastructure.py"
+    "tests/test_infrastructure.py",
+    "tests/test_b2_runtime_api.py",
+    "tests/test_b3_deployment_arm64.py"
 )
 $hardeningTests = @($hardeningCandidates | Where-Object { Test-Path -LiteralPath $_ })
 

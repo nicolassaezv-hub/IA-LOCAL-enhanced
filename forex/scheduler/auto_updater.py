@@ -5,13 +5,17 @@ Se ejecuta vía el AutonomousScheduler en cada ciclo H1/H4/D1.
 """
 import logging
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_INDEX_PATH = Path(__file__).parent.parent.parent / "astra_csv_index.json"
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_INDEX_PATH = Path(os.environ.get("ASTRA_CSV_INDEX_PATH", "astra_csv_index.json"))
+if not _INDEX_PATH.is_absolute():
+    _INDEX_PATH = _PROJECT_ROOT / _INDEX_PATH
 
 
 class AutoUpdater:

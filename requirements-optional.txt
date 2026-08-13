@@ -1,0 +1,14 @@
+# OPTIONAL FEATURES — core service startup must not depend on this file.
+openai>=1.0
+groq>=0.11.0
+faiss-cpu>=1.7
+python-dotenv>=1.0.0
+
+# Deep-learning, audio, cloud and desktop packages remain opt-in. In
+# particular, MetaTrader5 and Windows GUI packages are not Linux requirements.
+# torch>=2.0
+# tensorflow>=2.14
+# librosa>=0.10
+# redis>=5.0
+# boto3>=1.34
+# MetaTrader5>=5.0.45; platform_system == "Windows"

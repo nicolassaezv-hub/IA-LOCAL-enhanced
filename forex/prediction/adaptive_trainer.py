@@ -3,11 +3,15 @@ VI.1.B — Adaptive Training Budget
 Ajusta automáticamente n_trials de Optuna según la urgencia y el historial.
 """
 import json
+import os
 import sqlite3
 from pathlib import Path
 from datetime import datetime
 
-_DB_PATH = Path(__file__).parent.parent.parent / "astra_hparam_cache.db"
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_DB_PATH = Path(os.environ.get("ASTRA_HPARAM_DB_PATH", "astra_hparam_cache.db"))
+if not _DB_PATH.is_absolute():
+    _DB_PATH = _PROJECT_ROOT / _DB_PATH
 
 _DEFAULTS = {
     "production":   50,   # entrenamiento completo con dataset grande

@@ -9,7 +9,10 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
-_DB_PATH = Path(__file__).parent.parent.parent / "astra_hparam_cache.db"
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_DB_PATH = Path(os.environ.get("ASTRA_HPARAM_DB_PATH", "astra_hparam_cache.db"))
+if not _DB_PATH.is_absolute():
+    _DB_PATH = _PROJECT_ROOT / _DB_PATH
 _CACHE_TTL_DAYS = 7
 _DATA_CHANGE_THRESHOLD = 0.05  # 5%
 
