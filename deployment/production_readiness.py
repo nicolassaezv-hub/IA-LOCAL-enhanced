@@ -372,11 +372,10 @@ def _default_provider_probe(active_symbols: Iterable[str]) -> dict:
     }
 
 
-def _existing_sqlite_path(base_dir: Path) -> Path:
-    from infra.db.database import DEFAULT_SQLITE_DB_PATH
+def _existing_sqlite_path(_base_dir: Path) -> Path:
+    from infra.db.database import configured_sqlite_path
 
-    configured = Path(os.environ.get("ASTRA_DB_PATH", DEFAULT_SQLITE_DB_PATH))
-    return configured if configured.is_absolute() else base_dir / configured
+    return configured_sqlite_path()
 
 
 def _add_environment_checks(report: ProductionReadinessReport, base_dir: Path) -> None:

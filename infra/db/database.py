@@ -13,15 +13,22 @@ import math
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Iterator
 
 from astra_version import ASTRA_VERSION
+from runtime_paths import configured_project_path
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SQLITE_DB_PATH = "memory_db/astra_autonomous.db"
 # Release of the ASTRA runtime that generated/persisted the prediction.
 _PIPELINE_VERSION = f"v{ASTRA_VERSION}"
+
+
+def configured_sqlite_path() -> Path:
+    """Return the environment-selected SQLite path under the ASTRA project root."""
+    return configured_project_path("ASTRA_DB_PATH", DEFAULT_SQLITE_DB_PATH)
 
 
 class PersistenceConflictError(RuntimeError):
@@ -106,9 +113,9 @@ class SQLiteDatabase(DatabaseAdapter):
     """SQLite implementation with short-lived, operation-owned connections."""
 
     def __init__(self, db_path: str = None):
-        self.db_path = db_path or os.environ.get(
-            "ASTRA_DB_PATH", DEFAULT_SQLITE_DB_PATH
-        )
+        # An explicit argument remains caller-owned for compatibility.  Only the
+        # environment/default contract defines relative paths from PROJECT_ROOT.
+        self.db_path = db_path or str(configured_sqlite_path())
         db_dir = os.path.dirname(self.db_path)
         if db_dir:
             os.makedirs(db_dir, exist_ok=True)

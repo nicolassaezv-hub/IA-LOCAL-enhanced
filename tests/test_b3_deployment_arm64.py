@@ -605,6 +605,83 @@ def test_configured_project_path_uses_default_for_missing_or_empty_env(monkeypat
     assert runtime_paths.configured_project_path(environment_name, "memory.db") == expected
 
 
+def test_relative_astra_db_path_is_project_canonical_and_cwd_independent(
+    monkeypatch, tmp_path: Path
+):
+    from infra.db.database import get_database
+
+    project_root = tmp_path / "opt" / "astra"
+    first_cwd = tmp_path / "first-cwd"
+    second_cwd = tmp_path / "second-cwd"
+    first_cwd.mkdir(parents=True)
+    second_cwd.mkdir()
+    monkeypatch.setattr(runtime_paths, "PROJECT_ROOT", project_root)
+    monkeypatch.setenv("ASTRA_DB_ENGINE", "sqlite")
+    monkeypatch.setenv("ASTRA_DB_PATH", "memory_db/astra_autonomous.db")
+
+    monkeypatch.chdir(first_cwd)
+    first_database = get_database()
+    monkeypatch.chdir(second_cwd)
+    second_database = get_database()
+
+    expected = project_root / "memory_db" / "astra_autonomous.db"
+    assert Path(first_database.db_path) == expected
+    assert Path(second_database.db_path) == expected
+    assert expected.is_file()
+    assert not (first_cwd / "memory_db").exists()
+    assert not (second_cwd / "memory_db").exists()
+
+
+def test_absolute_astra_db_path_remains_absolute(monkeypatch, tmp_path: Path):
+    from infra.db.database import get_database
+
+    project_root = tmp_path / "project"
+    absolute_path = tmp_path / "runtime" / "astra.db"
+    unrelated_cwd = tmp_path / "cwd"
+    unrelated_cwd.mkdir()
+    monkeypatch.setattr(runtime_paths, "PROJECT_ROOT", project_root)
+    monkeypatch.setenv("ASTRA_DB_ENGINE", "sqlite")
+    monkeypatch.setenv("ASTRA_DB_PATH", str(absolute_path))
+    monkeypatch.chdir(unrelated_cwd)
+
+    database = get_database()
+
+    assert Path(database.db_path) == absolute_path
+    assert absolute_path.is_file()
+
+
+def test_default_astra_db_path_is_under_project_root(monkeypatch, tmp_path: Path):
+    from infra.db.database import DEFAULT_SQLITE_DB_PATH, get_database
+
+    project_root = tmp_path / "project"
+    unrelated_cwd = tmp_path / "cwd"
+    unrelated_cwd.mkdir()
+    monkeypatch.setattr(runtime_paths, "PROJECT_ROOT", project_root)
+    monkeypatch.delenv("ASTRA_DB_PATH", raising=False)
+    monkeypatch.setenv("ASTRA_DB_ENGINE", "sqlite")
+    monkeypatch.chdir(unrelated_cwd)
+
+    database = get_database()
+
+    assert Path(database.db_path) == project_root / DEFAULT_SQLITE_DB_PATH
+    assert not (unrelated_cwd / "memory_db").exists()
+
+
+def test_explicit_relative_sqlite_path_keeps_caller_owned_semantics(
+    monkeypatch, tmp_path: Path
+):
+    from infra.db.database import SQLiteDatabase
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ASTRA_DB_PATH", "memory_db/environment.db")
+
+    database = SQLiteDatabase("explicit.db")
+
+    assert database.db_path == "explicit.db"
+    assert (tmp_path / "explicit.db").is_file()
+    assert not (tmp_path / "memory_db").exists()
+
+
 def _load_dev_log_module():
     spec = importlib.util.spec_from_file_location("_b3_dev_log", ROOT / "dev_log.py")
     assert spec is not None and spec.loader is not None

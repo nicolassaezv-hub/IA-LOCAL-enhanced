@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pandas as pd
 
 from deployment.production_readiness import (
+    _existing_sqlite_path,
     evaluate_dataset_registry_entry,
     run_production_readiness,
 )
@@ -14,6 +15,7 @@ from forex.data.indicator_delta import recalculate_tail_indicators
 from forex.data.rolling_dataset import ROLLING_WINDOW, validate_dataset
 from infra.db.database import SQLiteDatabase
 from robustness.first_run_wizard import FirstRunWizard
+import runtime_paths
 
 
 def _frame(rows: int, *, indicators: bool = True) -> pd.DataFrame:
@@ -388,6 +390,47 @@ def test_first_run_and_readiness_share_canonical_database_registry(tmp_path):
     assert scheduler_backends == [db_path.resolve()]
     assert _dataset_check(readiness)["status"] == "pass"
     assert not (tmp_path / "memory_db" / "memoria.db").exists()
+
+
+def test_readiness_and_factory_share_project_relative_database_across_cwd(
+    monkeypatch, tmp_path
+):
+    from infra.db.database import get_database
+
+    project_root = tmp_path / "opt" / "astra"
+    unrelated_cwd = tmp_path / "service-cwd"
+    unrelated_cwd.mkdir(parents=True)
+    monkeypatch.setattr(runtime_paths, "PROJECT_ROOT", project_root)
+    monkeypatch.setenv("ASTRA_DB_ENGINE", "sqlite")
+    monkeypatch.setenv("ASTRA_DB_PATH", "memory_db/astra_autonomous.db")
+
+    database = get_database()
+    database.add_symbol("EURUSD", "EUR/USD", 0.0001)
+    canonical_path = Path(database.db_path)
+    monkeypatch.chdir(unrelated_cwd)
+
+    report = run_production_readiness(
+        base_dir=project_root,
+        required_timeframes=(),
+        require_models=False,
+        probe_providers=False,
+    )
+    database_check = next(
+        check for check in report.to_dict()["checks"]
+        if check["category"] == "4. Base de datos"
+    )
+    provider_check = next(
+        check for check in report.to_dict()["checks"]
+        if check["check"] == "Adquisición operacional verificada"
+    )
+
+    assert canonical_path == project_root / "memory_db" / "astra_autonomous.db"
+    assert _existing_sqlite_path(project_root) == canonical_path
+    assert database_check["status"] == "pass"
+    assert database_check["detail"] == "1 símbolo(s) activo(s)"
+    assert provider_check["status"] == "pending"
+    assert provider_check["evidence_state"] == "UNVERIFIED"
+    assert not (unrelated_cwd / "memory_db").exists()
 
 
 def test_first_run_wizard_does_not_convert_not_ready_report_to_pass(tmp_path):
