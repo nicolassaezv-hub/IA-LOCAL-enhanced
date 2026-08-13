@@ -13,11 +13,11 @@
 - Configura el servidor VM a usar, aplica tests end-end para verificar viabilidad y finalizar la consolidacion del proyecto (Version Final)
 - Usa herramientas para avanzar
 
-   - ### Base44
-   - ### Replit
-   - ### Bolt.new
-   - ### Lovable
-   - ### Github Copilot (desde repositorio)
+   - ### Base44 (Integracion y testeo)
+   - ### Replit (Integracion y planificacion)
+   - ### Bolt.new (solo para crear borrador)
+   - ### Lovable (Integracion y Planificacion)
+   - ### Github Copilot (Diagnostico y Planificacion)
    - ### Claude (solo de diagnostico)
 
 - Para comprobaciones de calidad de usuario (UX) o estetica consulta con Base44, asegurate de mencionar que la estetica es propia del Workspace en servidor (modificar HTML constantemente)
