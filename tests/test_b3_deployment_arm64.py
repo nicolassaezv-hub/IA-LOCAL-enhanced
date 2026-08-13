@@ -231,6 +231,21 @@ def test_deploy_contains_no_world_writable_or_destructive_runtime_cleanup():
     assert "python3.12 -m venv" in deploy
 
 
+def test_deploy_installs_linux_openmp_runtime_required_by_lightgbm():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    dependencies = deploy.split("system_dependencies() {", 1)[1].split("\n}", 1)[0]
+    package_line = next(
+        line.strip()
+        for line in dependencies.splitlines()
+        if line.strip().startswith("local packages=(")
+    )
+    packages = package_line.split("(", 1)[1].split(")", 1)[0].split()
+
+    assert "libgomp1" in packages, (
+        "LightGBM on Linux requires the libgomp1 OpenMP runtime (libgomp.so.1)"
+    )
+
+
 def test_critical_phase_failure_can_never_be_success():
     phases = [
         PhaseResult("PRECHECK", "PASS"),

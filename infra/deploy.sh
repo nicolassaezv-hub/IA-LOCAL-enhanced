@@ -128,7 +128,7 @@ precheck() {
 }
 
 system_dependencies() {
-    local packages=(python3.12 python3.12-venv python3-pip rsync curl)
+    local packages=(python3.12 python3.12-venv python3-pip rsync curl libgomp1)
     local missing=() package
     for package in "${packages[@]}"; do
         dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q 'install ok installed' || missing+=("$package")
