@@ -156,6 +156,12 @@ def test_environment_examples_use_canonical_b1_database_path():
         assert _env_assignments(path)["ASTRA_DB_PATH"] == expected, path
 
 
+def test_environment_examples_use_persistent_dev_log_database_path():
+    expected = "memory_db/dev_log.db"
+    for path in (DEV_ENV, PROD_ENV):
+        assert _env_assignments(path)["ASTRA_DEV_LOG_DB_PATH"] == expected, path
+
+
 def test_deployment_docs_do_not_claim_https_or_proxy_is_implemented():
     deployment = _text(DEPLOYMENT_DOC)
     vm = _text(VM_DOC)

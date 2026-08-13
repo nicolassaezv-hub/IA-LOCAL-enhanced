@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -602,6 +603,58 @@ def test_configured_project_path_uses_default_for_missing_or_empty_env(monkeypat
     assert runtime_paths.configured_project_path(environment_name, "memory.db") == expected
     monkeypatch.setenv(environment_name, "")
     assert runtime_paths.configured_project_path(environment_name, "memory.db") == expected
+
+
+def _load_dev_log_module():
+    spec = importlib.util.spec_from_file_location("_b3_dev_log", ROOT / "dev_log.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_dev_log_uses_configured_project_path_and_can_be_redirected(monkeypatch, tmp_path: Path):
+    redirected = tmp_path / "redirected_dev_log.db"
+    calls: list[tuple[str, str]] = []
+    original = runtime_paths.configured_project_path
+
+    def recording_path(environment_name: str, default_relative: str) -> Path:
+        calls.append((environment_name, default_relative))
+        return original(environment_name, default_relative)
+
+    monkeypatch.setenv("ASTRA_DEV_LOG_DB_PATH", str(redirected))
+    monkeypatch.setattr(runtime_paths, "configured_project_path", recording_path)
+
+    module = _load_dev_log_module()
+
+    assert calls == [("ASTRA_DEV_LOG_DB_PATH", "dev_log.db")]
+    assert module._DB == redirected
+    assert redirected.is_file()
+
+
+@pytest.mark.parametrize("environment_value", [None, ""])
+def test_dev_log_default_remains_in_project_root(
+    monkeypatch, tmp_path: Path, environment_value: str | None
+):
+    if environment_value is None:
+        monkeypatch.delenv("ASTRA_DEV_LOG_DB_PATH", raising=False)
+    else:
+        monkeypatch.setenv("ASTRA_DEV_LOG_DB_PATH", environment_value)
+    monkeypatch.setattr(runtime_paths, "PROJECT_ROOT", tmp_path)
+
+    module = _load_dev_log_module()
+
+    assert module._DB == tmp_path / "dev_log.db"
+    assert module._DB.is_file()
+
+
+def test_dev_log_production_path_is_runtime_state_not_install_root():
+    source = (ROOT / "dev_log.py").read_text(encoding="utf-8")
+    production_env = (ROOT / "infra/config/astra.env.example").read_text(encoding="utf-8")
+
+    assert '_BASE / "dev_log.db"' not in source
+    assert "/opt/astra/dev_log.db" not in source
+    assert "ASTRA_DEV_LOG_DB_PATH=memory_db/dev_log.db" in production_env.splitlines()
 
 
 def test_backup_does_not_follow_external_symlink(tmp_path: Path):

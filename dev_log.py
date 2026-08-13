@@ -8,11 +8,12 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 from enum import Enum
 
-_BASE = Path(__file__).parent
-_DB   = _BASE / "dev_log.db"
+from runtime_paths import configured_project_path
+
+
+_DB = configured_project_path("ASTRA_DEV_LOG_DB_PATH", "dev_log.db")
 
 try:
     from colorama import Fore, Style
