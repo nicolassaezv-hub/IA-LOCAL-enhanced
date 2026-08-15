@@ -27,6 +27,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from astra_version import ASTRA_VERSION
 from infra.db.database import get_database, DatabaseAdapter
+from runtime_paths import forex_dataset_path
 from forex.data.data_router import DataRouter
 from forex.data.rolling_dataset import (
     ROLLING_WINDOW,
@@ -66,15 +67,14 @@ def fetch_market_data(symbol: str, timeframe: str, count: int = FETCH_BARS):
     return df, router.source_used
 
 
-def _dataset_path(symbol: str, timeframe: str, registry_entry: dict = None) -> Path:
-    canonical = PROJECT_ROOT / "forex" / "data" / f"{symbol}_{timeframe}.csv"
-    raw_path = registry_entry.get("blob_path") if registry_entry else None
-    if raw_path:
-        path = Path(raw_path)
-        path = path if path.is_absolute() else PROJECT_ROOT / path
-        if path.exists() or not canonical.exists():
-            return path
-    return canonical
+def _dataset_path(symbol: str, timeframe: str) -> Path:
+    """Return the only path used for new production dataset writes."""
+    return forex_dataset_path(symbol, timeframe, project_root=PROJECT_ROOT)
+
+
+def _legacy_dataset_path(symbol: str, timeframe: str) -> Path:
+    """Return the former mixed code/data path for read-only compatibility."""
+    return PROJECT_ROOT / "forex" / "data" / f"{symbol}_{timeframe}.csv"
 
 
 def save_dataset_csv(df, symbol: str, timeframe: str) -> str:
@@ -87,9 +87,11 @@ def save_dataset_csv(df, symbol: str, timeframe: str) -> str:
 
 
 def load_dataset_csv(symbol: str, timeframe: str):
-    """Load existing dataset CSV. Returns DataFrame or None."""
+    """Load a canonical dataset, with explicit legacy read compatibility."""
     import pandas as pd
-    path = PROJECT_ROOT / "forex" / "data" / f"{symbol}_{timeframe}.csv"
+    path = _dataset_path(symbol, timeframe)
+    if not path.exists():
+        path = _legacy_dataset_path(symbol, timeframe)
     if not path.exists():
         return None
     df = pd.read_csv(path, parse_dates=["timestamp"])
@@ -269,7 +271,7 @@ def run_rolling_update(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict
     """Acquire, validate and atomically update one production rolling dataset."""
     registry = db.get_dataset_registry(symbol, timeframe)
     entry = registry[0] if registry else None
-    path = _dataset_path(symbol, timeframe, entry)
+    path = _dataset_path(symbol, timeframe)
     existed_before = path.is_file()
     logger.info(
         "UPDATE %s %s - current=%s",
@@ -328,25 +330,28 @@ def _resolve_prediction_dataset(
     registry = db.get_dataset_registry(symbol, timeframe)
     entry = registry[0] if registry else None
 
-    raw_path = None
+    candidates: list[Path | str] = []
     if entry and entry.get("status") == "ready":
-        raw_path = entry.get("blob_path")
+        if entry.get("blob_path"):
+            candidates.append(entry["blob_path"])
 
-    if not raw_path:
-        canonical = PROJECT_ROOT / "forex" / "data" / f"{symbol}_{timeframe}.csv"
-        if canonical.is_file():
-            raw_path = canonical
+    candidates.extend((
+        _dataset_path(symbol, timeframe),
+        _legacy_dataset_path(symbol, timeframe),
+    ))
 
-    if raw_path:
+    checked = []
+    for raw_path in candidates:
         path = Path(raw_path)
         if not path.is_absolute():
             path = PROJECT_ROOT / path
+        checked.append(str(path))
         if path.is_file():
             return str(path)
 
     message = f"Dataset CSV not found for {symbol} {timeframe}"
-    if raw_path:
-        message += f": {raw_path}"
+    if checked:
+        message += f"; checked: {', '.join(checked)}"
     if required:
         raise FileNotFoundError(message)
 
@@ -496,8 +501,10 @@ def run_closed_loop_maintenance(
     entry = registry[0]
     if entry.get("status") != "ready":
         return {"action": "skip", "reason": "dataset_is_not_ready"}
-    path = _dataset_path(symbol, timeframe, entry)
     try:
+        path = Path(
+            _resolve_prediction_dataset(db, symbol, timeframe, required=True)
+        )
         from forex.prediction.outcome_tracker import OutcomeTracker
         from forex.prediction.model_storage import ModelStorage
         from forex.prediction.retrain_manager import RetrainManager

@@ -7,7 +7,7 @@ afectados y mantiene los CSVs sincronizados.
 
 Integracion:
     from forex.data.dataset_updater import DatasetUpdater
-    updater = DatasetUpdater(data_dir="data/forex")
+    updater = DatasetUpdater()
     result = updater.update_pair("EURUSD", "H1")
 """
 from __future__ import annotations
@@ -17,9 +17,12 @@ import sqlite3
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+from runtime_paths import forex_dataset_root
 
 try:
     import yfinance as yf
@@ -91,18 +94,20 @@ class DatasetUpdater:
 
     def __init__(
         self,
-        data_dir: str = "data/forex",
+        data_dir: str | Path | None = None,
         db_path: str = "memoria.db",
         config: dict | None = None,
     ):
-        self.data_dir = data_dir
+        self.data_dir = (
+            forex_dataset_root() if data_dir is None else Path(data_dir)
+        )
         self.db_path = db_path
         self.config = config or {}
-        os.makedirs(data_dir, exist_ok=True)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
 
     # ── CSV path ──
     def _csv_path(self, pair: str, timeframe: str) -> str:
-        return os.path.join(self.data_dir, f"{pair}_{timeframe}.csv")
+        return str(self.data_dir / f"{pair}_{timeframe}.csv")
 
     # ── Load existing CSV ──
     def _load_existing(self, pair: str, timeframe: str) -> pd.DataFrame | None:
@@ -351,7 +356,7 @@ def cmd_dataset_update(args: str = "") -> str:
         return "Uso: dataset_update <pair> <timeframe> [data_dir]"
     pair = parts[0].upper()
     timeframe = parts[1].upper()
-    data_dir = parts[2] if len(parts) > 2 else "data/forex"
+    data_dir = parts[2] if len(parts) > 2 else None
     updater = DatasetUpdater(data_dir=data_dir)
     result = updater.update_pair(pair, timeframe)
     if result.error:

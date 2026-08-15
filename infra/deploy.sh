@@ -209,7 +209,7 @@ install_filesystem() {
             --exclude='/memory_db/' --exclude='/models/' --exclude='/CSVs/' \
             --exclude='/forex/data/*.csv' --exclude='/workspace/uploads/' \
             --exclude='/reports/' --exclude='/logs/' --exclude='/lab_reports/' \
-            --exclude='/data/forex_analytics/' \
+            --exclude='/data/forex/' --exclude='/data/forex_analytics/' \
             "$ASTRA_REPO/" "$ASTRA_HOME/"
         if [[ -d "$ASTRA_REPO/models/forex/params" ]]; then
             run_privileged install -d -m 0750 "$ASTRA_HOME/models/forex/params"
@@ -219,7 +219,8 @@ install_filesystem() {
 
     local runtime_directories=(
         memory_db models CSVs CSVs/H1 CSVs/H4 CSVs/D1
-        workspace/uploads reports reports/deployment logs data data/forex_analytics
+        workspace/uploads reports reports/deployment logs
+        data data/forex data/forex_analytics
         lab_reports prediction/reports
     )
     local relative

@@ -813,7 +813,7 @@ def cmd_risk(args: str = "") -> str:
 def run_dataset_update(
     pair: str,
     timeframe: str = "H1",
-    data_dir: str = "data/forex",
+    data_dir: str | None = None,
     force_full: bool = False,
     verbose: bool = True,
 ) -> dict:
