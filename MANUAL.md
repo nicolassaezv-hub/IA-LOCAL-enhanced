@@ -431,7 +431,7 @@ Base de datos SQLite con múltiples bases de datos:
 | `analytics_memory.db` | SQLite | Cache de reportes de análisis (forex + business) |
 | `astra_hparam_cache.db` | SQLite | Cache de hiperparámetros optimizados |
 | `models/forex/` | Pickle/Joblib | Modelos XGBoost + LightGBM entrenados (generados en runtime) |
-| `forex/data/` | CSV | Datasets rolling de velas OHLC |
+| `data/forex/` | CSV | Datasets rolling canónicos de velas OHLC |
 
 ---
 
@@ -929,7 +929,8 @@ El supervisor (`infra/monitor/supervisor.py`):
 
 El script `infra/backup/backup.sh` (corre diario a 02:00):
 - Crea `astra_backup_YYYYMMDD_HHMMSS.tar.gz`
-- Incluye: memory_db/, forex/data/, models/forex/, config, scheduler
+- Incluye snapshots SQLite y roots runtime declarados, entre ellos
+  `data/forex/`, `models/`, `CSVs/`, reportes y uploads
 - Guarda en `/var/backups/astra/`
 - Retencion: 7 dias (configurable via `ASTRA_BACKUP_RETENTION_DAYS`)
 

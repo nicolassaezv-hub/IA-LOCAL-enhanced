@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import ast
+import os
+import stat
 import sys
 import threading
 import types
@@ -11,6 +13,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pandas as pd
 import pytest
+from filelock import FileLock
 
 from forex.data.data_router import DataProviderError, DataRouter
 from forex.data.binance_provider import BinanceProvider
@@ -69,7 +72,7 @@ def scheduler_update(tmp_path, rows: pd.DataFrame, timeframe="H1"):
         return_value=(rows, "TestProvider"),
     ):
         result = autonomous_scheduler.run_rolling_update(db, "EURUSD", timeframe)
-    return db, result, tmp_path / "forex" / "data" / f"EURUSD_{timeframe}.csv"
+    return db, result, tmp_path / "data" / "forex" / f"EURUSD_{timeframe}.csv"
 
 
 def test_window_over_2000_keeps_exact_latest_2000(tmp_path):
@@ -159,6 +162,38 @@ def test_atomic_success_leaves_no_temporary_file(tmp_path):
     path = tmp_path / "data.csv"
     RollingDataset("EURUSD", "H1", csv_path=path).update_frame(frame(2000))
     assert not list(tmp_path.glob(f".{path.name}.*.tmp"))
+
+
+def test_runtime_dataset_directory_supports_lock_and_atomic_temp_contract(tmp_path):
+    runtime_dir = tmp_path / "opt" / "astra" / "data" / "forex"
+    runtime_dir.mkdir(parents=True)
+    runtime_dir.chmod(0o750)
+    if os.name == "posix":
+        assert stat.S_IMODE(runtime_dir.stat().st_mode) == 0o750
+
+    path = runtime_dir / "EURUSD_H1.csv"
+    dataset = RollingDataset("EURUSD", "H1", csv_path=path, lock_timeout=0.1)
+    from forex.data import rolling_dataset as rolling_module
+
+    real_write = rolling_module.atomic_write_csv
+    lock_observed_during_transaction = False
+
+    def observe_lock(rows, target):
+        nonlocal lock_observed_during_transaction
+        lock_observed_during_transaction = dataset.lock_path.exists()
+        return real_write(rows, target)
+
+    with patch.object(rolling_module, "atomic_write_csv", side_effect=observe_lock):
+        dataset.update_frame(frame(2000))
+
+    assert path.is_file()
+    assert dataset.lock_path.parent == runtime_dir.resolve()
+    assert lock_observed_during_transaction
+    assert not list(runtime_dir.glob(f".{path.name}.*.tmp"))
+    # Backends differ on retaining the lock inode, but the advisory lock must
+    # be released so the next scheduler transaction can acquire it immediately.
+    with FileLock(str(dataset.lock_path), timeout=0.1):
+        pass
 
 
 def test_two_writers_on_same_dataset_do_not_corrupt_or_lose_rows(tmp_path):
@@ -510,7 +545,7 @@ def test_cli_init_uses_the_existing_deployment_integration_hook():
 
 
 def test_registry_updates_only_after_successful_atomic_write(tmp_path):
-    existing_path = tmp_path / "forex" / "data" / "EURUSD_H1.csv"
+    existing_path = tmp_path / "data" / "forex" / "EURUSD_H1.csv"
     existing_path.parent.mkdir(parents=True)
     initial = frame(2000)
     initial.to_csv(existing_path, index=False)
@@ -525,7 +560,7 @@ def test_registry_updates_only_after_successful_atomic_write(tmp_path):
     }
     db = FakeDatabase({("EURUSD", "H1"): entry})
     original = existing_path.read_bytes()
-    with patch.object(
+    with patch.object(autonomous_scheduler, "PROJECT_ROOT", tmp_path), patch.object(
         autonomous_scheduler,
         "fetch_market_data",
         return_value=(frame(1, start="2025-01-01"), "TestProvider"),
@@ -535,6 +570,62 @@ def test_registry_updates_only_after_successful_atomic_write(tmp_path):
     assert db.upserts == []
     assert db.entries[("EURUSD", "H1")] == entry
     assert existing_path.read_bytes() == original
+
+
+def test_legacy_registry_is_read_only_and_successful_update_moves_registry(tmp_path):
+    legacy_path = tmp_path / "forex" / "data" / "EURUSD_H1.csv"
+    legacy_path.parent.mkdir(parents=True)
+    initial = frame(2000)
+    initial.to_csv(legacy_path, index=False)
+    original = legacy_path.read_bytes()
+    entry = {
+        "symbol": "EURUSD",
+        "timeframe": "H1",
+        "status": "ready",
+        "candle_count": 2000,
+        "rolling_window_size": 2000,
+        "last_candle_timestamp": str(initial["timestamp"].iloc[-1]),
+        "blob_path": str(legacy_path),
+    }
+    db = FakeDatabase({("EURUSD", "H1"): entry})
+
+    with patch.object(autonomous_scheduler, "PROJECT_ROOT", tmp_path), patch.object(
+        autonomous_scheduler,
+        "fetch_market_data",
+        return_value=(frame(2000), "TestProvider"),
+    ):
+        result = autonomous_scheduler.run_rolling_update(db, "EURUSD", "H1")
+
+    canonical = tmp_path / "data" / "forex" / "EURUSD_H1.csv"
+    assert result["action"] == "generated"
+    assert canonical.is_file()
+    assert legacy_path.read_bytes() == original
+    assert Path(db.upserts[-1]["blob_path"]).resolve() == canonical.resolve()
+
+
+def test_legacy_dataset_path_remains_readable_without_becoming_a_writer(tmp_path):
+    legacy_path = tmp_path / "forex" / "data" / "EURUSD_H1.csv"
+    legacy_path.parent.mkdir(parents=True)
+    frame(10).to_csv(legacy_path, index=False)
+
+    with patch.object(autonomous_scheduler, "PROJECT_ROOT", tmp_path):
+        loaded = autonomous_scheduler.load_dataset_csv("EURUSD", "H1")
+
+    assert len(loaded) == 10
+    assert not (tmp_path / "data" / "forex" / "EURUSD_H1.csv").exists()
+
+
+def test_dataset_updater_default_uses_canonical_runtime_helper(tmp_path):
+    from forex.data import dataset_updater as updater_module
+
+    runtime_root = tmp_path / "data" / "forex"
+    with patch.object(updater_module, "forex_dataset_root", return_value=runtime_root):
+        updater = updater_module.DatasetUpdater()
+
+    assert updater.data_dir == runtime_root
+    assert updater._csv_path("EURUSD", "H1") == str(
+        runtime_root / "EURUSD_H1.csv"
+    )
 
 
 def test_registry_upsert_happens_after_atomic_replace(tmp_path):

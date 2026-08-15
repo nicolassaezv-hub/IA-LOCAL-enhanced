@@ -107,7 +107,7 @@ def test_rolling_update():
         import pandas as pd
         old = pd.date_range("2026-01-01",periods=2000,freq="1h")
         old_df = pd.DataFrame({"timestamp":old,"open":1.08,"high":1.085,"low":1.075,"close":1.082,"volume":1000,"pair":"EURUSD"})
-        data_dir = Path(tmpdir)/"forex"/"data"; data_dir.mkdir(parents=True,exist_ok=True)
+        data_dir = Path(tmpdir)/"data"/"forex"; data_dir.mkdir(parents=True,exist_ok=True)
         csv = data_dir/"EURUSD_H1.csv"; old_df.to_csv(csv,index=False)
         db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":"H1","candle_count":2000,"last_candle_timestamp":str(old[-1]),"blob_path":str(csv),"status":"ready"})
         new_all = pd.date_range("2026-01-01",periods=2003,freq="1h")
@@ -194,22 +194,22 @@ def test_monitor():
 def test_backup():
     with TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
-        for directory in ["memory_db","forex/data","forex/models","scheduler","infra/db"]:
+        for directory in ["memory_db","data/forex","forex/models","scheduler","infra/db"]:
             (root / directory).mkdir(parents=True,exist_ok=True)
         (root / "memory_db/astra.db").write_text("db", encoding="utf-8")
-        (root / "forex/data/EURUSD_H1.csv").write_text("csv", encoding="utf-8")
+        (root / "data/forex/EURUSD_H1.csv").write_text("csv", encoding="utf-8")
         (root / "forex/models/model.pkl").write_text("model", encoding="utf-8")
         import tarfile
         bf = root / "backup.tar.gz"
         with tarfile.open(bf,"w:gz") as tar:
             tar.add(root / "memory_db",arcname="memory_db")
-            tar.add(root / "forex/data",arcname="forex/data")
+            tar.add(root / "data/forex",arcname="data/forex")
             tar.add(root / "forex/models",arcname="forex/models")
         assert bf.stat().st_size>0
         with tarfile.open(bf,"r:gz") as tar:
             names=tar.getnames()
             assert any("memory_db" in n for n in names)
-            assert any("forex/data" in n for n in names)
+            assert any("data/forex" in n for n in names)
 
 def _run_isolated_e2e_cycle(root: Path):
     from infra.db.database import SQLiteDatabase
@@ -219,7 +219,7 @@ def _run_isolated_e2e_cycle(root: Path):
     db.add_symbol("EURUSD","EUR/USD",0.0001)
     import pandas as pd
     df = pd.DataFrame({"timestamp":pd.date_range("2020-01-01",periods=2000,freq="1h"),"open":1.08,"high":1.085,"low":1.075,"close":1.082,"volume":1000,"pair":"EURUSD"})
-    data_dir = root/"forex"/"data"; data_dir.mkdir(parents=True,exist_ok=True)
+    data_dir = root/"data"/"forex"; data_dir.mkdir(parents=True,exist_ok=True)
     csv = data_dir/"EURUSD_H1.csv"; df.to_csv(csv,index=False)
     for tf in ["H1","H4","D1"]:
         db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(df["timestamp"].iloc[-1]),"blob_path":str(csv)})

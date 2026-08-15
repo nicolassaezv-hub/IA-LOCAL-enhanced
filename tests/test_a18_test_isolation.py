@@ -21,6 +21,7 @@ from tests.test_infrastructure import (
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PRODUCT_TARGETS = (
     PROJECT_ROOT / "forex" / "data",
+    PROJECT_ROOT / "data" / "forex",
     PROJECT_ROOT / "forex" / "models",
     PROJECT_ROOT / "CSVs",
     PROJECT_ROOT / "models",

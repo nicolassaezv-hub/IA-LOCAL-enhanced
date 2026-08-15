@@ -278,6 +278,7 @@ ASTRA_*.zip
 
 # Datasets Forex generados/runtime
 /forex/data/*.csv
+/data/forex/
 
 # Uploads del Workplace: datos de usuario/runtime
 /workspace/uploads/*

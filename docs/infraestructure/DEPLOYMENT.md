@@ -69,7 +69,7 @@ astra:astra (nologin, sin sudo)
        workspace/uploads/
        reports/ y prediction/reports/
        logs/
-       data/
+       data/ (incluye data/forex/ y data/forex_analytics/)
        lab_reports/
        /var/log/astra/
        /var/backups/astra/
@@ -80,13 +80,21 @@ producción mediante `ASTRA_MEMORY_DB_PATH`, `ASTRA_HPARAM_DB_PATH` y
 `ASTRA_CSV_INDEX_PATH`. El estado del Circuit Breaker se redirige mediante
 `ASTRA_CIRCUIT_BREAKER_STATE_PATH`. Los defaults locales previos se preservan.
 
-`forex/data/` contiene código fuente de providers y gestión de datasets; no es
-un root de estado y permanece read-only. Los writers auditados persisten los
-datasets en `CSVs/` o `data/forex/`, ambos roots runtime dedicados y escribibles.
+`forex/data/` es exclusivamente el paquete Python de providers y gestión de
+datasets: se instala `root:root` y permanece read-only. Los CSV canónicos del
+scheduler viven en `data/forex/<SYMBOL>_<TF>.csv`, root runtime dedicado
+`astra:astra` con modo `0750`. Los locks y temporales atómicos se crean en ese
+mismo root. El deploy excluye `data/forex/` del rsync para preservar datasets.
+Un `blob_path` legacy bajo `forex/data/` puede leerse, pero toda escritura nueva
+y todo registry actualizado apuntan al root canónico.
 
 Las units usan `ProtectSystem=strict`, `ProtectHome=true`, `PrivateTmp=true`,
 `NoNewPrivileges=true`, `UMask=0027` y `ReadWritePaths` limitado. systemd es la
-única autoridad de restart; `infra/monitor/supervisor.py` es diagnóstico.
+única autoridad de restart; `infra/monitor/supervisor.py` es diagnóstico. El
+scheduler escribe los ciclos canónicos y la API necesita el mismo root porque
+`POST /api/deployment/run` y el comando de chat `deploy check` ejecutan Pipeline
+Reports que pueden crear esos CSV. Ambas units ya tienen `/opt/astra/data` en
+`ReadWritePaths`; ninguna unit recibe escritura sobre `/opt/astra/forex/data`.
 
 ## Backup y logging
 
@@ -103,8 +111,8 @@ Las units usan `ProtectSystem=strict`, `ProtectHome=true`, `PrivateTmp=true`,
 `ASTRA_BACKUP_ROOT` debe ser absoluto, estar fuera del proyecto y ser un
 directorio dedicado. Roots de filesystem/sistema como `/`, `/var`, `/opt`,
 `/srv` o `/mnt` se rechazan antes de crear o modificar el directorio. El backup
-incluye los datasets runtime de `CSVs/` y `data/forex/`, no el código fuente de
-`forex/data/`.
+incluye los datasets runtime de `CSVs/` y `data/forex/`. El paquete de código
+`forex/data/` no forma parte del estado respaldado.
 
 Los env/secrets, venv, caches y código no se incluyen. No existe actualmente un
 restore productivo canónico; cualquier restore debe validar manifest y archive

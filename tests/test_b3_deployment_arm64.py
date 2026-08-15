@@ -135,7 +135,35 @@ def test_units_have_bounded_writable_roots_and_hardening():
                 paths = set(line.removeprefix("ReadWritePaths=").split())
                 assert paths <= allowed, (name, paths - allowed)
                 assert "/opt/astra" not in paths
-                assert "/opt/astra/forex/data" not in paths
+
+
+def test_dataset_writers_use_data_root_without_mutating_python_package():
+    texts = _service_texts()
+    code_root = "/opt/astra/forex/data"
+    runtime_root = "/opt/astra/data"
+    writers = {"astra-api.service", "astra-scheduler@.service"}
+
+    for name, source in texts.items():
+        writable = next(
+            line for line in source.splitlines() if line.startswith("ReadWritePaths=")
+        ).removeprefix("ReadWritePaths=").split()
+        assert code_root not in writable, name
+        assert "ProtectSystem=strict" in source
+        if name in writers:
+            assert runtime_root in writable
+
+
+def test_api_deployment_flow_reaches_canonical_dataset_writer():
+    server = (ROOT / "workspace/server.py").read_text(encoding="utf-8")
+    first_run = (ROOT / "deployment/first_run_validator.py").read_text(
+        encoding="utf-8"
+    )
+    pipeline = (ROOT / "deployment/pipeline_report.py").read_text(encoding="utf-8")
+
+    assert '@app.post("/api/deployment/run")' in server
+    assert "run_first_deployment_check(" in server
+    assert "run_pipeline_report(" in first_run
+    assert "save_dataset_csv(df, symbol, timeframe)" in pipeline
 
 
 @pytest.mark.parametrize(
@@ -284,6 +312,41 @@ def test_rsync_excludes_every_real_dot_env_basename_at_any_depth():
     assert "--exclude='*.env'" in deploy
     assert "--exclude='/*.env'" not in deploy
     assert "--exclude='*.env.example'" not in deploy
+
+
+def test_canonical_data_forex_is_a_preserved_bounded_runtime_directory():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    install_filesystem = deploy.split("install_filesystem() {", 1)[1].split(
+        "\n}", 1
+    )[0]
+    runtime_directories = install_filesystem.split(
+        "local runtime_directories=(", 1
+    )[1].split(")", 1)[0].split()
+
+    assert "data/forex" in runtime_directories
+    assert "forex/data" not in runtime_directories
+    assert (
+        'install -d -m 0750 -o "$ASTRA_USER" -g "$ASTRA_GROUP" '
+        '"$ASTRA_HOME/$relative"'
+    ) in install_filesystem
+    assert "--exclude='/data/forex/'" in install_filesystem
+    assert "--exclude='/forex/data/*.csv'" in install_filesystem
+    assert 'chmod 0750 "$ASTRA_HOME/$relative"' in install_filesystem
+    assert 'chown -R "$ASTRA_USER:$ASTRA_GROUP" "$ASTRA_HOME"' not in install_filesystem
+
+
+def test_forex_data_python_package_stays_root_owned_and_read_only():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    install_filesystem = deploy.split("install_filesystem() {", 1)[1].split(
+        "\n}", 1
+    )[0]
+    code_files = sorted((ROOT / "forex" / "data").glob("*.py"))
+
+    assert code_files
+    assert "rsync -a --chown=root:root" in install_filesystem
+    assert 'chmod -R go-w "$ASTRA_HOME"' in install_filesystem
+    assert '"$ASTRA_HOME/forex/data"' not in install_filesystem
+    assert 'if [[ "$relative" == "forex/data" ]]' not in install_filesystem
 
 
 def test_deploy_contains_no_world_writable_or_destructive_runtime_cleanup():
@@ -486,6 +549,11 @@ def test_backup_uses_sqlite_online_snapshot_not_direct_live_db_copy():
     assert "tar -" not in shell
 
 
+def test_backup_state_roots_include_canonical_forex_datasets():
+    assert "data/forex" in backup_module._STATE_ROOTS
+    assert "forex/data" not in backup_module._STATE_ROOTS
+
+
 def test_backup_manifest_checksums_and_sqlite_snapshot(tmp_path: Path):
     project = _make_project(tmp_path)
     (project / "memory_db/circuit_breaker_state.json").write_text(
@@ -511,7 +579,7 @@ def test_backup_manifest_checksums_and_sqlite_snapshot(tmp_path: Path):
 
 def test_archive_verification_rejects_payload_checksum_mismatch(tmp_path: Path):
     archive = tmp_path / "corrupt.tar.gz"
-    relative = "forex/data/EURUSD_H1.csv"
+    relative = "data/forex/EURUSD_H1.csv"
     expected_checksums = {relative: hashlib.sha256(b"expected payload").hexdigest()}
     manifest = json.dumps(
         {"status": "complete", "checksums": expected_checksums}
@@ -635,6 +703,16 @@ def test_configured_project_path_uses_default_for_missing_or_empty_env(monkeypat
     assert runtime_paths.configured_project_path(environment_name, "memory.db") == expected
     monkeypatch.setenv(environment_name, "")
     assert runtime_paths.configured_project_path(environment_name, "memory.db") == expected
+
+
+def test_forex_dataset_runtime_path_has_one_canonical_root(tmp_path: Path):
+    expected_root = tmp_path / "data" / "forex"
+
+    assert runtime_paths.FOREX_DATASET_RELATIVE_ROOT == Path("data") / "forex"
+    assert runtime_paths.forex_dataset_root(tmp_path) == expected_root
+    assert runtime_paths.forex_dataset_path(
+        "EURUSD", "H1", project_root=tmp_path
+    ) == expected_root / "EURUSD_H1.csv"
 
 
 def test_relative_astra_db_path_is_project_canonical_and_cwd_independent(
