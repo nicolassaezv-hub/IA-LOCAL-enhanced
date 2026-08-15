@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterable
 
+from runtime_paths import forex_model_root
+
 
 _BASE = Path(__file__).resolve().parent.parent
 
@@ -529,7 +531,7 @@ def run_production_readiness(
 
     # Models are mandatory for the H1 executable prediction cycle.
     if require_models:
-        models_dir = root / "models" / "forex"
+        models_dir = forex_model_root(root)
         for symbol in active_symbols:
             model_path = _find_model_path(models_dir, symbol)
             evidence = evaluate_model_artifact(

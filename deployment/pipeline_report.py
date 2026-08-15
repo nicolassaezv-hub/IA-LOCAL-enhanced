@@ -27,6 +27,8 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
+from runtime_paths import forex_dataset_path
+
 _BASE = Path(__file__).resolve().parent.parent
 
 
@@ -47,7 +49,7 @@ class StageResult:
 class PipelineReport:
     """Informe completo del pipeline para un simbolo."""
     symbol: str
-    timeframe: str = "H4"
+    timeframe: str = "H1"
     timestamp: str = ""
     stages: list[StageResult] = field(default_factory=list)
     overall_status: str = "pending"  # "pass" | "fail" | "partial"
@@ -203,7 +205,7 @@ def _diagnose_error(exc: Exception, stage: str) -> tuple[str, str]:
 
 def run_pipeline_report(
     symbol: str,
-    timeframe: str = "H4",
+    timeframe: str = "H1",
     csv_path: str | None = None,
     db=None,
 ) -> PipelineReport:
@@ -211,12 +213,16 @@ def run_pipeline_report(
     Ejecuta la validacion completa del pipeline para un simbolo.
     Reutiliza los modulos existentes: scheduler, pipeline, portfolio, API, etc.
     """
+    timeframe = timeframe.upper()
     report = PipelineReport(symbol=symbol, timeframe=timeframe)
 
     # Auto-discover CSV if not provided
     if not csv_path:
-        for tf_dir in [timeframe, timeframe.upper()]:
-            candidate = _BASE / "CSVs" / tf_dir / f"{symbol}.csv"
+        candidates = [
+            forex_dataset_path(symbol, timeframe),
+            _BASE / "CSVs" / timeframe / f"{symbol}.csv",
+        ]
+        for candidate in candidates:
             if candidate.exists():
                 csv_path = str(candidate)
                 break
@@ -427,6 +433,37 @@ def run_pipeline_report(
         ))
         return report
 
+    # H4 and D1 are context-only datasets. Stop before executable model or
+    # prediction side effects so they can never be promoted as H1.
+    from forex.prediction.integrated_pipeline import PREDICTION_TIMEFRAME
+    if timeframe != PREDICTION_TIMEFRAME:
+        report.add_stage(StageResult(
+            stage="5. Entrenamiento / carga del modelo",
+            status="skip",
+            detail=(
+                f"{timeframe} es contexto MTF; solo {PREDICTION_TIMEFRAME} "
+                "puede entrenar o cargar un modelo ejecutable"
+            ),
+        ))
+        report.add_stage(StageResult(
+            stage="6. Generacion de prediccion",
+            status="skip",
+            detail=(
+                f"{timeframe} no genera predicciones ejecutables; "
+                f"use {PREDICTION_TIMEFRAME} como dataset primario"
+            ),
+        ))
+        for stage, detail in (
+            ("7. Outcome Tracker", "Sin prediccion ejecutable que evaluar"),
+            ("8. Opportunity Score", "Sin prediccion ejecutable que puntuar"),
+            ("9. Portfolio Ranker", "Sin oportunidad ejecutable que ordenar"),
+            ("10. Almacenamiento en DB", "Sin prediccion ejecutable que persistir"),
+            ("11. Disponibilidad via API", "No aplica a un reporte de contexto MTF"),
+            ("12. Visualizacion en Workspace", "No aplica a un reporte de contexto MTF"),
+        ):
+            report.add_stage(StageResult(stage=stage, status="skip", detail=detail))
+        return report
+
     # ── Etapa 5: Entrenamiento o carga del modelo ────────────
     t0 = time.time()
     try:
@@ -448,6 +485,8 @@ def run_pipeline_report(
             # Entrenar modelo nuevo
             from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
             pipe = ForexIntegratedPipeline()
+            if db is not None:
+                pipe.closed_loop_database = db
             train_result = pipe.train(csv_path, pair=symbol, use_wfv=False, force=True)
             if "error" in train_result:
                 raise RuntimeError(train_result["error"])
@@ -475,6 +514,8 @@ def run_pipeline_report(
     try:
         from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
         pipe = ForexIntegratedPipeline()
+        if db is not None:
+            pipe.closed_loop_database = db
         pred = pipe.predict(csv_path, pair=symbol)
 
         if "error" in pred:

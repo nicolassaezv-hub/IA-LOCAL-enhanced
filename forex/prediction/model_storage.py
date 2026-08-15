@@ -11,6 +11,8 @@ from typing import Callable
 
 import joblib
 
+from runtime_paths import forex_model_root
+
 # Pair-specific aliases are executable production state.  Only the canonical
 # promotion coordinator imports this capability; public storage helpers may
 # stage artifacts or maintain the explicit no-pair legacy alias, but cannot
@@ -21,8 +23,12 @@ _PROMOTION_AUTHORITY = object()
 class ModelStorage:
     """Store immutable artifacts before atomically updating a latest alias."""
 
-    def __init__(self, base_dir: str | Path = "models/forex"):
-        self.base_dir = Path(base_dir).resolve()
+    def __init__(self, base_dir: str | Path | None = None):
+        self.base_dir = (
+            forex_model_root()
+            if base_dir is None
+            else Path(base_dir).resolve()
+        )
         self.latest_path = self.base_dir / "latest_model.pkl"
         self.base_dir.mkdir(parents=True, exist_ok=True)
 

@@ -21,8 +21,11 @@ import glob
 import os
 import pickle
 import re
+from pathlib import Path
 from typing import List, Optional
 import joblib
+
+from runtime_paths import forex_model_root
 
 
 @dataclass
@@ -232,12 +235,18 @@ def _check_single_model(model_path: str, expected_symbol: Optional[str] = None, 
     )
 
 
-def run_model_integrity_check(models_dir: str = "models/forex", auto_recover: bool = True) -> ModelIntegrityReport:
+def run_model_integrity_check(
+    models_dir: str | Path | None = None,
+    auto_recover: bool = True,
+) -> ModelIntegrityReport:
     """
     Checks all ML models in models_dir before the scheduler starts a new cycle.
     Attempts automatic recovery if auto_recover is True.
     Returns ModelIntegrityReport.
     """
+    models_dir = os.fspath(
+        forex_model_root() if models_dir is None else models_dir
+    )
     checks = []
 
     # Standard pairs to check from CSVs/H4 or models directory
@@ -295,7 +304,7 @@ def check_model_before_cycle(symbol: str, timeframe: str = "H4") -> bool:
     Checks if a model for a specific symbol is valid before starting a cycle.
     Returns True if model is OK or successfully recovered; False if BLOCKED or failed.
     """
-    models_dir = "models/forex"
+    models_dir = os.fspath(forex_model_root())
     symbol_clean = symbol.upper()
     latest_path = os.path.join(models_dir, f"latest_{symbol_clean}.pkl")
 

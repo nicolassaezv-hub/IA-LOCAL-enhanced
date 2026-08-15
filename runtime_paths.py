@@ -7,6 +7,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 FOREX_DATASET_RELATIVE_ROOT = Path("data") / "forex"
+FOREX_MODEL_RELATIVE_ROOT = Path("models") / "forex"
 
 
 def configured_project_path(environment_name: str, default_relative: str) -> Path:
@@ -19,6 +20,12 @@ def forex_dataset_root(project_root: Path | str | None = None) -> Path:
     """Return the canonical runtime root for production Forex datasets."""
     root = PROJECT_ROOT if project_root is None else Path(project_root)
     return root / FOREX_DATASET_RELATIVE_ROOT
+
+
+def forex_model_root(project_root: Path | str | None = None) -> Path:
+    """Return the canonical runtime root for production Forex models."""
+    root = PROJECT_ROOT if project_root is None else Path(project_root)
+    return root / FOREX_MODEL_RELATIVE_ROOT
 
 
 def forex_dataset_path(

@@ -98,17 +98,24 @@ def _valid_risk_result(risk, action: str) -> bool:
 
 def _autoresolve_mtf(filepath: str, path_h4: str = None, path_d1: str = None):
     """Si filepath contiene _H1, deriva _H4 y _D1 automáticamente cuando existen."""
-    import os
-    if not filepath or ("_H1" not in filepath and "_h1" not in filepath):
+    if not filepath:
+        return path_h4, path_d1
+    source = Path(filepath)
+    filename = source.name
+    if "_H1" not in filename and "_h1" not in filename:
         return path_h4, path_d1
     if path_h4 is None:
-        cand = filepath.replace("_H1", "_H4").replace("_h1", "_h4")
-        if cand != filepath and os.path.exists(cand):
-            path_h4 = cand
+        candidate = source.with_name(
+            filename.replace("_H1", "_H4").replace("_h1", "_h4")
+        )
+        if candidate != source and candidate.exists():
+            path_h4 = str(candidate)
     if path_d1 is None:
-        cand = filepath.replace("_H1", "_D1").replace("_h1", "_d1")
-        if cand != filepath and os.path.exists(cand):
-            path_d1 = cand
+        candidate = source.with_name(
+            filename.replace("_H1", "_D1").replace("_h1", "_d1")
+        )
+        if candidate != source and candidate.exists():
+            path_d1 = str(candidate)
     return path_h4, path_d1
 
 

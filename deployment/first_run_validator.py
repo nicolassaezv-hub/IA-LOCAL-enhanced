@@ -44,7 +44,7 @@ def _is_first_run(db) -> bool:
 def run_first_deployment_check(
     db=None,
     symbols: list[str] | None = None,
-    timeframe: str = "H4",
+    timeframe: str = "H1",
     force: bool = False,
     probe_providers: bool = False,
 ) -> dict:
@@ -54,7 +54,7 @@ def run_first_deployment_check(
     Args:
         db: instancia de DatabaseAdapter (si None, se crea una nueva)
         symbols: lista de simbolos a validar (si None, usa los de la DB)
-        timeframe: timeframe a validar (default H4)
+        timeframe: timeframe ejecutable a validar (default H1)
         force: si True, ejecuta aunque ya haya predicciones previas
         probe_providers: ejecuta adquisición real solo si se solicita explícitamente
     

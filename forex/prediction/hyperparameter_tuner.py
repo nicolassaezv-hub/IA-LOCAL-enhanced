@@ -11,6 +11,7 @@ import warnings
 import numpy as np
 
 from sklearn.metrics import precision_score
+from runtime_paths import forex_model_root
 
 warnings.filterwarnings("ignore")
 
@@ -33,7 +34,7 @@ try:
 except ImportError:
     _HAS_LGB = False
 
-PARAMS_DIR = "models/forex/params"
+PARAMS_DIR = forex_model_root() / "params"
 
 # FIX #5: Coherente con MIN_PRECISION_THRESHOLD
 MIN_PRECISION_THRESHOLD = 0.65
@@ -45,9 +46,11 @@ class ForexHyperparameterTuner:
     Objetivo: maximizar precision en val con umbral >= 0.65.
     """
 
-    def __init__(self, pair: str = "default", params_dir: str = PARAMS_DIR):
+    def __init__(self, pair: str = "default", params_dir=None):
         self.pair       = pair.upper().replace("/", "").replace("_", "").replace("-", "")
-        self.params_dir = params_dir
+        self.params_dir = os.fspath(
+            forex_model_root() / "params" if params_dir is None else params_dir
+        )
         os.makedirs(self.params_dir, exist_ok=True)
         self.best_params: dict = {}
 

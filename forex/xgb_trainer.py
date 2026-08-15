@@ -27,6 +27,7 @@ from sklearn.metrics import (
 )
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.isotonic import IsotonicRegression
+from runtime_paths import forex_model_root
 from .model_storage import ModelStorage
 
 warnings.filterwarnings("ignore")
@@ -49,7 +50,7 @@ try:
 except ImportError:
     _HAS_SMOTE = False
 
-PARAMS_DIR = "models/forex/params"
+PARAMS_DIR = forex_model_root() / "params"
 MIN_PRECISION_THRESHOLD = 0.65
 
 
