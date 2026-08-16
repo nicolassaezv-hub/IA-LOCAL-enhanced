@@ -35,3 +35,4 @@ orjson>=3.9
 filelock>=3.13
 watchdog>=4.0
 sympy>=1.12
+openai>=1.0

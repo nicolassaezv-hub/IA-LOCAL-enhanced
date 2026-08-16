@@ -35,6 +35,7 @@ _CRITICAL_DEPS = [
     ("orjson", "orjson"),
     ("filelock", "filelock"),
     ("psutil", "psutil"),
+    ("openai", "openai"),
 ]
 
 _OPTIONAL_DEPS = [
@@ -44,7 +45,6 @@ _OPTIONAL_DEPS = [
     ("torch", "torch"),
     ("tensorflow", "tensorflow"),
     ("MetaTrader5", "MetaTrader5"),
-    ("openai", "openai"),
 ]
 
 _EXPECTED_DIRS = [
@@ -428,12 +428,26 @@ def _add_environment_checks(report: ProductionReadinessReport, base_dir: Path) -
         blocking=True,
     ))
     has_chat_key = bool(os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY"))
+    chat_sdk_available, chat_sdk_detail = _try_import("openai")
+    chat_ready = has_chat_key and chat_sdk_available
     report.add_check(ReadinessCheck(
         "3. Configuración", "API Keys de chat",
-        "pass" if has_chat_key else "warn",
-        "Al menos una key configurada" if has_chat_key else "Chat cloud no configurado",
-        "Configure una key solo si el chat cloud es requerido",
-        blocking=False,
+        "pass" if chat_ready else ("fail" if has_chat_key else "warn"),
+        (
+            "Key de chat y SDK openai disponibles"
+            if chat_ready
+            else (
+                f"Key configurada pero el SDK openai no está disponible: {chat_sdk_detail}"
+                if has_chat_key
+                else "Chat cloud no configurado"
+            )
+        ),
+        (
+            "Instale el SDK openai requerido por el cliente compatible de Groq"
+            if has_chat_key and not chat_sdk_available
+            else "Configure una key solo si el chat cloud es requerido"
+        ),
+        blocking=bool(has_chat_key and not chat_sdk_available),
     ))
 
 
@@ -531,24 +545,50 @@ def run_production_readiness(
 
     # Models are mandatory for the H1 executable prediction cycle.
     if require_models:
+        from forex.prediction.model_storage import ModelStorage
+        from forex.prediction.retrain_manager import RetrainManager
+
         models_dir = forex_model_root(root)
+        model_manager = None
         for symbol in active_symbols:
             model_path = _find_model_path(models_dir, symbol)
             evidence = evaluate_model_artifact(
                 model_path, symbol, checker=model_checker
             )
             warnings = evidence.get("warnings", [])
-            status = "pass" if evidence["valid"] and not warnings else (
-                "warn" if evidence["valid"] else "fail"
+            eligibility = None
+            if evidence["valid"] and database is not None:
+                try:
+                    if model_manager is None:
+                        model_manager = RetrainManager(
+                            database=database,
+                            storage=ModelStorage(models_dir),
+                        )
+                    eligibility = model_manager.audit_pair_model(symbol)
+                except Exception as exc:
+                    eligibility = {
+                        "eligible": False,
+                        "reason": f"ELIGIBILITY_AUDIT_ERROR: {type(exc).__name__}: {exc}",
+                    }
+            eligible = bool(eligibility and eligibility.get("eligible") is True)
+            production_valid = bool(evidence["valid"] and eligible)
+            status = "pass" if production_valid and not warnings else (
+                "warn" if production_valid else "fail"
             )
+            reasons = list(evidence.get("reasons", []))
+            if evidence["valid"] and not eligible:
+                reasons.append((eligibility or {}).get("reason", "ELIGIBILITY_UNAVAILABLE"))
+            evidence_state = evidence["state"]
+            if evidence["valid"] and not eligible:
+                evidence_state = "INTEGRITY_VALID_NOT_PRODUCTION_ELIGIBLE"
             report.add_check(ReadinessCheck(
                 "6. Modelos", f"Modelo {symbol}/H1", status,
-                "; ".join(evidence.get("reasons", []) or warnings)
+                "; ".join(reasons or warnings)
                 or f"Integrity verified: {model_path}",
                 "Proporcione un modelo válido; readiness nunca entrena ni recupera modelos"
-                if not evidence["valid"] else "",
-                blocking=not evidence["valid"],
-                evidence_state=evidence["state"],
+                if not production_valid else "",
+                blocking=not production_valid,
+                evidence_state=evidence_state,
             ))
 
     # Scheduler state must come from an actual recorded run, not the DB's
@@ -588,10 +628,28 @@ def run_production_readiness(
                     f"active_symbols={len(active_symbols)} | symbols_processed=0"
                 )
                 evidence_state = "COMPLETED_NOOP"
-            elif last_run.get("status") == "running":
-                scheduler_status = "pending"
-                detail = f"Run #{last_run.get('id')} is still running"
-                evidence_state = "RUNNING"
+            elif str(last_run.get("status", "")).lower() == "running":
+                from scheduler.run_state import is_scheduler_run_stale
+
+                if is_scheduler_run_stale(last_run):
+                    scheduler_status = "fail"
+                    detail = (
+                        f"Run #{last_run.get('id')} is stale/interrupted; "
+                        f"started_at={last_run.get('started_at')}"
+                    )
+                    evidence_state = "STALE/INTERRUPTED"
+                else:
+                    scheduler_status = "pending"
+                    detail = f"Run #{last_run.get('id')} is still running"
+                    evidence_state = "RUNNING"
+            elif str(last_run.get("status", "")).lower() == "interrupted":
+                scheduler_status = "fail"
+                detail = (
+                    f"Run #{last_run.get('id')} was interrupted | "
+                    f"recovered_at={last_run.get('recovered_at')} | "
+                    f"reason={last_run.get('interruption_reason')}"
+                )
+                evidence_state = "INTERRUPTED"
             else:
                 scheduler_status = "fail"
                 detail = (

@@ -3,7 +3,7 @@ Description=ASTRA H4 Scheduler Timer (Fires every 4 hours at :05)
 
 [Timer]
 OnCalendar=*-*-* 00/4:05:00
-Persistent=true
+Persistent=false
 Unit=astra-scheduler@H4.service
 
 [Install]

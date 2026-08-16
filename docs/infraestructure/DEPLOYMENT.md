@@ -31,6 +31,33 @@ Eso demuestra salud del proceso, no readiness productiva.
 Readiness no crea datasets/modelos sintéticos. El probe de providers sólo se
 ejecuta al usar `--probe-providers`.
 
+`START` reinicia y verifica únicamente API y monitor; no inicia ni habilita los
+timers H1/H4/D1. Durante un redeploy, `FILESYSTEM` detiene primero timers y
+servicios scheduler existentes, antes del rsync y del reemplazo de units. Los
+timers usan `Persistent=false`, por lo que no ejecutan catch-up por el tiempo
+que permanecieron detenidos durante el despliegue.
+
+Los estados durables `RUNNING` usan defaults operacionales de una hora:
+`ASTRA_SCHEDULER_STALE_SECONDS=3600` para ciclos scheduler y
+`ASTRA_RETRAIN_RUNNING_TIMEOUT_SECONDS=3600` para retraining/bootstrap. Ambos
+valores deben ser positivos. Un scheduler que supera ese tiempo se registra
+como interrumpido antes del nuevo ciclo; sólo un bootstrap interrumpido cuyo
+alias, checksum y audit siguen siendo idénticos vuelve al mismo run durable para
+revalidación completa.
+
+La activación productiva es una operación posterior y explícita. Tras completar
+First Run, ejecutar al menos un ciclo H1 manual verificado y obtener readiness
+READY, el operador puede habilitar los tres timers:
+
+```bash
+bash infra/activate_schedulers.sh --probe-providers
+```
+
+El flag de probe sigue siendo explícito: el helper no realiza tráfico de red si
+se omite, y en ese caso readiness permanece incompleto por falta de evidencia
+operacional. Si readiness devuelve NOT READY, el helper sale con código 2 y no
+habilita ningún timer.
+
 ## Primera instalación
 
 El instalador no instala paquetes OS sin autorización explícita:
@@ -70,6 +97,7 @@ astra:astra (nologin, sin sudo)
        reports/ y prediction/reports/
        logs/
        data/ (incluye data/forex/ y data/forex_analytics/)
+       data/.cache/ y data/.cache/matplotlib/
        lab_reports/
        /var/log/astra/
        /var/backups/astra/
@@ -87,6 +115,11 @@ scheduler viven en `data/forex/<SYMBOL>_<TF>.csv`, root runtime dedicado
 mismo root. El deploy excluye `data/forex/` del rsync para preservar datasets.
 Un `blob_path` legacy bajo `forex/data/` puede leerse, pero toda escritura nueva
 y todo registry actualizado apuntan al root canónico.
+
+`HOME=/nonexistent` permanece como aislamiento intencional del usuario de
+servicio. El EnvironmentFile define `XDG_CACHE_HOME=/opt/astra/data/.cache` y
+`MPLCONFIGDIR=/opt/astra/data/.cache/matplotlib`; en redeploy estos defaults se
+añaden sólo si faltan, sin sustituir claves, secrets ni valores existentes.
 
 Las units usan `ProtectSystem=strict`, `ProtectHome=true`, `PrivateTmp=true`,
 `NoNewPrivileges=true`, `UMask=0027` y `ReadWritePaths` limitado. systemd es la
@@ -124,9 +157,11 @@ los destinos `StandardOutput=append`.
 
 ## Dependencias
 
-- `requirements-core.txt`: servicio y utilidades obligatorias.
+- `requirements-core.txt`: servicio y utilidades obligatorias, incluido el SDK
+  `openai` que el cliente compatible usa contra la base URL de Groq.
 - `requirements-ml.txt`: Forex/ML productivo y ruta Yahoo para Linux.
-- `requirements-optional.txt`: cloud clients, FAISS y otras features opt-in.
+- `requirements-optional.txt`: SDK Groq directo no utilizado por el runtime,
+  FAISS y otras features opt-in.
 - `requirements-dev.txt`: tests/desarrollo.
 - `constraints-py312.txt`: versiones directas observadas con Python 3.12.6.
 

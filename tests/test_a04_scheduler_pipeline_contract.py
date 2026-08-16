@@ -38,6 +38,9 @@ class FakeCycleDatabase:
         self.run = {"id": 1, **run}
         return self.run
 
+    def get_scheduler_runs(self, limit=20):
+        return []
+
     def update_scheduler_run(self, run_id, updates):
         self.run_updates.append((run_id, updates))
         return {**self.run, **updates}

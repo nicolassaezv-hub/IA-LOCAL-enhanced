@@ -682,6 +682,7 @@ def test_all_productive_timeframes_use_2000_window(tmp_path, timeframe, freq):
 def test_higher_timeframe_cycles_never_predict(timeframe):
     db = Mock()
     db.create_scheduler_run.return_value = {"id": 1}
+    db.get_scheduler_runs.return_value = []
     db.get_supported_symbols.return_value = [{"symbol_code": "EURUSD"}]
     with patch.object(autonomous_scheduler, "detect_new_symbols", return_value=[]), patch.object(
         autonomous_scheduler, "run_rolling_update", return_value={"action": "updated"}

@@ -13,7 +13,7 @@ import sys
 import tarfile
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -30,6 +30,7 @@ from infra.deployment_contract import (
     validate_service_environment,
 )
 import runtime_paths
+from infra.configure_runtime_env import ensure_runtime_cache_defaults
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -402,6 +403,309 @@ def test_deploy_is_idempotent_by_contract_and_does_not_reset_env():
     assert "astra-new.$$" in deploy
 
 
+def test_deploy_start_never_starts_scheduler_timers_and_disables_catch_up():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    start = deploy.split("start_and_verify() {", 1)[1].split("\n}", 1)[0]
+    install_systemd = deploy.split("install_systemd() {", 1)[1].split("\n}", 1)[0]
+
+    assert "astra-scheduler-h1.timer" not in start
+    assert "astra-scheduler-h4.timer" not in start
+    assert "astra-scheduler-d1.timer" not in start
+    assert "systemctl is-active --quiet astra-api.service" in start
+    assert "systemctl is-active --quiet astra-monitor.service" in start
+    assert "systemctl disable astra-scheduler-h1.timer" in install_systemd
+    for timer in SYSTEMD_ROOT.glob("astra-scheduler-*.timer"):
+        assert "Persistent=false" in timer.read_text(encoding="utf-8"), timer.name
+
+
+def test_redeploy_quiesces_scheduler_before_runtime_replacement():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    filesystem = deploy.split("install_filesystem() {", 1)[1].split("\n}", 1)[0]
+
+    assert filesystem.index("quiesce_schedulers") < filesystem.index("rsync -a")
+    quiesce = deploy.split("quiesce_schedulers() {", 1)[1].split("\n}", 1)[0]
+    assert quiesce.index("systemctl stop \"$timer\"") < quiesce.index(
+        "systemctl stop astra-scheduler@H1.service"
+    )
+
+
+def test_scheduler_activation_is_explicit_and_readiness_gated():
+    helper = (ROOT / "infra/activate_schedulers.sh").read_text(encoding="utf-8")
+    readiness = helper.index("deployment_contract.py")
+    activation = helper.index("systemctl enable --now")
+
+    assert readiness < activation
+    assert "exit 2" in helper
+    assert 'PROBE_PROVIDERS=false' in helper
+    assert 'readiness_arguments+=(--probe-providers)' in helper
+
+
+SCHEDULER_TIMERS = (
+    "astra-scheduler-h1.timer",
+    "astra-scheduler-h4.timer",
+    "astra-scheduler-d1.timer",
+)
+
+
+def _run_scheduler_activation(
+    tmp_path,
+    *,
+    readiness_exit=0,
+    fail_enable="",
+    inactive_after_enable="",
+    fail_stop=False,
+    fail_disable=False,
+):
+    if os.name == "nt":
+        pytest.skip("scheduler activation shell harness requires POSIX process semantics")
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash is not available")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    state_path = tmp_path / "systemctl-state.json"
+    log_path = tmp_path / "systemctl.log"
+    readiness_log = tmp_path / "readiness.log"
+    state_path.write_text('{"enabled": [], "active": []}', encoding="utf-8")
+
+    systemctl = fake_bin / "systemctl"
+    systemctl.write_text(
+        """#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+state_path = Path(os.environ["FAKE_SYSTEMCTL_STATE"])
+log_path = Path(os.environ["FAKE_SYSTEMCTL_LOG"])
+state = json.loads(state_path.read_text(encoding="utf-8"))
+args = sys.argv[1:]
+with log_path.open("a", encoding="utf-8") as handle:
+    handle.write(json.dumps(args) + "\\n")
+
+command = args[0]
+timers = [argument for argument in args[1:] if argument.endswith(".timer")]
+if command == "enable":
+    for timer in timers:
+        if timer not in state["enabled"]:
+            state["enabled"].append(timer)
+        if timer != os.environ.get("FAKE_INACTIVE_TIMER") and timer not in state["active"]:
+            state["active"].append(timer)
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    if os.environ.get("FAKE_FAIL_ENABLE") in timers:
+        raise SystemExit(1)
+elif command == "stop":
+    if os.environ.get("FAKE_FAIL_STOP") == "1":
+        raise SystemExit(1)
+    state["active"] = [timer for timer in state["active"] if timer not in timers]
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+elif command == "disable":
+    if os.environ.get("FAKE_FAIL_DISABLE") == "1":
+        raise SystemExit(1)
+    state["enabled"] = [timer for timer in state["enabled"] if timer not in timers]
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+elif command == "is-active":
+    raise SystemExit(0 if args[-1] in state["active"] else 3)
+elif command == "is-enabled":
+    raise SystemExit(0 if args[-1] in state["enabled"] else 1)
+else:
+    raise SystemExit(64)
+""",
+        encoding="utf-8",
+    )
+    runuser = fake_bin / "runuser"
+    runuser.write_text(
+        """#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+Path(os.environ["FAKE_READINESS_LOG"]).write_text(
+    json.dumps(sys.argv[1:]), encoding="utf-8"
+)
+raise SystemExit(int(os.environ.get("FAKE_READINESS_EXIT", "0")))
+""",
+        encoding="utf-8",
+    )
+    sudo = fake_bin / "sudo"
+    sudo.write_text(
+        """#!/usr/bin/env python3
+import os
+import sys
+
+arguments = sys.argv[1:]
+if arguments and arguments[0] == "-n":
+    arguments = arguments[1:]
+os.execvp(arguments[0], arguments)
+""",
+        encoding="utf-8",
+    )
+    for executable in (systemctl, runuser, sudo):
+        executable.chmod(0o755)
+
+    environment = os.environ.copy()
+    environment.update({
+        "PATH": str(fake_bin) + os.pathsep + environment.get("PATH", ""),
+        "ASTRA_HOME": "/opt/astra-test",
+        "ASTRA_ENV_FILE": "/etc/astra-test.env",
+        "FAKE_SYSTEMCTL_STATE": str(state_path),
+        "FAKE_SYSTEMCTL_LOG": str(log_path),
+        "FAKE_READINESS_LOG": str(readiness_log),
+        "FAKE_READINESS_EXIT": str(readiness_exit),
+        "FAKE_FAIL_ENABLE": fail_enable,
+        "FAKE_INACTIVE_TIMER": inactive_after_enable,
+        "FAKE_FAIL_STOP": "1" if fail_stop else "0",
+        "FAKE_FAIL_DISABLE": "1" if fail_disable else "0",
+    })
+    result = subprocess.run(
+        [bash, str(ROOT / "infra/activate_schedulers.sh"), "--probe-providers"],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    calls = [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+    ] if log_path.exists() else []
+    readiness_call = json.loads(readiness_log.read_text(encoding="utf-8"))
+    return result, state, calls, readiness_call
+
+
+def test_scheduler_activation_enables_and_starts_all_three_timers(tmp_path):
+    result, state, _calls, readiness_call = _run_scheduler_activation(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert set(state["enabled"]) == set(SCHEDULER_TIMERS)
+    assert set(state["active"]) == set(SCHEDULER_TIMERS)
+    assert "--probe-providers" in readiness_call
+
+
+def test_scheduler_activation_rolls_back_all_after_h4_enable_failure(tmp_path):
+    result, state, calls, _readiness_call = _run_scheduler_activation(
+        tmp_path, fail_enable="astra-scheduler-h4.timer"
+    )
+
+    assert result.returncode == 1
+    assert state == {"enabled": [], "active": []}
+    assert ["enable", "--now", SCHEDULER_TIMERS[0]] in calls
+    assert ["enable", "--now", SCHEDULER_TIMERS[1]] in calls
+    assert ["enable", "--now", SCHEDULER_TIMERS[2]] not in calls
+    assert ["stop", *SCHEDULER_TIMERS] in calls
+    assert ["disable", *SCHEDULER_TIMERS] in calls
+
+
+def test_scheduler_activation_rolls_back_when_timer_is_not_active(tmp_path):
+    result, state, calls, _readiness_call = _run_scheduler_activation(
+        tmp_path, inactive_after_enable="astra-scheduler-h4.timer"
+    )
+
+    assert result.returncode == 1
+    assert state == {"enabled": [], "active": []}
+    assert ["enable", "--now", SCHEDULER_TIMERS[2]] in calls
+    assert "not active: astra-scheduler-h4.timer" in result.stderr
+
+
+def test_scheduler_activation_not_ready_never_touches_systemctl(tmp_path):
+    result, state, calls, _readiness_call = _run_scheduler_activation(
+        tmp_path, readiness_exit=2
+    )
+
+    assert result.returncode == 2
+    assert state == {"enabled": [], "active": []}
+    assert calls == []
+
+
+def test_scheduler_activation_reports_incomplete_rollback(tmp_path):
+    result, state, _calls, _readiness_call = _run_scheduler_activation(
+        tmp_path,
+        fail_enable="astra-scheduler-h4.timer",
+        fail_stop=True,
+        fail_disable=True,
+    )
+
+    assert result.returncode == 1
+    assert state["active"]
+    assert state["enabled"]
+    assert "systemctl stop failed" in result.stderr
+    assert "systemctl disable failed" in result.stderr
+    assert "still active" in result.stderr
+    assert "still enabled" in result.stderr
+
+
+def test_redeploy_adds_cache_defaults_without_overwriting_secrets(tmp_path):
+    environment = tmp_path / "astra.env"
+    original = (
+        "GROQ_API_KEY=groq-placeholder\n"
+        "ASTRA_API_KEY=astra-placeholder\n"
+        "OPENAI_API_KEY=openai-placeholder\n"
+        "XDG_CACHE_HOME=/custom/cache\n"
+        "ASTRA_PORT=9000\n"
+    )
+    environment.write_text(original, encoding="utf-8")
+
+    first = ensure_runtime_cache_defaults(
+        environment, PurePosixPath("/opt/astra/data/.cache")
+    )
+    second = ensure_runtime_cache_defaults(
+        environment, PurePosixPath("/different/cache")
+    )
+    content = environment.read_text(encoding="utf-8")
+
+    assert first == ["MPLCONFIGDIR"]
+    assert second == []
+    assert content.startswith(original)
+    assert content.count("MPLCONFIGDIR=/opt/astra/data/.cache/matplotlib") == 1
+    assert "XDG_CACHE_HOME=/custom/cache" in content
+    assert "different" not in content
+    for secret in ("groq-placeholder", "astra-placeholder", "openai-placeholder"):
+        assert secret in content
+
+
+def test_cache_directories_are_owned_runtime_paths_with_minimal_permissions():
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    filesystem = deploy.split("install_filesystem() {", 1)[1].split("\n}", 1)[0]
+    assert "data/.cache data/.cache/matplotlib" in filesystem
+    assert 'install -d -m 0750 -o "$ASTRA_USER" -g "$ASTRA_GROUP"' in filesystem
+    example = (ROOT / "infra/config/astra.env.example").read_text(encoding="utf-8")
+    assert "XDG_CACHE_HOME=/opt/astra/data/.cache" in example
+    assert "MPLCONFIGDIR=/opt/astra/data/.cache/matplotlib" in example
+    assert "ASTRA_SCHEDULER_STALE_SECONDS=3600" in example
+    assert "ASTRA_RETRAIN_RUNNING_TIMEOUT_SECONDS=3600" in example
+
+
+def test_matplotlib_uses_explicit_runtime_cache_with_nonexistent_home(tmp_path):
+    cache = tmp_path / "cache"
+    mpl = cache / "matplotlib"
+    cache.mkdir()
+    mpl.mkdir()
+    environment = os.environ.copy()
+    environment["HOME"] = "/nonexistent"
+    environment["XDG_CACHE_HOME"] = str(cache)
+    environment["MPLCONFIGDIR"] = str(mpl)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import matplotlib; print(matplotlib.get_configdir()); print(matplotlib.get_cachedir())",
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "/nonexistent" not in result.stderr
+    assert result.stdout.splitlines() == [str(mpl), str(cache / "matplotlib")]
+
+
 def test_ubuntu_arm64_and_python_312_are_supported():
     assert normalize_architecture("arm64") == "aarch64"
     assert not validate_platform(
@@ -459,7 +763,8 @@ def test_requirements_are_classified_constrained_and_not_x86_hardcoded():
     assert "requirements-core.txt" in production and "requirements-ml.txt" in production
     assert "requirements-optional.txt" not in production
     assert "yfinance" in ml and "xgboost" in ml and "lightgbm" in ml
-    assert "faiss-cpu" in optional and "openai" in optional
+    assert "faiss-cpu" in optional and "openai" in core
+    assert "openai" not in optional
     combined = "\n".join((production, core, ml, optional, constraints)).lower()
     assert "x86_64" not in combined and "amd64" not in combined
     for source in (core, ml):
@@ -481,7 +786,7 @@ def test_core_runtime_has_no_mandatory_static_optional_dependency_imports():
     optional_requirements = (ROOT / "requirements-optional.txt").read_text(
         encoding="utf-8"
     )
-    for distribution in ("groq", "openai", "python-dotenv", "faiss-cpu"):
+    for distribution in ("groq", "python-dotenv", "faiss-cpu"):
         assert distribution in optional_requirements
 
     optional_imports = {"groq", "openai", "dotenv", "faiss"}

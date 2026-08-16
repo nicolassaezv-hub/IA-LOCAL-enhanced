@@ -164,6 +164,12 @@ configure_service_environment() {
         run_privileged chmod 0640 "$ASTRA_ENV_FILE"
     fi
 
+    run_privileged python3.12 "$ASTRA_REPO/infra/configure_runtime_env.py" \
+        --environment-file "$ASTRA_ENV_FILE" \
+        --cache-root "$ASTRA_HOME/data/.cache"
+    run_privileged chown root:"$ASTRA_GROUP" "$ASTRA_ENV_FILE"
+    run_privileged chmod 0640 "$ASTRA_ENV_FILE"
+
     local config_arguments=(validate-config --environment-file "$ASTRA_ENV_FILE" --project-root "$ASTRA_HOME")
     [[ "$ALLOW_PUBLIC_HTTP" == true ]] && config_arguments+=(--allow-public-http)
     run_privileged python3.12 "$ASTRA_REPO/infra/deployment_contract.py" "${config_arguments[@]}"
@@ -185,6 +191,21 @@ PY
     run_privileged install -d -m 0750 -o "$ASTRA_USER" -g "$ASTRA_GROUP" "$ASTRA_BACKUP_DIR"
 }
 
+quiesce_schedulers() {
+    local timer
+    for timer in astra-scheduler-h1.timer astra-scheduler-h4.timer astra-scheduler-d1.timer; do
+        if run_privileged systemctl list-unit-files "$timer" --no-legend 2>/dev/null \
+            | grep -q "^$timer"; then
+            run_privileged systemctl stop "$timer"
+        fi
+    done
+    if run_privileged systemctl list-unit-files astra-scheduler@.service --no-legend \
+        2>/dev/null | grep -q '^astra-scheduler@.service'; then
+        run_privileged systemctl stop astra-scheduler@H1.service \
+            astra-scheduler@H4.service astra-scheduler@D1.service
+    fi
+}
+
 create_service_identity() {
     if ! getent group "$ASTRA_GROUP" >/dev/null; then
         run_privileged groupadd --system "$ASTRA_GROUP"
@@ -200,6 +221,8 @@ create_service_identity() {
 }
 
 install_filesystem() {
+    # Prevent an already-enabled timer from executing code during rsync/unit replacement.
+    quiesce_schedulers
     create_service_identity
     run_privileged install -d -m 0755 -o root -g root "$ASTRA_HOME"
     if [[ "$ASTRA_REPO" != "$ASTRA_HOME" ]]; then
@@ -221,6 +244,7 @@ install_filesystem() {
         memory_db models CSVs CSVs/H1 CSVs/H4 CSVs/D1
         workspace/uploads reports reports/deployment logs
         data data/forex data/forex_analytics
+        data/.cache data/.cache/matplotlib
         lab_reports prediction/reports
     )
     local relative
@@ -286,8 +310,9 @@ install_systemd() {
     rm -f -- "$generated"
     run_privileged systemctl daemon-reload
     run_privileged systemctl enable astra-api.service astra-monitor.service \
-        astra-scheduler-h1.timer astra-scheduler-h4.timer astra-scheduler-d1.timer \
         astra-backup.timer
+    run_privileged systemctl disable astra-scheduler-h1.timer \
+        astra-scheduler-h4.timer astra-scheduler-d1.timer
     if command -v systemd-analyze >/dev/null; then
         run_privileged systemd-analyze verify \
             /etc/systemd/system/astra-api.service \
@@ -299,9 +324,9 @@ install_systemd() {
 
 start_and_verify() {
     run_privileged systemctl restart astra-api.service astra-monitor.service
-    run_privileged systemctl start astra-scheduler-h1.timer astra-scheduler-h4.timer \
-        astra-scheduler-d1.timer astra-backup.timer
+    run_privileged systemctl start astra-backup.timer
     run_privileged systemctl is-active --quiet astra-api.service
+    run_privileged systemctl is-active --quiet astra-monitor.service
 
     run_privileged runuser --user "$ASTRA_USER" -- \
         "$ASTRA_HOME/venv/bin/python" - "$ASTRA_ENV_FILE" "$ASTRA_HOME" <<'PY'
@@ -365,12 +390,14 @@ if [[ "$READINESS_EXIT" -eq 0 ]]; then
     print_summary
     echo "DEPLOYMENT RESULT: SUCCESS"
     echo "ASTRA is listening on loopback; publish only through a separately secured HTTPS reverse proxy."
+    echo "Scheduler timers remain disabled; activate explicitly with: bash infra/activate_schedulers.sh"
     exit 0
 elif [[ "$READINESS_EXIT" -eq 2 ]]; then
     record_phase READINESS PENDING
     print_summary
     echo "DEPLOYMENT RESULT: DEPLOYED_NOT_READY"
     echo "The service is healthy, but canonical production readiness evidence is incomplete."
+    echo "Scheduler timers remain disabled while readiness is incomplete."
     exit 2
 else
     record_phase READINESS FAIL

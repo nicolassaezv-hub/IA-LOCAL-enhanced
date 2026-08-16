@@ -3,7 +3,7 @@ Description=ASTRA D1 Scheduler Timer (Fires daily at 00:10)
 
 [Timer]
 OnCalendar=*-*-* 00:10:00
-Persistent=true
+Persistent=false
 Unit=astra-scheduler@D1.service
 
 [Install]

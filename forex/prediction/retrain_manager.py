@@ -81,8 +81,10 @@ DEFAULT_CONFIG = {
     "scheduled_interval_days": 7,
     "min_predictions_for_eval": 20,
     "min_new_outcomes": 20,
-    "running_timeout_seconds": 21600,
+    "running_timeout_seconds": 3600,
 }
+
+RETRAIN_RUNNING_TIMEOUT_ENV = "ASTRA_RETRAIN_RUNNING_TIMEOUT_SECONDS"
 
 _OWNER_TOKEN = f"{os.getpid()}:{uuid.uuid4().hex}"
 
@@ -101,17 +103,31 @@ class RetrainManager:
         *,
         database: SQLiteDatabase | None = None,
         storage: ModelStorage | None = None,
+        now_func: Callable[[], datetime] | None = None,
     ):
         if database is not None and db_path is not None:
             raise ValueError("provide database or db_path, not both")
         self.database = database or SQLiteDatabase(str(db_path) if db_path else None)
         self.db_path = self.database.db_path
-        self.config = {**DEFAULT_CONFIG, **(config or {})}
+        configured = dict(config or {})
+        if "running_timeout_seconds" not in configured:
+            configured["running_timeout_seconds"] = os.getenv(
+                RETRAIN_RUNNING_TIMEOUT_ENV,
+                str(DEFAULT_CONFIG["running_timeout_seconds"]),
+            )
+        self.config = {**DEFAULT_CONFIG, **configured}
         if int(self.config["min_new_outcomes"]) <= 0:
             raise ValueError("min_new_outcomes must be positive")
         if float(self.config["running_timeout_seconds"]) <= 0:
             raise ValueError("running_timeout_seconds must be positive")
         self.storage = storage or ModelStorage()
+        self._now_func = now_func or (lambda: datetime.now(timezone.utc))
+
+    def _utc_now(self) -> datetime:
+        value = self._now_func()
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def store_baseline(
         self,
@@ -292,6 +308,14 @@ class RetrainManager:
 
         audit = self.audit_pair_model(symbol)
         if not audit.get("bootstrap_revalidation"):
+            for run in self.database.get_retrain_runs(symbol, limit=100000):
+                if (
+                    run.get("timeframe") == tf
+                    and run.get("trigger")
+                    == RetrainTrigger.BOOTSTRAP_REVALIDATION.value
+                    and run.get("status") == "RUNNING"
+                ):
+                    self._recover_interrupted_running(run)
             return None
         latest = self.storage.base_dir / f"latest_{symbol}.pkl"
         source_path = Path(audit["source_model_path"])
@@ -316,6 +340,11 @@ class RetrainManager:
             None,
         )
         if existing is not None:
+            if existing.get("status") == "RUNNING":
+                transitioned = self._recover_interrupted_running(existing)
+                if transitioned is not None:
+                    return transitioned
+                return self._get_run(existing["run_id"])
             return existing
 
         evidence_identity = {
@@ -353,6 +382,77 @@ class RetrainManager:
         if not run:
             raise KeyError(f"unknown retrain run {run_id}")
         return run
+
+    def _recover_interrupted_running(self, run: dict) -> dict | None:
+        """Recover only a stale, checksum-identical bootstrap; fail other stale runs."""
+        if run.get("status") != "RUNNING":
+            return None
+        heartbeat = run.get("heartbeat_at") or run.get("updated_at")
+        heartbeat_time = None
+        if heartbeat:
+            try:
+                heartbeat_time = datetime.fromisoformat(
+                    str(heartbeat).replace("Z", "+00:00")
+                )
+            except ValueError:
+                heartbeat_time = None
+        if heartbeat_time is not None and heartbeat_time.tzinfo is None:
+            heartbeat_time = heartbeat_time.replace(tzinfo=timezone.utc)
+        timed_out = (
+            heartbeat_time is None
+            or (self._utc_now() - heartbeat_time).total_seconds()
+            >= float(self.config["running_timeout_seconds"])
+        )
+        if not timed_out:
+            return None
+
+        target_status = "FAILED"
+        reason = "interrupted: stale RUNNING retrain detected during recovery"
+        if run.get("trigger") == RetrainTrigger.BOOTSTRAP_REVALIDATION.value:
+            audit = self.audit_pair_model(run["symbol"])
+            latest = self.storage.base_dir / f"latest_{_clean_pair(run['symbol'])}.pkl"
+            source_path = Path(run.get("source_model_path") or "")
+            source_hash = run.get("source_model_sha256")
+            source_matches = bool(
+                audit.get("bootstrap_revalidation") is True
+                and source_hash
+                and audit.get("source_model_sha256") == source_hash
+                and source_path.resolve() == latest.resolve()
+                and latest.is_file()
+            )
+            if source_matches:
+                try:
+                    self.storage.validate_artifact(latest)
+                    source_matches = self.storage.checksum(latest) == source_hash
+                except Exception:
+                    source_matches = False
+            if source_matches:
+                target_status = "PENDING"
+                reason = (
+                    "interrupted: stale RUNNING bootstrap recovered for full "
+                    "revalidation with unchanged source checksum"
+                )
+            else:
+                audit_reason = audit.get("reason", "CHECKSUM_MISMATCH")
+                reason = (
+                    f"{audit_reason}: interrupted bootstrap source is no longer "
+                    "eligible for retry"
+                )
+
+        transitioned = self.database.transition_interrupted_retrain_run(
+            run["run_id"],
+            expected_heartbeat=heartbeat,
+            status=target_status,
+            error=reason,
+            transitioned_at=self._utc_now().isoformat(),
+        )
+        if transitioned is not None:
+            logger.warning(
+                "Recovered interrupted retrain %s as %s",
+                run["run_id"],
+                target_status,
+            )
+        return transitioned
 
     def execute_retrain(
         self,
@@ -681,23 +781,9 @@ class RetrainManager:
             active_run_by_symbol.setdefault(row["symbol"], row["retrain_run_id"])
         for run in self.database.get_retrain_runs(limit=100000):
             if run["status"] == "RUNNING":
-                heartbeat = run.get("heartbeat_at") or run.get("updated_at")
-                heartbeat_time = datetime.fromisoformat(heartbeat) if heartbeat else None
-                if heartbeat_time and heartbeat_time.tzinfo is None:
-                    heartbeat_time = heartbeat_time.replace(tzinfo=timezone.utc)
-                timed_out = (
-                    heartbeat_time is None
-                    or (datetime.now(timezone.utc) - heartbeat_time).total_seconds()
-                    >= float(self.config["running_timeout_seconds"])
-                )
-                if not timed_out:
-                    continue
-                self.database.update_retrain_run(run["run_id"], {
-                    "status": "FAILED",
-                    "error": "interrupted RUNNING retrain detected during recovery",
-                    "updated_at": _now(),
-                })
-                recovered.append(run["run_id"])
+                transitioned = self._recover_interrupted_running(run)
+                if transitioned is not None:
+                    recovered.append(run["run_id"])
                 continue
             artifact = Path(run["artifact_path"]) if run.get("artifact_path") else None
             latest = Path(run["latest_path"]) if run.get("latest_path") else (

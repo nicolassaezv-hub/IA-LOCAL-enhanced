@@ -287,6 +287,31 @@ def test_missing_optional_dependency_is_warning_and_does_not_crash(tmp_path):
     assert report.ready is False  # other critical evidence remains pending
 
 
+def test_configured_chat_key_without_openai_sdk_fails_coherently(monkeypatch, tmp_path):
+    db = _database(tmp_path)
+    from deployment import production_readiness as readiness_module
+
+    real_try_import = readiness_module._try_import
+
+    def openai_missing(module):
+        if module == "openai":
+            return False, "ModuleNotFoundError: No module named 'openai'"
+        return real_try_import(module)
+
+    monkeypatch.setenv("GROQ_API_KEY", "configured-placeholder")
+    with patch.object(readiness_module, "_try_import", side_effect=openai_missing):
+        report = _run_for_h1(tmp_path, db, require_models=False)
+
+    checks = report.to_dict()["checks"]
+    dependency = next(item for item in checks if item["check"] == "openai (openai)")
+    chat = next(item for item in checks if item["check"] == "API Keys de chat")
+    assert dependency["status"] == "fail"
+    assert dependency["blocking"] is True
+    assert chat["status"] == "fail"
+    assert chat["blocking"] is True
+    assert "SDK openai" in chat["detail"]
+
+
 def test_exception_inside_critical_check_fails_closed(tmp_path):
     db = _database(tmp_path)
     models = tmp_path / "models" / "forex"

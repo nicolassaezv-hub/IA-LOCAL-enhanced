@@ -247,7 +247,8 @@ class SQLiteDatabase(DatabaseAdapter):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timeframe TEXT, started_at TEXT, finished_at TEXT,
                 status TEXT, symbols_processed INTEGER, predictions_generated INTEGER,
-                errors_count INTEGER, log_blob_path TEXT
+                errors_count INTEGER, log_blob_path TEXT,
+                interruption_reason TEXT, recovered_at TEXT
             );
             CREATE TABLE IF NOT EXISTS config (
                 key TEXT PRIMARY KEY,
@@ -265,6 +266,10 @@ class SQLiteDatabase(DatabaseAdapter):
 
     def _migrate_closed_loop_schema(self, c: sqlite3.Connection) -> None:
         """Apply additive, repeatable B1 migrations to existing SQLite files."""
+        self._add_columns(c, "scheduler_runs", {
+            "interruption_reason": "TEXT",
+            "recovered_at": "TEXT",
+        })
         self._add_columns(c, "predictions", {
             "prediction_id": "TEXT",
             "action": "TEXT",
@@ -702,6 +707,33 @@ class SQLiteDatabase(DatabaseAdapter):
             if not row:
                 raise KeyError(f"unknown retrain run {run_id}")
         return dict(row)
+
+    def transition_interrupted_retrain_run(
+        self,
+        run_id: str,
+        *,
+        expected_heartbeat: str | None,
+        status: str,
+        error: str,
+        transitioned_at: str,
+    ) -> dict | None:
+        """CAS a stale RUNNING retrain so a concurrent heartbeat wins safely."""
+        if status not in {"PENDING", "FAILED"}:
+            raise ValueError(f"invalid interrupted retrain transition: {status}")
+        with self._connection() as c:
+            c.execute("""
+                UPDATE retrain_runs
+                SET status=?, owner_token=NULL, heartbeat_at=NULL, error=?, updated_at=?
+                WHERE run_id=? AND status='RUNNING'
+                  AND COALESCE(heartbeat_at, updated_at) IS ?
+            """, (status, error, transitioned_at, run_id, expected_heartbeat))
+            transitioned = c.execute("SELECT changes()").fetchone()[0] == 1
+            row = c.execute(
+                "SELECT * FROM retrain_runs WHERE run_id=?", (run_id,)
+            ).fetchone()
+        if not row:
+            raise KeyError(f"unknown retrain run {run_id}")
+        return dict(row) if transitioned else None
 
     def claim_retrain_run(
         self, run_id: str, owner_token: str, claimed_at: str

@@ -597,9 +597,31 @@ def detect_new_symbols(db: DatabaseAdapter) -> list:
 
 def run_cycle(db: DatabaseAdapter, timeframe: str):
     """Update one timeframe and run a prediction only for the H1 cycle."""
+    from scheduler.run_state import is_scheduler_run_stale, utc_timestamp
+
+    recovered_at = utc_timestamp()
+    for previous in db.get_scheduler_runs(limit=1000):
+        if not is_scheduler_run_stale(previous):
+            continue
+        reason = (
+            "Interrupted scheduler process detected before a new cycle; "
+            "the prior run was not completed"
+        )
+        db.update_scheduler_run(previous["id"], {
+            "status": "interrupted",
+            "finished_at": recovered_at,
+            "recovered_at": recovered_at,
+            "interruption_reason": reason,
+            "errors_count": max(1, int(previous.get("errors_count") or 0)),
+        })
+        logger.warning(
+            "Recovered stale scheduler run #%s (%s) as interrupted",
+            previous.get("id"),
+            previous.get("timeframe"),
+        )
     run = db.create_scheduler_run({
         "timeframe": timeframe,
-        "started_at": datetime.now().isoformat(),
+        "started_at": utc_timestamp(),
         "status": "running"
     })
     run_id = run["id"]
@@ -754,7 +776,7 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
     # 3. Update scheduler run
     db.update_scheduler_run(run_id, {
         "status": "completed" if errors_count == 0 else "partial",
-        "finished_at": datetime.now().isoformat(),
+        "finished_at": utc_timestamp(),
         "symbols_processed": symbols_processed,
         "predictions_generated": predictions_generated,
         "errors_count": errors_count
@@ -812,7 +834,17 @@ def main():
     parser.add_argument("--add-symbol", type=str, help="Add a new symbol (e.g. EURUSD)")
     args = parser.parse_args()
 
-    db = get_database()
+    try:
+        db = get_database()
+    except Exception as exc:
+        if args.init:
+            print(json.dumps({
+                "ok": False,
+                "init": [],
+                "error": f"{type(exc).__name__}: {exc}",
+            }, indent=2, default=str))
+            raise SystemExit(1)
+        raise
 
     if args.status:
         health = get_status(db)
@@ -829,13 +861,27 @@ def main():
         return
 
     if args.init:
-        result = run_init_with_deployment_check(db)
-        payload = {"ok": True, "init": result["init_results"]}
+        try:
+            result = run_init_with_deployment_check(db)
+        except Exception as exc:
+            print(json.dumps({
+                "ok": False,
+                "init": [],
+                "error": f"{type(exc).__name__}: {exc}",
+            }, indent=2, default=str))
+            raise SystemExit(1)
+        deployment = result.get("deployment")
+        internal_failure = "deployment_error" in result
+        incomplete = bool(deployment is not None and deployment.get("ready") is not True)
+        exit_code = 1 if internal_failure else (2 if incomplete else 0)
+        payload = {"ok": exit_code == 0, "init": result["init_results"]}
         if "deployment" in result:
             payload["deployment"] = result["deployment"]
         if "deployment_error" in result:
             payload["deployment_error"] = result["deployment_error"]
         print(json.dumps(payload, indent=2, default=str))
+        if exit_code:
+            raise SystemExit(exit_code)
         return
 
     if args.timeframe:
