@@ -1,6 +1,6 @@
 # ai_models.py
 """
-Motor de IA de ASTRA — Groq (Llama-3.3-70B) con memoria de sesión,
+Motor de IA de ASTRA — Groq (openai/gpt-oss-120b) con memoria de sesión,
 historial persistente estructurado, y narración de herramientas.
 """
 
@@ -63,7 +63,7 @@ except ImportError:
 # ==========================================
 
 _groq_client    = None
-_GROQ_MODEL     = "llama-3.3-70b-versatile"
+_GROQ_MODEL     = "openai/gpt-oss-120b"
 _GROQ_BASE_URL  = "https://api.groq.com/openai/v1"
 _TEMPERATURE    = 0.4          # analytical but not robotic
 _MAX_TOKENS     = 1024         # enough for consultant-grade answers

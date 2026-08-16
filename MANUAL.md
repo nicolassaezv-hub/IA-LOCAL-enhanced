@@ -70,7 +70,7 @@ por separado. El repositorio no configura TLS, DNS ni ingress cloud.
 
 | Panel | Acceso | Qué hace |
 |---|---|---|
-| **Chat** | Barra lateral → Chat | Conversación con ASTRA (Llama-3.3-70B), historial de sesión, subida de archivos |
+| **Chat** | Barra lateral → Chat | Conversación con ASTRA (openai/gpt-oss-120b vía Groq), historial de sesión, subida de archivos |
 | **Forex Lab** | Barra lateral → Forex Lab | Selector de par/CSV, gráfico de velas OHLC interactivo, entrenamiento con barra de progreso visual |
 | **Prediction Lab** | Barra lateral → Prediction Lab | Análisis ML de cualquier dataset |
 | **Business Lab** | Barra lateral → Business Lab | KPIs + health score + forecast + scorecard PYME |
@@ -169,7 +169,7 @@ Verifica 10 categorías completas y guarda resultado en `astra_doctor_report.jso
 Arranque del CLI: `python main.py`. Escribe `ayuda` en cualquier momento para ver
 este mismo listado dentro del programa, y `salir` / `exit` / `quit` para terminar.
 **Cualquier texto que no coincida con un comando se envía al chat libre
-(Llama-3.3-70B vía Groq) con el contexto de la sesión.**
+(openai/gpt-oss-120b vía Groq) con el contexto de la sesión.**
 
 Convenciones: `<obligatorio>`, `[opcional]`, `|` separa alternativas.
 Las rutas de CSV admiten varios archivos separados por comas en los comandos que lo indican.
@@ -417,7 +417,7 @@ CSVs/
 ## PARTE 4 — MOTOR AI Y MEMORIA
 
 ### Motor de lenguaje
-ASTRA usa **Groq** con Llama-3.3-70B por defecto. Alternativa: OpenAI GPT-4.
+ASTRA usa **Groq** con `openai/gpt-oss-120b` por defecto. Alternativa: OpenAI GPT-4.
 La conexión se realiza via el SDK de OpenAI con `base_url="https://api.groq.com/openai/v1"`.
 
 ### Memoria

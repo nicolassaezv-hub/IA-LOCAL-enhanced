@@ -1001,7 +1001,7 @@ def _ayuda():
 {Fore.CYAN}── SYSTEM ─────────────────────────────────────────────────────{Style.RESET_ALL}
   ayuda                          Show this help menu
   salir / exit / quit            Exit ASTRA
-  <anything else>                Enviado a Llama-3.3-70B (Groq) — chat libre con contexto
+  <anything else>                Enviado a openai/gpt-oss-120b (Groq) — chat libre con contexto
 """
     print(help_text)
     return ""

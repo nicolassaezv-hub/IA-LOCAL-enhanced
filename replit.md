@@ -46,6 +46,6 @@ python astra_doctor.py      # completo (10 categorías)
 Chat · Forex Lab · Prediction Lab · Business Lab · Cognitive Core · Evolution Engine · Activity Center · Dashboard Activo · Configuración
 
 ## Stack
-- Python 3.12 · FastAPI + uvicorn · Groq (Llama-3.3-70B)
+- Python 3.12 · FastAPI + uvicorn · Groq (openai/gpt-oss-120b)
 - ML: XGBoost + LightGBM + scikit-learn + Optuna
 - Memoria: SQLite (memoria.db + especializados) · Redis/FAISS opcionales

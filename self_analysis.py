@@ -63,7 +63,7 @@ def _ai_backend() -> str:
     groq_key = os.environ.get("GROQ_API_KEY")
     openai_key = os.environ.get("OPENAI_API_KEY")
     if groq_key:
-        return "Groq — llama-3.3-70b-versatile"
+        return "Groq — openai/gpt-oss-120b"
     if openai_key:
         return "OpenAI — gpt-3.5-turbo"
     return "Sin configurar (GROQ_API_KEY o OPENAI_API_KEY requerido)"

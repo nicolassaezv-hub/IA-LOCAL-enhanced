@@ -172,7 +172,7 @@ async function configPanelLoad() {
 
     // API Keys table
     const keysRows = [
-      ["Groq (Llama-3.3-70B)", d.api_keys.groq ? "✔ Configurada" : "✗ No encontrada",
+      ["Groq (openai/gpt-oss-120b)", d.api_keys.groq ? "✔ Configurada" : "✗ No encontrada",
         d.api_keys.groq ? d.model_active : "—"],
       ["OpenAI (GPT-3.5-turbo)", d.api_keys.openai ? "✔ Configurada" : "✗ No encontrada",
         d.api_keys.openai && !d.api_keys.groq ? d.model_active : "—"],

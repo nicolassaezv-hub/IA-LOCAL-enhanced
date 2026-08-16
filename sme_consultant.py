@@ -334,7 +334,7 @@ def sme_forecast(filepath: str, months: int = 6) -> str:
 
 def sme_recommend(filepath: str) -> str:
     """
-    Generates a Llama-3.3-70B strategic action plan tailored to this business.
+    Generates a strategic action plan with ASTRA's active Groq model.
 
     Combines KPIs + dimensional scores into a rich context and asks ASTRA's
     Llama engine to produce 5 concrete, prioritized recommendations.

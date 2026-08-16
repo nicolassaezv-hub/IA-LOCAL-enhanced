@@ -68,7 +68,7 @@ def process_request(user_input: str) -> str:
             return (
                 f"{result}\n\n"
                 f"{'─' * 52}\n"
-                f"💬  Análisis ASTRA (Llama-3.3-70B)\n"
+                f"💬  Análisis ASTRA (Groq: openai/gpt-oss-120b)\n"
                 f"{'─' * 52}\n"
                 f"{narration}"
             )

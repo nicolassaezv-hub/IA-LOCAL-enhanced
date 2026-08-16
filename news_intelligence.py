@@ -3,7 +3,7 @@
 ASTRA — News Intelligence (Fase 4)
 
 Obtiene noticias de un par Forex, analiza el sentimiento
-con Llama-3.3-70B (Groq, ya integrado en ai_models.py) y
+con openai/gpt-oss-120b (Groq, ya integrado en ai_models.py) y
 combina el score con la señal técnica del predictor.
 
 Fuentes de noticias (sin API key, scraping libre):
@@ -194,7 +194,7 @@ def fetch_news(pair: str, max_total: int = 10) -> List[dict]:
 
 def analyze_sentiment(news: List[dict], pair: str) -> dict:
     """
-    Analiza el sentimiento de las noticias usando Llama-3.3-70B (Groq).
+    Analiza el sentimiento de las noticias usando openai/gpt-oss-120b (Groq).
     Devuelve:
       score     float  [-1.0, +1.0]  (−1 muy bearish, +1 muy bullish)
       label     str    "bullish" | "bearish" | "neutral"

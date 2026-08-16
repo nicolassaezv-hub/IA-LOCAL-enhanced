@@ -10,7 +10,7 @@ después (Dataset Analyzer, Feasibility Engine, Model Planner...) consume
 el ProblemSpec que este módulo produce.
 
 Dos modos de extracción:
-  1. LLM (Groq/Llama-3.3-70B) — preciso, entiende matices, requiere API key.
+  1. LLM (Groq/openai/gpt-oss-120b) — preciso, entiende matices, requiere API key.
   2. Heurístico (regex/keywords) — fallback offline, siempre disponible.
 
 Si el LLM falla o no hay API key, se degrada automáticamente al heurístico
