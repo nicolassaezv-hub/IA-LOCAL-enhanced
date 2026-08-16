@@ -52,6 +52,26 @@ except ImportError:
 
 PARAMS_DIR = forex_model_root() / "params"
 MIN_PRECISION_THRESHOLD = 0.65
+WFV_MEDIAN_PRECISION_THRESHOLD = 0.70
+
+
+def wfv_quality_passed(result: dict) -> bool:
+    """Evaluate the canonical out-of-sample WFV production contract."""
+    if (
+        result.get("error")
+        or result.get("wfv_passed") is not True
+        or not result.get("folds")
+    ):
+        return False
+    try:
+        average = float(result["avg_precision"])
+        median = float(result["median_precision"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return bool(
+        average >= MIN_PRECISION_THRESHOLD
+        or median >= WFV_MEDIAN_PRECISION_THRESHOLD
+    )
 
 
 def _load_tuned_params(pair: str) -> dict:
@@ -257,7 +277,10 @@ class WalkForwardValidator:
         print(f"[WFV] avg_prec={avg_prec:.2%}  median_prec={median_prec:.2%}  avg_acc={avg_acc:.2%}")
 
         # Aprobado si avg >= 65% O mediana >= 70%
-        wfv_passed = avg_prec >= MIN_PRECISION_THRESHOLD or median_prec >= 0.70
+        wfv_passed = (
+            avg_prec >= MIN_PRECISION_THRESHOLD
+            or median_prec >= WFV_MEDIAN_PRECISION_THRESHOLD
+        )
 
         return {
             "folds":          results,
@@ -278,6 +301,9 @@ class ForexEnsembleTrainer:
         self.best_score = 0.0
         self.best_model = None
         self.model      = None
+        self.calibration_sufficient = False
+        self.validation_sufficient = False
+        self.model_valid = False
         self.pair       = pair
         self._tuned     = _load_tuned_params(pair) if pair else {}
 
@@ -379,22 +405,32 @@ class ForexEnsembleTrainer:
         calibrated = CalibratedEnsemble(ensemble)
         calibrated.fit(X_cal, y_cal)
         self.model = calibrated
+        self.calibration_sufficient = bool(calibrated.sufficient)
 
         preds = calibrated.predict(X_val)
         acc   = accuracy_score(y_val, preds)
         prec  = precision_score(y_val, preds, zero_division=0)
         f1    = f1_score(y_val, preds, zero_division=0)
         n_buy = int(preds.sum())
+        self.validation_sufficient = bool(
+            n_buy > 0 and prec >= MIN_PRECISION_THRESHOLD
+        )
+        self.model_valid = bool(
+            self.calibration_sufficient and self.validation_sufficient
+        )
 
         print(f"\n[ENSEMBLE] === MÉTRICAS ===")
         print(f"  Accuracy  : {acc:.2%}  | Precision BUY: {prec:.2%}  | F1: {f1:.4f}")
         print(f"  Umbral    : {calibrated.threshold:.3f}  | Señales: {n_buy}/{len(y_val)}")
-        print(f"  Válido    : {'✓ SÍ' if calibrated.sufficient else '✗ NO (prec < 65%)'}")
+        print(
+            f"  Válido    : "
+            f"{'✓ SÍ' if self.model_valid else '✗ NO (calibración/validación)'}"
+        )
         print(f"\n{classification_report(y_val, preds, target_names=['Bearish','Bullish'], zero_division=0)}")
 
         self._print_importance(models, list(X_tr.columns))
 
-        if save and calibrated.sufficient:
+        if save and self.model_valid:
             if prec > self.best_score or self.best_model is None:
                 self.best_score = prec
                 self.best_model = calibrated
@@ -403,8 +439,12 @@ class ForexEnsembleTrainer:
                 self.storage.save_model(calibrated, name=name, pair=self.pair,
                                         feature_names=list(X_tr.columns))
                 print(f"[ENSEMBLE] ✓ Modelo guardado (precision={prec:.4f})")
-        elif save and not calibrated.sufficient:
-            print(f"[ENSEMBLE] ✗ Modelo NO guardado (prec {prec:.2%} < 65%)")
+        elif save and not self.model_valid:
+            print(
+                "[ENSEMBLE] ✗ Modelo NO guardado "
+                f"(calibracion={self.calibration_sufficient}, "
+                f"precision validacion={prec:.2%}, senales={n_buy})"
+            )
             print(f"[ENSEMBLE]   Usa 'tune forex <csv>' para optimizar.")
 
         return acc, prec
@@ -438,8 +478,10 @@ def train_with_wfv(X, y, pair: str = None, save: bool = True, force: bool = Fals
     # reales, sin importar qué tan bien le vaya en el split de calibración
     # final (ese split es un solo corte del mismo dataset y puede engañar).
     # Antes este resultado solo se imprimía como texto y no bloqueaba nada.
-    wfv_ok = (not force) and (not wfv_r.get("error")) and wfv_r.get("wfv_passed", False)
-    can_save = save and (wfv_ok or force)
+    wfv_ok = (not wfv_r.get("error")) and wfv_r.get("wfv_passed", False)
+    # ``force`` may request an attempted training run, but it is never quality
+    # evidence and cannot authorize publication of a production model.
+    can_save = save and wfv_ok
 
     if "error" in wfv_r:
         print(f"[WFV] Error: {wfv_r['error']}")
@@ -455,10 +497,14 @@ def train_with_wfv(X, y, pair: str = None, save: bool = True, force: bool = Fals
     # Entrenamiento final con dataset completo
     print(f"\n[ENSEMBLE] Entrenamiento final (dataset completo)...")
     trainer   = ForexEnsembleTrainer(pair=pair)
-    acc, prec = trainer.train(X, y, save=can_save)
+    # Pair-specific publication is coordinated only by RetrainManager in the
+    # integrated pipeline.  This helper may still maintain the generic legacy
+    # alias when no pair is supplied.
+    generic_save = bool(can_save and pair is None)
+    acc, prec = trainer.train(X, y, save=generic_save)
 
     # Guardar también las feature_names en el modelo final
-    if can_save and trainer.model is not None and trainer.best_model is not None:
+    if generic_save and trainer.model is not None and trainer.best_model is not None:
         from .model_storage import ModelStorage
         ModelStorage().save_model(
             trainer.best_model,
@@ -467,6 +513,8 @@ def train_with_wfv(X, y, pair: str = None, save: bool = True, force: bool = Fals
             feature_names=list(X.columns),
         )
 
-    wfv_r["model_deployed"] = bool(can_save and trainer.best_model is not None)
+    wfv_r["model_deployed"] = bool(
+        generic_save and trainer.best_model is not None
+    )
 
     return trainer, wfv_r, acc, prec

@@ -32,6 +32,27 @@ from runtime_paths import forex_dataset_path
 _BASE = Path(__file__).resolve().parent.parent
 
 
+def _loopback_get(path: str, *, authenticated: bool = False):
+    """Query the already-running local service without exposing credentials."""
+    import requests
+
+    host = os.environ.get("ASTRA_API_HOST", "127.0.0.1").strip().lower()
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        host = "127.0.0.1"
+    if host == "::1":
+        host = "[::1]"
+    port = int(os.environ.get("ASTRA_API_PORT", "8000"))
+    headers = None
+    if authenticated:
+        api_key = os.environ.get("ASTRA_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("ASTRA_API_KEY is not configured for the protected API check")
+        headers = {"Authorization": f"Bearer {api_key}"}
+    return requests.get(
+        f"http://{host}:{port}{path}", headers=headers, timeout=5
+    )
+
+
 @dataclass
 class StageResult:
     """Resultado de una etapa del pipeline."""
@@ -474,22 +495,107 @@ def run_pipeline_report(
         if storage.latest_exists(pair=symbol):
             model, train_columns = storage.load_model_with_features(pair=symbol)
             model_valid = getattr(model, "sufficient", True) if model else False
+            from forex.prediction.retrain_manager import RetrainManager
+            manager = (
+                RetrainManager(database=db, storage=storage)
+                if db is not None
+                else RetrainManager(storage=storage)
+            )
+            eligibility = manager.audit_pair_model(symbol)
+            revalidation = None
+            if eligibility.get("bootstrap_revalidation"):
+                from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
+
+                pipe = ForexIntegratedPipeline()
+                pipe.storage = storage
+                if db is not None:
+                    pipe.closed_loop_database = db
+                    if hasattr(db, "get_dataset_registry"):
+                        registry = db.get_dataset_registry(symbol, timeframe)
+                        if registry:
+                            entry = registry[0]
+                            pipe.closed_loop_dataset_provenance = {
+                                "registry_id": entry.get("id"),
+                                "blob_path": entry.get("blob_path"),
+                                "candle_count": entry.get("candle_count"),
+                                "rolling_window_size": entry.get("rolling_window_size"),
+                                "last_candle_timestamp": entry.get("last_candle_timestamp"),
+                                "last_updated": entry.get("last_updated"),
+                            }
+                revalidation = pipe.bootstrap_revalidate(
+                    csv_path, pair=symbol, manager=manager
+                )
+                eligibility = manager.audit_pair_model(symbol)
+                if revalidation.get("model_deployed") and eligibility["eligible"]:
+                    model, train_columns = storage.load_model_with_features(pair=symbol)
+                    model_valid = (
+                        getattr(model, "sufficient", True) if model else False
+                    )
+            executable = bool(model_valid and eligibility["eligible"])
+            if executable:
+                failure_cause = ""
+            elif revalidation and revalidation.get("quality_gate_failed"):
+                failure_cause = "QUALITY_GATE"
+            elif revalidation:
+                failure_cause = "BOOTSTRAP_REVALIDATION_FAILED"
+            else:
+                failure_cause = eligibility["reason"]
             report.add_stage(StageResult(
                 stage="5. Entrenamiento / carga del modelo",
-                status="pass" if model_valid else "warn",
-                detail=f"Modelo cargado para {symbol} | valido: {model_valid} | features: {len(train_columns) if train_columns else 'N/A'}",
+                status="pass" if executable else "fail",
+                detail=(
+                    f"Modelo cargado para {symbol} | valido: {model_valid} | "
+                    f"eligibility: {eligibility['reason']} | features: "
+                    f"{len(train_columns) if train_columns else 'N/A'}"
+                ),
+                cause=failure_cause,
                 duration_ms=(time.time() - t0) * 1000,
-                data={"mode": "loaded", "valid": model_valid},
+                data={
+                    "mode": (
+                        "bootstrap_revalidation" if revalidation else "loaded"
+                    ),
+                    "valid": model_valid,
+                    "eligibility": eligibility,
+                    "revalidation": revalidation,
+                },
             ))
+            if not executable:
+                return report
         else:
             # Entrenar modelo nuevo
             from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
             pipe = ForexIntegratedPipeline()
             if db is not None:
                 pipe.closed_loop_database = db
-            train_result = pipe.train(csv_path, pair=symbol, use_wfv=False, force=True)
+            train_result = pipe.train(
+                csv_path, pair=symbol, use_wfv=True, force=False
+            )
             if "error" in train_result:
                 raise RuntimeError(train_result["error"])
+            wfv = train_result.get("wfv") or {}
+            model_valid = train_result.get("model_valid") is True
+            model_deployed = bool(
+                train_result.get("model_deployed", wfv.get("model_deployed", False))
+            )
+            latest_exists = storage.latest_exists(pair=symbol)
+            if not (model_valid and model_deployed and latest_exists):
+                report.add_stage(StageResult(
+                    stage="5. Entrenamiento / carga del modelo",
+                    status="fail",
+                    detail=(
+                        f"Modelo no desplegado | model_valid={model_valid} | "
+                        f"model_deployed={model_deployed} | "
+                        f"latest_{symbol}={latest_exists}"
+                    ),
+                    cause="MODEL_NOT_DEPLOYED / QUALITY_GATE",
+                    recommendation=(
+                        "Revise calibration, validation and WFV evidence; "
+                        "quality gates must pass before promotion"
+                    ),
+                    duration_ms=(time.time() - t0) * 1000,
+                    data={"mode": "trained", **train_result},
+                ))
+                return report
             report.add_stage(StageResult(
                 stage="5. Entrenamiento / carga del modelo",
                 status="pass",
@@ -528,7 +634,11 @@ def run_pipeline_report(
             status="pass",
             detail=f"Signal: {action} | Confidence: {conf:.2f} | ADX: {pred.get('adx', 'N/A')}",
             duration_ms=(time.time() - t0) * 1000,
-            data={"action": action, "confidence": conf},
+            data={
+                "action": action,
+                "confidence": conf,
+                "prediction_id": pred.get("prediction_id"),
+            },
         ))
     except Exception as e:
         cause, rec = _diagnose_error(e, timeframe)
@@ -546,12 +656,20 @@ def run_pipeline_report(
     t0 = time.time()
     try:
         from forex.prediction.outcome_tracker import OutcomeTracker
-        ot = OutcomeTracker()
-        stats = ot.stats(pair=symbol)
+        ot = OutcomeTracker(database=db) if db is not None else OutcomeTracker()
+        outcome_stats = ot.get_stats(pair=symbol)
+        stats = (
+            outcome_stats.to_dict()
+            if hasattr(outcome_stats, "to_dict")
+            else dict(outcome_stats)
+        )
         report.add_stage(StageResult(
             stage="7. Outcome Tracker",
             status="pass",
-            detail=f"Tracker activo | predicciones registradas: {stats.get('total', 0)}",
+            detail=(
+                "Tracker activo | predicciones operacionales registradas: "
+                f"{stats.get('total_predictions', 0)}"
+            ),
             duration_ms=(time.time() - t0) * 1000,
             data=stats,
         ))
@@ -617,20 +735,53 @@ def run_pipeline_report(
             from infra.db.database import get_database
             db = get_database()
 
-        preds = db.get_predictions(symbol=symbol, limit=1)
-        has_preds = len(preds) > 0 if preds else False
-
-        report.add_stage(StageResult(
-            stage="10. Almacenamiento en DB",
-            status="pass" if has_preds else "warn",
-            detail=f"DB engine: {getattr(db, 'engine', 'sqlite')} | predicciones de {symbol}: {len(preds) if preds else 0}",
-            duration_ms=(time.time() - t0) * 1000,
-        ))
+        if action == "HOLD":
+            report.add_stage(StageResult(
+                stage="10. Almacenamiento en DB",
+                status="pass",
+                detail=(
+                    f"DB engine: {getattr(db, 'engine', 'sqlite')} | "
+                    "HOLD no entra al outcome loop"
+                ),
+                duration_ms=(time.time() - t0) * 1000,
+            ))
+        elif action in {"BUY", "SELL"}:
+            prediction_id = pred.get("prediction_id")
+            persisted = (
+                db.get_prediction(prediction_id)
+                if prediction_id and hasattr(db, "get_prediction")
+                else None
+            )
+            identity_ok = bool(
+                persisted
+                and persisted.get("prediction_id") == prediction_id
+                and persisted.get("symbol") == symbol
+                and (persisted.get("action") or persisted.get("direction")) == action
+            )
+            report.add_stage(StageResult(
+                stage="10. Almacenamiento en DB",
+                status="pass" if identity_ok else "fail",
+                detail=(
+                    f"Prediction identity persisted: {prediction_id}"
+                    if identity_ok
+                    else "La prediccion operacional no tiene identidad persistida verificable"
+                ),
+                cause="" if identity_ok else "PREDICTION_ID_NOT_PERSISTED",
+                duration_ms=(time.time() - t0) * 1000,
+            ))
+        else:
+            report.add_stage(StageResult(
+                stage="10. Almacenamiento en DB",
+                status="fail",
+                detail=f"Accion final no canonica: {action}",
+                cause="INVALID_FINAL_ACTION",
+                duration_ms=(time.time() - t0) * 1000,
+            ))
     except Exception as e:
         cause, rec = _diagnose_error(e, timeframe)
         report.add_stage(StageResult(
             stage="10. Almacenamiento en DB",
-            status="warn",
+            status="fail" if action in {"BUY", "SELL"} else "warn",
             error=str(e)[:200],
             cause=cause,
             recommendation=rec,
@@ -640,10 +791,7 @@ def run_pipeline_report(
     # ── Etapa 11: Disponibilidad via API ──────────────────────
     t0 = time.time()
     try:
-        from fastapi.testclient import TestClient
-        from workspace.server import app
-        c = TestClient(app)
-        r = c.get("/api/datasets/status")
+        r = _loopback_get("/api/datasets/status", authenticated=True)
         api_ok = r.status_code == 200
         report.add_stage(StageResult(
             stage="11. Disponibilidad via API",
@@ -665,10 +813,7 @@ def run_pipeline_report(
     # ── Etapa 12: Visualizacion en el Workspace ──────────────
     t0 = time.time()
     try:
-        from fastapi.testclient import TestClient
-        from workspace.server import app
-        c = TestClient(app)
-        r = c.get("/")
+        r = _loopback_get("/")
         ws_ok = r.status_code == 200 and len(r.content) > 1000
         report.add_stage(StageResult(
             stage="12. Visualizacion en Workspace",

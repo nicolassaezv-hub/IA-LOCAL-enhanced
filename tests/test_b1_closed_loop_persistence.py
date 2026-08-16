@@ -111,6 +111,23 @@ def _manager(tmp_path, database, *, minimum=2):
     return manager, storage
 
 
+def _initial_eligibility_metadata() -> dict:
+    return {
+        "eligibility": {
+            "calibration_passed": True,
+            "validation_passed": True,
+            "validation_precision": 0.70,
+            "wfv_passed": True,
+        },
+        "wfv": {
+            "folds": [{"fold": 1, "precision": 0.70}],
+            "avg_precision": 0.70,
+            "median_precision": 0.70,
+            "wfv_passed": True,
+        },
+    }
+
+
 def _pending_run(tmp_path, database, *, minimum=2):
     _seed_finalized_outcomes(database, minimum)
     manager, storage = _manager(tmp_path, database, minimum=minimum)
@@ -118,6 +135,7 @@ def _pending_run(tmp_path, database, *, minimum=2):
         {"version": 1},
         pair="EURUSD",
         dataset_provenance={"registry_id": 1, "snapshot": "initial-v1"},
+        metadata=_initial_eligibility_metadata(),
     )
     assert initial["status"] == "PROMOTED"
     run = manager.ensure_pending_from_outcomes(
@@ -139,6 +157,7 @@ def test_pair_specific_load_never_falls_back_to_generic_latest(tmp_path):
         pair="EURUSD",
         dataset_provenance={"path": "EURUSD_H1.csv"},
         feature_names=["close"],
+        metadata=_initial_eligibility_metadata(),
     )
 
     assert storage.load_model("EURUSD") == {"symbol": "EURUSD"}
@@ -161,6 +180,7 @@ def test_pipeline_model_identity_never_crosses_symbol(tmp_path):
         {"symbol": "EURUSD"},
         pair="EURUSD",
         dataset_provenance={"path": "EURUSD_H1.csv"},
+        metadata=_initial_eligibility_metadata(),
     )
     from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
 
@@ -189,6 +209,7 @@ def test_pair_promotion_requires_canonical_provenance_boundary(tmp_path):
         {"version": 1},
         pair="EURUSD",
         dataset_provenance={"path": "EURUSD_H1.csv", "rows": 2000},
+        metadata=_initial_eligibility_metadata(),
     )
 
     latest = storage.base_dir / "latest_EURUSD.pkl"

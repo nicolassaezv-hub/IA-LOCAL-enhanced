@@ -53,6 +53,7 @@ if _configured_window not in (None, str(ROLLING_WINDOW)):
 FETCH_BARS = ROLLING_WINDOW + 1
 TIMEFRAMES = ["H1", "H4", "D1"]
 PREDICTION_TIMEFRAME = "H1"
+BOOTSTRAP_REVALIDATION_ISSUE = "initial_training_not_production_eligible"
 DEFAULT_SYMBOLS = [
     ("EURUSD", "EUR/USD", 0.0001),
     ("GBPUSD", "GBP/USD", 0.0001),
@@ -513,20 +514,6 @@ def run_closed_loop_maintenance(
             database=db,
             storage=ModelStorage(PROJECT_ROOT / "models" / "forex"),
         )
-        reconciliation = manager.reconcile()
-        symbol_issues = [
-            issue for issue in reconciliation["issues"]
-            if issue.get("symbol") == symbol
-        ]
-        if symbol_issues:
-            return {
-                "action": "error",
-                "error": "model provenance reconciliation failed",
-                "issues": symbol_issues,
-            }
-        finalized = OutcomeTracker(database=db).evaluate_from_csv(
-            path, pair=symbol, timeframe=timeframe
-        )
         provenance = {
             "registry_id": entry.get("id"),
             "blob_path": entry.get("blob_path"),
@@ -535,6 +522,47 @@ def run_closed_loop_maintenance(
             "last_candle_timestamp": entry.get("last_candle_timestamp"),
             "last_updated": entry.get("last_updated"),
         }
+        reconciliation = manager.reconcile()
+        symbol_issues = [
+            issue for issue in reconciliation["issues"]
+            if issue.get("symbol") == symbol
+        ]
+        bootstrap_result = None
+        audit = manager.audit_pair_model(symbol)
+        bootstrap_allowed = (
+            len(symbol_issues) == 1
+            and symbol_issues[0].get("code") == BOOTSTRAP_REVALIDATION_ISSUE
+            and audit.get("bootstrap_revalidation") is True
+        )
+        if bootstrap_allowed:
+            from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
+
+            pipeline = ForexIntegratedPipeline()
+            pipeline.storage = manager.storage
+            pipeline.closed_loop_database = db
+            pipeline.closed_loop_dataset_provenance = provenance
+            bootstrap_result = pipeline.bootstrap_revalidate(
+                str(path),
+                pair=symbol,
+                path_h4=_resolve_prediction_dataset(db, symbol, "H4", required=False),
+                path_d1=_resolve_prediction_dataset(db, symbol, "D1", required=False),
+                manager=manager,
+            )
+            reconciliation = manager.reconcile()
+            symbol_issues = [
+                issue for issue in reconciliation["issues"]
+                if issue.get("symbol") == symbol
+            ]
+        if symbol_issues:
+            return {
+                "action": "error",
+                "error": "model provenance reconciliation failed",
+                "issues": symbol_issues,
+                "bootstrap_revalidation": bootstrap_result,
+            }
+        finalized = OutcomeTracker(database=db).evaluate_from_csv(
+            path, pair=symbol, timeframe=timeframe
+        )
         pending = manager.ensure_pending_from_outcomes(
             symbol, timeframe=timeframe, dataset_provenance=provenance
         )
@@ -543,6 +571,7 @@ def run_closed_loop_maintenance(
             "outcomes_finalized": finalized,
             "retrain_run_id": pending.get("run_id") if pending else None,
             "retrain_status": pending.get("status") if pending else None,
+            "bootstrap_revalidation": bootstrap_result,
         }
     except Exception as exc:
         logger.error("  CLOSED LOOP FAILED %s %s: %s", symbol, timeframe, exc)
@@ -578,6 +607,8 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
 
     symbols = db.get_supported_symbols()
     symbols_processed = 0
+    bootstrap_only_symbols: set[str] = set()
+    provenance_blocked_symbols: set[str] = set()
 
     # A promoted model is executable only while DB provenance and both file
     # identities reconcile.  Ambiguous crash states block that symbol.
@@ -586,21 +617,42 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
             from forex.prediction.retrain_manager import RetrainManager
             from forex.prediction.model_storage import ModelStorage
 
-            recovery = RetrainManager(
+            recovery_manager = RetrainManager(
                 database=db,
                 storage=ModelStorage(PROJECT_ROOT / "models" / "forex"),
-            ).reconcile()
-            blocked = {
-                issue["symbol"]
-                for issue in recovery["issues"]
-                if issue.get("symbol")
-            }
-            if blocked:
+            )
+            recovery = recovery_manager.reconcile()
+            issues_by_symbol: dict[str, list[dict]] = {}
+            for issue in recovery["issues"]:
+                issue_symbol = issue.get("symbol")
+                if issue_symbol:
+                    issues_by_symbol.setdefault(issue_symbol, []).append(issue)
+            for issue_symbol, symbol_issues in issues_by_symbol.items():
+                audit = recovery_manager.audit_pair_model(issue_symbol)
+                bootstrap_allowed = (
+                    len(symbol_issues) == 1
+                    and symbol_issues[0].get("code")
+                    == BOOTSTRAP_REVALIDATION_ISSUE
+                    and audit.get("bootstrap_revalidation") is True
+                )
+                if bootstrap_allowed:
+                    bootstrap_only_symbols.add(issue_symbol)
+                else:
+                    provenance_blocked_symbols.add(issue_symbol)
+            if provenance_blocked_symbols:
                 logger.error(
                     "Model provenance mismatch — blocking H1 prediction for %s",
-                    sorted(blocked),
+                    sorted(provenance_blocked_symbols),
                 )
-                symbols = [s for s in symbols if s["symbol_code"] not in blocked]
+                symbols = [
+                    symbol for symbol in symbols
+                    if symbol["symbol_code"] not in provenance_blocked_symbols
+                ]
+            if bootstrap_only_symbols:
+                logger.info(
+                    "Legacy aliases restricted to bootstrap revalidation for %s",
+                    sorted(bootstrap_only_symbols),
+                )
         except Exception as exc:
             logger.error("Model provenance reconciliation failed closed: %s", exc)
             symbols = []
@@ -612,6 +664,8 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
             blocked_symbols = []
             for sym in symbols:
                 code = sym["symbol_code"]
+                if code in bootstrap_only_symbols:
+                    continue
                 if not check_model_before_cycle(code, timeframe):
                     blocked_symbols.append(code)
                     logger.warning(f"Model for {code} {timeframe} failed integrity check — BLOCKED for this cycle")
@@ -628,7 +682,10 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
     new = detect_new_symbols(db)
     if new:
         logger.info(f"New symbol datasets generated: {len(new)}")
-        symbols = db.get_supported_symbols()  # refresh
+        symbols = [
+            symbol for symbol in db.get_supported_symbols()
+            if symbol["symbol_code"] not in provenance_blocked_symbols
+        ]  # refresh without reintroducing fail-closed symbols
 
     # 2. Rolling update + prediction for each symbol
     for sym in symbols:
@@ -646,6 +703,45 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
             results.append({"symbol": code, "closed_loop": closed_loop_result})
             if closed_loop_result.get("action") == "error":
                 errors_count += 1
+            if code in bootstrap_only_symbols:
+                try:
+                    from forex.prediction.retrain_manager import RetrainManager
+                    from forex.prediction.model_storage import ModelStorage
+
+                    post_manager = RetrainManager(
+                        database=db,
+                        storage=ModelStorage(PROJECT_ROOT / "models" / "forex"),
+                    )
+                    post_reconciliation = post_manager.reconcile()
+                    post_issues = [
+                        issue for issue in post_reconciliation["issues"]
+                        if issue.get("symbol") == code
+                    ]
+                    post_audit = post_manager.audit_pair_model(code)
+                    production_eligible = (
+                        not post_issues and post_audit.get("eligible") is True
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Bootstrap post-reconciliation failed closed for %s: %s",
+                        code,
+                        exc,
+                    )
+                    production_eligible = False
+                if not production_eligible:
+                    logger.error(
+                        "Bootstrap revalidation did not produce an eligible alias; "
+                        "prediction remains blocked for %s",
+                        code,
+                    )
+                    results.append({
+                        "symbol": code,
+                        "predict": {
+                            "action": "skip",
+                            "reason": "bootstrap_revalidation_not_production_eligible",
+                        },
+                    })
+                    continue
             pred_result = run_prediction(db, code, timeframe)
             results.append({"symbol": code, "predict": pred_result})
             if pred_result.get("action") == "predicted":

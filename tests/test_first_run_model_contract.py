@@ -147,8 +147,10 @@ def test_h1_report_uses_canonical_csv_and_autoresolves_mtf_context(
     monkeypatch.setattr(runtime_paths, "PROJECT_ROOT", project_root)
 
     class EmptyStorage:
+        deployed = False
+
         def latest_exists(self, pair=None):
-            return False
+            return self.deployed
 
     monkeypatch.setattr(model_storage, "ModelStorage", EmptyStorage)
     calls = []
@@ -156,8 +158,18 @@ def test_h1_report_uses_canonical_csv_and_autoresolves_mtf_context(
     class Pipeline:
         def train(self, filepath, **kwargs):
             path_h4, path_d1 = _autoresolve_mtf(filepath)
-            calls.append(("train", filepath, path_h4, path_d1, self.closed_loop_database))
-            return {"precision": 0.7, "accuracy": 0.8}
+            calls.append((
+                "train", filepath, path_h4, path_d1,
+                self.closed_loop_database, kwargs,
+            ))
+            EmptyStorage.deployed = True
+            return {
+                "precision": 0.7,
+                "accuracy": 0.8,
+                "model_valid": True,
+                "model_deployed": True,
+                "wfv": {"wfv_passed": True, "model_deployed": True},
+            }
 
         def predict(self, filepath, **kwargs):
             calls.append(("predict", filepath, self.closed_loop_database))
@@ -170,7 +182,9 @@ def test_h1_report_uses_canonical_csv_and_autoresolves_mtf_context(
 
     assert report.stages[0].data == {}
     assert report.stages[1].data["path"] == str(h1)
-    assert calls[0] == ("train", str(h1), str(h4), str(d1), database)
+    assert calls[0][:5] == ("train", str(h1), str(h4), str(d1), database)
+    assert calls[0][5]["use_wfv"] is True
+    assert calls[0][5]["force"] is False
     assert calls[1] == ("predict", str(h1), database)
 
 

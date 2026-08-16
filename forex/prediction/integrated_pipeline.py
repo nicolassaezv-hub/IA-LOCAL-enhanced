@@ -24,7 +24,10 @@ from .feature_engineering  import build_features
 from .dataset_builder      import DatasetBuilder, get_pair_config
 from .predictor            import ForexPredictor
 from .backtester           import ForexBacktester
-from .xgb_trainer          import ForexEnsembleTrainer, train_with_wfv
+from .xgb_trainer          import (
+    ForexEnsembleTrainer,
+    train_with_wfv,
+)
 from .hyperparameter_tuner import ForexHyperparameterTuner
 from .csv_adapter          import adapt_csv
 
@@ -256,6 +259,116 @@ class ForexIntegratedPipeline:
             metadata=metadata,
         )
 
+    def bootstrap_revalidate(
+        self,
+        filepath: str,
+        *,
+        pair: str,
+        path_h4: str = None,
+        path_d1: str = None,
+        manager=None,
+    ) -> dict:
+        """Retrain a provable legacy initial alias under today's full contract."""
+        from forex.prediction.retrain_manager import RetrainManager
+
+        path_h4, path_d1 = _autoresolve_mtf(filepath, path_h4, path_d1)
+        df = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
+        symbol = _infer_pair(df, pair, filepath=filepath)
+        df = build_features(df)
+        horizon, rr_ratio = self._pair_params(symbol)
+        provenance = self._dataset_provenance(filepath, df, horizon=horizon)
+        provenance["timeframe"] = PREDICTION_TIMEFRAME
+        provenance["mtf_context"] = {
+            "H4": str(Path(path_h4).resolve()) if path_h4 else None,
+            "D1": str(Path(path_d1).resolve()) if path_d1 else None,
+        }
+
+        if manager is None:
+            database = getattr(self, "closed_loop_database", None)
+            manager = (
+                RetrainManager(database=database, storage=self.storage)
+                if database is not None
+                else RetrainManager(storage=self.storage)
+            )
+        run = manager.ensure_bootstrap_revalidation(
+            symbol,
+            timeframe=PREDICTION_TIMEFRAME,
+            dataset_provenance=provenance,
+        )
+        if run is None:
+            return {
+                "model_deployed": False,
+                "error": "Alias is not eligible for bootstrap revalidation",
+                "eligibility": manager.audit_pair_model(symbol),
+            }
+
+        def train_candidate(_symbol: str, _timeframe: str, _context: dict) -> dict:
+            from forex.prediction.roadmap_v_integration import run_quality_gate
+            from forex.prediction.xgb_trainer import wfv_quality_passed
+
+            approved, quality_report = run_quality_gate(
+                df,
+                pair=symbol,
+                timeframe=PREDICTION_TIMEFRAME,
+                verbose=False,
+            )
+            if not approved:
+                score = getattr(quality_report, "global_score", "unknown")
+                raise ValueError(f"QUALITY_GATE: dataset rejected (score={score})")
+
+            builder = DatasetBuilder(df)
+            X, y = builder.build(horizon=horizon, rr_ratio=rr_ratio)
+            if len(X) < 300:
+                raise ValueError("QUALITY_GATE: WFV requires at least 300 rows")
+            trainer, wfv_result, accuracy, precision = train_with_wfv(
+                X, y, pair=symbol, save=False, force=False
+            )
+            metadata = {
+                "accuracy": accuracy,
+                "precision": precision,
+                "wfv": wfv_result,
+                "eligibility": {
+                    "calibration_passed": bool(
+                        getattr(trainer, "calibration_sufficient", False)
+                    ),
+                    "validation_passed": bool(
+                        getattr(trainer, "validation_sufficient", False)
+                    ),
+                    "validation_precision": float(precision),
+                    "wfv_passed": bool(wfv_quality_passed(wfv_result)),
+                },
+                "promotion_type": "bootstrap_revalidation",
+            }
+            eligibility_error = manager._initial_eligibility_error(metadata)
+            if trainer.model is None or eligibility_error:
+                raise ValueError(
+                    f"QUALITY_GATE: {eligibility_error or 'MODEL_NOT_TRAINED'}"
+                )
+            return {
+                "model": trainer.model,
+                "feature_names": list(X.columns),
+                "metadata": metadata,
+            }
+
+        result = manager.execute_retrain(
+            run["run_id"],
+            train_candidate,
+            validator=lambda model: getattr(model, "sufficient", True) is True,
+        )
+        audit = manager.audit_pair_model(symbol)
+        error = result.get("error") or ""
+        return {
+            "run_id": result["run_id"],
+            "retrain_status": result["status"],
+            "trigger": result["trigger"],
+            "model_deployed": bool(
+                result["status"] == "PROMOTED" and audit.get("eligible")
+            ),
+            "quality_gate_failed": "QUALITY_GATE:" in error,
+            "error": error,
+            "eligibility": audit,
+        }
+
     def _model_identity(self, pair: str) -> str | None:
         """Return only the checksum of the exact symbol alias requested."""
         base_dir = getattr(self.storage, "base_dir", None)
@@ -331,11 +444,13 @@ class ForexIntegratedPipeline:
             trainer, wfv_r, acc, prec = train_with_wfv(
                 X, y, pair=pair, save=False, force=force
             )
-            eligible = bool(force or wfv_r.get("wfv_passed", False))
+            eligible = bool(
+                not wfv_r.get("error") and wfv_r.get("wfv_passed", False)
+            )
             deployed = bool(
                 eligible
                 and trainer.model is not None
-                and getattr(trainer.model, "sufficient", False)
+                and getattr(trainer, "model_valid", False)
             )
             if deployed:
                 promotion = self._promote_initial_training(
@@ -345,7 +460,21 @@ class ForexIntegratedPipeline:
                     df=df,
                     feature_names=list(X.columns),
                     horizon=horizon,
-                    metadata={"accuracy": acc, "precision": prec, "wfv": wfv_r},
+                    metadata={
+                        "accuracy": acc,
+                        "precision": prec,
+                        "wfv": wfv_r,
+                        "eligibility": {
+                            "calibration_passed": bool(
+                                getattr(trainer, "calibration_sufficient", False)
+                            ),
+                            "validation_passed": bool(
+                                getattr(trainer, "validation_sufficient", False)
+                            ),
+                            "validation_precision": float(prec),
+                            "wfv_passed": True,
+                        },
+                    },
                 )
                 deployed = promotion.get("status") == "PROMOTED"
             wfv_r["model_deployed"] = deployed
@@ -361,27 +490,16 @@ class ForexIntegratedPipeline:
                 "accuracy":    round(acc,  4),
                 "precision":   round(prec, 4),
                 "wfv":         wfv_r,
-                "model_valid": getattr(trainer.model, "sufficient", False) if trainer.model else False,
+                "model_valid": bool(getattr(trainer, "model_valid", False)),
                 "model":       "guardado" if deployed else "NO guardado",
+                "model_deployed": deployed,
             }
         else:
             trainer   = ForexEnsembleTrainer(pair=pair)
             acc, prec = trainer.train(X, y, save=False)
-            deployed = bool(
-                trainer.model is not None
-                and getattr(trainer.model, "sufficient", False)
-            )
-            if deployed:
-                promotion = self._promote_initial_training(
-                    trainer.model,
-                    pair=pair,
-                    filepath=filepath,
-                    df=df,
-                    feature_names=list(X.columns),
-                    horizon=horizon,
-                    metadata={"accuracy": acc, "precision": prec},
-                )
-                deployed = promotion.get("status") == "PROMOTED"
+            # A run without WFV is diagnostic only and cannot publish a
+            # pair-specific production alias.
+            deployed = False
             self.predictor.invalidate_cache(pair=pair)
             return {
                 "type":        "training_complete",
@@ -390,8 +508,10 @@ class ForexIntegratedPipeline:
                 "features":    len(X.columns),
                 "accuracy":    round(acc,  4),
                 "precision":   round(prec, 4),
-                "model_valid": getattr(trainer.model, "sufficient", False) if trainer.model else False,
+                "model_valid": bool(getattr(trainer, "model_valid", False)),
                 "model":       "guardado" if deployed else "NO guardado",
+                "model_deployed": deployed,
+                "quality_gate": "WFV_REQUIRED",
             }
 
     # ─────────────────────────────────────────────────────────
@@ -752,6 +872,7 @@ class ForexIntegratedPipeline:
         votes       = []
         horizons    = [5, 10, 20]
         _, rr_ratio = self._pair_params(pair)
+        audit_manager = None
 
         for h in horizons:
             builder = DatasetBuilder(df)
@@ -764,20 +885,80 @@ class ForexIntegratedPipeline:
 
             if not model_exists:
                 print(f"[MULTI] Entrenando h={h}...")
-                trainer = ForexEnsembleTrainer(pair=pair)
-                trainer.train(X, y, save=False)
-                if trainer.model is not None and trainer.model.sufficient:
-                    self._promote_initial_training(
+                if len(X) >= 300:
+                    trainer, horizon_wfv, horizon_acc, horizon_prec = train_with_wfv(
+                        X, y, pair=f"{pair}_h{h}", save=False
+                    )
+                else:
+                    trainer = ForexEnsembleTrainer(pair=pair)
+                    horizon_acc, horizon_prec = trainer.train(X, y, save=False)
+                    horizon_wfv = {"error": "WFV requires at least 300 rows"}
+                from .xgb_trainer import wfv_quality_passed
+                horizon_eligible = bool(
+                    wfv_quality_passed(horizon_wfv)
+                    and getattr(trainer, "model_valid", False)
+                    and getattr(trainer, "calibration_sufficient", False)
+                    and getattr(trainer, "validation_sufficient", False)
+                )
+                if trainer.model is None or not horizon_eligible:
+                    continue
+                try:
+                    promotion = self._promote_initial_training(
                         trainer.model,
                         pair=f"{pair}_h{h}",
                         filepath=filepath,
                         df=df,
                         feature_names=list(X.columns),
                         horizon=h,
-                        metadata={"model_name": model_name},
+                        metadata={
+                            "model_name": model_name,
+                            "accuracy": horizon_acc,
+                            "precision": horizon_prec,
+                            "wfv": horizon_wfv,
+                            "eligibility": {
+                                "calibration_passed": bool(
+                                    getattr(trainer, "calibration_sufficient", False)
+                                ),
+                                "validation_passed": bool(
+                                    getattr(trainer, "validation_sufficient", False)
+                                ),
+                                "validation_precision": float(horizon_prec),
+                                "wfv_passed": True,
+                            },
+                        },
                     )
-                model = trainer.model
+                except Exception as exc:
+                    logger.warning(
+                        "Multi-horizon promotion failed for %s h=%s: %s",
+                        pair,
+                        h,
+                        exc,
+                    )
+                    continue
+                if promotion.get("status") != "PROMOTED":
+                    continue
+                try:
+                    model = storage.load_model(pair=f"{pair}_h{h}")
+                except Exception as exc:
+                    logger.warning(
+                        "Promoted multi-horizon alias could not be loaded for %s h=%s: %s",
+                        pair,
+                        h,
+                        exc,
+                    )
+                    continue
             else:
+                if audit_manager is None:
+                    from forex.prediction.retrain_manager import RetrainManager
+
+                    database = getattr(self, "closed_loop_database", None)
+                    audit_manager = (
+                        RetrainManager(database=database, storage=storage)
+                        if database is not None
+                        else RetrainManager(storage=storage)
+                    )
+                if not audit_manager.audit_pair_model(f"{pair}_h{h}")["eligible"]:
+                    continue
                 model = storage.load_model(pair=f"{pair}_h{h}")
 
             if model is None:
@@ -864,7 +1045,7 @@ class ForexIntegratedPipeline:
         deployed = bool(
             wfv_r.get("wfv_passed", False)
             and trainer.model is not None
-            and getattr(trainer.model, "sufficient", False)
+            and getattr(trainer, "model_valid", False)
         )
         if deployed:
             promotion = self._promote_initial_training(
@@ -879,6 +1060,16 @@ class ForexIntegratedPipeline:
                     "precision": prec,
                     "wfv": wfv_r,
                     "tuning_trials": n_trials,
+                    "eligibility": {
+                        "calibration_passed": bool(
+                            getattr(trainer, "calibration_sufficient", False)
+                        ),
+                        "validation_passed": bool(
+                            getattr(trainer, "validation_sufficient", False)
+                        ),
+                        "validation_precision": float(prec),
+                        "wfv_passed": True,
+                    },
                 },
             )
             deployed = promotion.get("status") == "PROMOTED"

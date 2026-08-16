@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 class RetrainTrigger(str, Enum):
     INITIAL_TRAINING = "initial_training"
+    BOOTSTRAP_REVALIDATION = "bootstrap_revalidation"
     WIN_RATE_DROP = "win_rate_drop"
     REGIME_CHANGE = "regime_change"
     NEW_DATA_THRESHOLD = "new_data_threshold"
@@ -274,6 +275,76 @@ class RetrainManager:
             "updated_at": timestamp,
         })
 
+    def ensure_bootstrap_revalidation(
+        self,
+        pair: str,
+        *,
+        timeframe: str = "H1",
+        dataset_provenance: dict,
+    ) -> dict | None:
+        """Create one durable replacement run for a provable legacy alias."""
+        symbol = _clean_pair(pair)
+        tf = str(timeframe).upper().strip()
+        if tf != "H1":
+            return None
+        if not isinstance(dataset_provenance, dict) or not dataset_provenance:
+            raise ValueError("bootstrap revalidation requires dataset provenance")
+
+        audit = self.audit_pair_model(symbol)
+        if not audit.get("bootstrap_revalidation"):
+            return None
+        latest = self.storage.base_dir / f"latest_{symbol}.pkl"
+        source_path = Path(audit["source_model_path"])
+        source_hash = audit["source_model_sha256"]
+        if source_path.resolve() != latest.resolve() or not latest.is_file():
+            return None
+        try:
+            self.storage.validate_artifact(latest)
+            current_hash = self.storage.checksum(latest)
+        except Exception:
+            return None
+        if current_hash != source_hash:
+            return None
+
+        existing = next(
+            (
+                run for run in self.database.get_retrain_runs(symbol, limit=100000)
+                if run.get("timeframe") == tf
+                and run.get("trigger") == RetrainTrigger.BOOTSTRAP_REVALIDATION.value
+                and run.get("source_model_sha256") == source_hash
+            ),
+            None,
+        )
+        if existing is not None:
+            return existing
+
+        evidence_identity = {
+            "symbol": symbol,
+            "timeframe": tf,
+            "trigger": RetrainTrigger.BOOTSTRAP_REVALIDATION.value,
+            "source_model_sha256": source_hash,
+        }
+        evidence_payload = json.dumps(
+            evidence_identity, sort_keys=True, separators=(",", ":")
+        )
+        evidence_key = hashlib.sha256(evidence_payload.encode("utf-8")).hexdigest()
+        timestamp = _now()
+        return self.database.create_retrain_run({
+            "run_id": "bootstrap_" + evidence_key[:24],
+            "evidence_key": evidence_key,
+            "symbol": symbol,
+            "timeframe": tf,
+            "trigger": RetrainTrigger.BOOTSTRAP_REVALIDATION.value,
+            "status": "PENDING",
+            "source_model_path": str(latest),
+            "source_model_sha256": source_hash,
+            "dataset_provenance": dataset_provenance,
+            "outcome_ids": [],
+            "last_outcome_id": None,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        })
+
     def _get_run(self, run_id: str) -> dict:
         run = next(
             (row for row in self.database.get_retrain_runs(limit=100000) if row["run_id"] == run_id),
@@ -316,6 +387,11 @@ class RetrainManager:
             raise ValueError("initial training timeframe is required")
         if not isinstance(dataset_provenance, dict) or not dataset_provenance:
             raise ValueError("initial training requires dataset provenance")
+        eligibility_error = self._initial_eligibility_error(metadata)
+        if eligibility_error:
+            raise ValueError(
+                f"initial training lacks production eligibility: {eligibility_error}"
+            )
         latest = self.storage.base_dir / f"latest_{symbol}.pkl"
         if latest.exists():
             raise RuntimeError(
@@ -365,6 +441,86 @@ class RetrainManager:
             validator=validator,
             provenance_status="INITIAL_TRAINING",
         )
+
+    @staticmethod
+    def _initial_eligibility_error(metadata: dict | None) -> str:
+        """Return why calibration, validation and WFV evidence is insufficient."""
+        from .xgb_trainer import MIN_PRECISION_THRESHOLD, wfv_quality_passed
+
+        evidence = (metadata or {}).get("eligibility")
+        wfv = (metadata or {}).get("wfv")
+        if not isinstance(evidence, dict) or not isinstance(wfv, dict):
+            return "WFV_EVIDENCE_MISSING"
+        if "calibration_passed" not in evidence:
+            return "CALIBRATION_EVIDENCE_MISSING"
+        if evidence.get("calibration_passed") is not True:
+            return "CALIBRATION_GATE"
+        if "validation_passed" not in evidence:
+            return "VALIDATION_EVIDENCE_MISSING"
+        if evidence.get("validation_passed") is not True:
+            return "VALIDATION_GATE"
+        try:
+            validation_precision = float(evidence["validation_precision"])
+        except (KeyError, TypeError, ValueError):
+            return "VALIDATION_EVIDENCE_MISSING"
+        if validation_precision < MIN_PRECISION_THRESHOLD:
+            return "VALIDATION_GATE"
+        if evidence.get("wfv_passed") is not True or not wfv_quality_passed(wfv):
+            return "WFV_GATE"
+        return ""
+
+    def audit_pair_model(self, pair: str) -> dict:
+        """Certify the current pair alias without mutating runtime state."""
+        symbol = _clean_pair(pair)
+        latest = self.storage.base_dir / f"latest_{symbol}.pkl"
+        if not latest.is_file():
+            return {"eligible": False, "reason": "MODEL_NOT_DEPLOYED"}
+        try:
+            bundle = self.storage.validate_artifact(latest)
+            checksum = self.storage.checksum(latest)
+        except Exception as exc:
+            return {
+                "eligible": False,
+                "reason": "ARTIFACT_INVALID",
+                "error_type": type(exc).__name__,
+            }
+        provenance = [
+            row for row in self.database.get_model_provenance(symbol)
+            if row.get("status") in {"INITIAL_TRAINING", "PROMOTED"}
+        ]
+        matches = [
+            row for row in provenance if row.get("artifact_sha256") == checksum
+        ]
+        if not matches:
+            return {
+                "eligible": False,
+                "reason": "CHECKSUM_MISMATCH" if provenance else "PROVENANCE_MISSING",
+            }
+        if len(matches) != 1:
+            return {"eligible": False, "reason": "PROVENANCE_AMBIGUOUS"}
+        matching = matches[0]
+        if matching["status"] == "INITIAL_TRAINING":
+            metadata = bundle.get("metadata", {}) if isinstance(bundle, dict) else {}
+            reason = self._initial_eligibility_error(metadata)
+            if reason:
+                revalidatable = reason in {
+                    "WFV_EVIDENCE_MISSING",
+                    "CALIBRATION_EVIDENCE_MISSING",
+                    "VALIDATION_EVIDENCE_MISSING",
+                }
+                result = {"eligible": False, "reason": reason}
+                if revalidatable:
+                    result.update({
+                        "bootstrap_revalidation": True,
+                        "source_model_path": str(latest),
+                        "source_model_sha256": checksum,
+                    })
+                return result
+        return {
+            "eligible": True,
+            "reason": "PRODUCTION_ELIGIBLE",
+            "model_id": matching.get("model_id"),
+        }
 
     def _execute_run(
         self,
@@ -437,6 +593,13 @@ class RetrainManager:
                 "updated_at": validated_at,
             })
             latest = self.storage.base_dir / f"latest_{_clean_pair(run['symbol'])}.pkl"
+            source_hash = run.get("source_model_sha256")
+            if source_hash:
+                source_path = Path(run.get("source_model_path") or "")
+                if source_path.resolve() != latest.resolve():
+                    raise ValueError("source model path does not identify the current alias")
+                if not latest.is_file() or self.storage.checksum(latest) != source_hash:
+                    raise ValueError("source model alias changed before promotion")
             if latest.exists():
                 with tempfile.NamedTemporaryFile(
                     dir=self.storage.base_dir,
@@ -590,12 +753,31 @@ class RetrainManager:
         }
         for latest in self.storage.base_dir.glob("latest_*.pkl"):
             symbol = latest.stem.removeprefix("latest_")
-            if (symbol, self.storage.checksum(latest)) not in certified_hashes:
+            latest_hash = self.storage.checksum(latest)
+            if (symbol, latest_hash) not in certified_hashes:
                 issues.append({
                     "run_id": None,
                     "symbol": symbol,
                     "code": "latest_without_provenance",
                 })
+                continue
+            provenance = next(
+                (
+                    row for row in provenance_rows
+                    if row["symbol"] == symbol
+                    and row["artifact_sha256"] == latest_hash
+                ),
+                None,
+            )
+            if provenance and provenance["status"] == "INITIAL_TRAINING":
+                audit = self.audit_pair_model(symbol)
+                if not audit["eligible"]:
+                    issues.append({
+                        "run_id": provenance["retrain_run_id"],
+                        "symbol": symbol,
+                        "code": "initial_training_not_production_eligible",
+                        "reason": audit["reason"],
+                    })
         for temporary in self.storage.base_dir.glob(".*.tmp"):
             issues.append({
                 "run_id": None,

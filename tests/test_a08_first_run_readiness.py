@@ -481,6 +481,47 @@ def test_provider_operation_is_pending_without_explicit_probe(tmp_path):
     assert report.ready is False
 
 
+def test_completed_h1_noop_is_not_operational_scheduler_evidence(tmp_path):
+    db = _database(tmp_path)
+    run = db.create_scheduler_run({"timeframe": "H1"})
+    db.update_scheduler_run(run["id"], {
+        "status": "completed",
+        "symbols_processed": 0,
+        "predictions_generated": 0,
+        "errors_count": 0,
+    })
+
+    report = _run_for_h1(tmp_path, db, require_models=False)
+    check = next(
+        item for item in report.to_dict()["checks"]
+        if item["category"] == "7. Scheduler"
+    )
+
+    assert check["status"] == "pending"
+    assert check["evidence_state"] == "COMPLETED_NOOP"
+    assert "symbols_processed=0" in check["detail"]
+
+
+def test_completed_h1_hold_cycle_is_valid_scheduler_evidence(tmp_path):
+    db = _database(tmp_path)
+    run = db.create_scheduler_run({"timeframe": "H1"})
+    db.update_scheduler_run(run["id"], {
+        "status": "completed",
+        "symbols_processed": 1,
+        "predictions_generated": 0,
+        "errors_count": 0,
+    })
+
+    report = _run_for_h1(tmp_path, db, require_models=False)
+    check = next(
+        item for item in report.to_dict()["checks"]
+        if item["category"] == "7. Scheduler"
+    )
+
+    assert check["status"] == "pass"
+    assert check["evidence_state"] == "PROCESSED_CYCLE"
+    assert "predictions_generated=0" in check["detail"]
+
 def test_explicit_provider_probe_uses_mocked_boundary_without_network(tmp_path):
     db = _database(tmp_path)
     calls = []

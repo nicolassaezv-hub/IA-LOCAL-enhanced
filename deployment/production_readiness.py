@@ -555,28 +555,55 @@ def run_production_readiness(
     # superficial healthy boolean.
     if database is not None:
         try:
-            runs = database.get_scheduler_runs(limit=1)
-            last_run = runs[0] if runs else None
+            runs = database.get_scheduler_runs(limit=100)
+            last_run = next(
+                (run for run in runs if str(run.get("timeframe", "")).upper() == "H1"),
+                None,
+            )
             if not last_run:
                 scheduler_status = "pending"
-                detail = "No scheduler run has been recorded"
-            elif last_run.get("status") == "completed" and not last_run.get("errors_count"):
+                detail = "No H1 scheduler run has been recorded"
+                evidence_state = "UNVERIFIED"
+            elif (
+                last_run.get("status") == "completed"
+                and not last_run.get("errors_count")
+                and int(last_run.get("symbols_processed") or 0) > 0
+            ):
                 scheduler_status = "pass"
-                detail = f"Recorded completed run #{last_run.get('id')}"
+                detail = (
+                    f"Recorded completed H1 run #{last_run.get('id')} | "
+                    f"symbols_processed={last_run.get('symbols_processed')} | "
+                    f"predictions_generated={last_run.get('predictions_generated') or 0}"
+                )
+                evidence_state = "PROCESSED_CYCLE"
+            elif (
+                last_run.get("status") == "completed"
+                and not last_run.get("errors_count")
+                and active_symbols
+                and int(last_run.get("symbols_processed") or 0) == 0
+            ):
+                scheduler_status = "pending"
+                detail = (
+                    f"Completed H1 run #{last_run.get('id')} was a no-op/blocked cycle | "
+                    f"active_symbols={len(active_symbols)} | symbols_processed=0"
+                )
+                evidence_state = "COMPLETED_NOOP"
             elif last_run.get("status") == "running":
                 scheduler_status = "pending"
                 detail = f"Run #{last_run.get('id')} is still running"
+                evidence_state = "RUNNING"
             else:
                 scheduler_status = "fail"
                 detail = (
                     f"Last run status={last_run.get('status')!r}, "
                     f"errors={last_run.get('errors_count')!r}"
                 )
+                evidence_state = "RECORDED_FAILURE"
             report.add_check(ReadinessCheck(
                 "7. Scheduler", "Ejecución registrada", scheduler_status, detail,
                 "Ejecute y verifique un ciclo scheduler real",
                 blocking=True,
-                evidence_state="RECORDED_RUN" if last_run else "UNVERIFIED",
+                evidence_state=evidence_state,
             ))
         except Exception as exc:
             report.add_check(ReadinessCheck(
