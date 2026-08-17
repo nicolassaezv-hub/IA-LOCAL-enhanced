@@ -20,6 +20,6 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 LockPersonality=true
 RestrictSUIDSGID=true
-ReadWritePaths=/var/backups/astra /var/log/astra
+ReadWritePaths=/var/backups/astra /var/log/astra /opt/astra/memory_db
 StandardOutput=append:/var/log/astra/backup.log
 StandardError=append:/var/log/astra/backup.log

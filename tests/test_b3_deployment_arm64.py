@@ -138,6 +138,30 @@ def test_units_have_bounded_writable_roots_and_hardening():
                 assert "/opt/astra" not in paths
 
 
+def test_backup_unit_allows_only_required_runtime_writes_and_deploy_relocates_them():
+    source = (SYSTEMD_ROOT / "astra-backup.service").read_text(encoding="utf-8")
+    writable_line = next(
+        line for line in source.splitlines() if line.startswith("ReadWritePaths=")
+    )
+
+    assert "ProtectSystem=strict" in source
+    assert writable_line == (
+        "ReadWritePaths=/var/backups/astra /var/log/astra /opt/astra/memory_db"
+    )
+    assert "/opt/astra" not in writable_line.removeprefix("ReadWritePaths=").split()
+
+    deploy = (ROOT / "infra/deploy.sh").read_text(encoding="utf-8")
+    install_systemd = deploy.split("install_systemd() {", 1)[1].split("\n}", 1)[0]
+    assert 'sed -e "s|/opt/astra|$ASTRA_HOME|g"' in install_systemd
+
+    generated = source.replace("/opt/astra", "/srv/astra")
+    assert (
+        "ReadWritePaths=/var/backups/astra /var/log/astra /srv/astra/memory_db"
+        in generated
+    )
+    assert "/opt/astra/memory_db" not in generated
+
+
 def test_dataset_writers_use_data_root_without_mutating_python_package():
     texts = _service_texts()
     code_root = "/opt/astra/forex/data"
