@@ -453,7 +453,7 @@ Ubuntu 24.04 (ARM64/aarch64 o x86_64)
 +-- ASTRA Pipeline (Python 3.12)
 |   +-- forex/prediction/integrated_pipeline.py  (XGBoost+LightGBM ensemble)
 |   +-- workspace/server.py (FastAPI SPA)
-|   +-- scheduler/autonomous_scheduler.py        (CLI: --init, --timeframe, --status)
+|   +-- scheduler/autonomous_scheduler.py        (CLI: --init, --timeframe, --status, --manual-quality-retrain)
 |   +-- memory_db/ (SQLite -- astra_autonomous.db, 8 tablas; creado en runtime)
 +-- infra/
 |   +-- deploy.sh          (despliegue en 1 comando)
@@ -894,11 +894,21 @@ python scheduler/autonomous_scheduler.py --status
 
 # Anadir un simbolo nuevo
 python scheduler/autonomous_scheduler.py --add-symbol NZDUSD
+
+# Reentrenamiento de calidad deliberado (H1 + snapshot H1/H4/D1)
+python scheduler/autonomous_scheduler.py \
+  --manual-quality-retrain EURUSD \
+  --request-id 550e8400-e29b-41d4-a716-446655440000
 ```
 
 `--timeframe` devuelve JSON y usa códigos de salida operacionales: `0` cuando
 el ciclo termina sin errores, `2` cuando el ciclo queda `partial` y conserva su
 resultado completo, y `1` cuando una excepción interna impide completarlo.
+
+`--manual-quality-retrain` requiere un `request-id` explícito y un alias fuente
+existente. Devuelve JSON; usa `0` sólo cuando el candidato fue promovido, `2`
+para rechazo por gates, precondición o conflicto, y `1` para errores internos.
+El comando no acepta `force` y no modifica la identidad one-shot de bootstrap.
 
 ---
 

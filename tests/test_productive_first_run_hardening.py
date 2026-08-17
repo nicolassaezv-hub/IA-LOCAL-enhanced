@@ -59,6 +59,11 @@ def _legacy_initial_alias(monkeypatch, manager, storage, pair="EURUSD"):
             "_initial_eligibility_error",
             staticmethod(lambda _metadata: ""),
         )
+        patch.setattr(
+            RetrainManager,
+            "_production_eligibility_error",
+            classmethod(lambda _cls, *_args, **_kwargs: ""),
+        )
         manager.promote_initial_model(
             SimpleNamespace(version="legacy", sufficient=True),
             pair=pair,
@@ -327,6 +332,9 @@ def test_preexisting_bootstrap_alias_is_preserved_and_flagged_for_revalidation(
     storage = ModelStorage(tmp_path / "models")
     manager = RetrainManager(database=database, storage=storage)
     monkeypatch.setattr(manager, "_initial_eligibility_error", lambda _metadata: "")
+    monkeypatch.setattr(
+        manager, "_production_eligibility_error", lambda *_args, **_kwargs: ""
+    )
     manager.promote_initial_model(
         {"version": "bootstrap"},
         pair="EURUSD",

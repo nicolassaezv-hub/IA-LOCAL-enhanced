@@ -12,12 +12,14 @@ Usage:
     python scheduler/autonomous_scheduler.py --timeframe D1    # Update D1 context only
     python scheduler/autonomous_scheduler.py --status          # System health JSON
     python scheduler/autonomous_scheduler.py --add-symbol NZDUSD  # Add new symbol
+    python scheduler/autonomous_scheduler.py --manual-quality-retrain EURUSD --request-id UUID
 """
 import sys
 import os
 import json
 import logging
 import argparse
+import contextlib
 from datetime import datetime
 from pathlib import Path
 
@@ -26,8 +28,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from astra_version import ASTRA_VERSION
-from infra.db.database import get_database, DatabaseAdapter
-from runtime_paths import forex_dataset_path
+from infra.db.database import (
+    DatabaseAdapter,
+    PersistenceConflictError,
+    get_database,
+)
+from runtime_paths import forex_dataset_path, forex_dataset_root, forex_model_root
 from forex.data.data_router import DataRouter
 from forex.data.rolling_dataset import (
     ROLLING_WINDOW,
@@ -885,27 +891,116 @@ def get_status(db: DatabaseAdapter) -> dict:
         }
 
 
+def run_manual_quality_retrain(
+    db: DatabaseAdapter,
+    symbol: str,
+    request_id: str,
+) -> dict:
+    """Execute one explicit H1 quality retrain against canonical MTF data."""
+    from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
+    from forex.prediction.model_storage import ModelStorage
+    from forex.prediction.retrain_manager import RetrainManager
+
+    storage = ModelStorage(forex_model_root(PROJECT_ROOT))
+    manager = RetrainManager(
+        database=db,
+        storage=storage,
+        dataset_root=forex_dataset_root(PROJECT_ROOT),
+    )
+    pipeline = ForexIntegratedPipeline()
+    pipeline.storage = storage
+    pipeline.closed_loop_database = db
+    return pipeline.manual_quality_retrain(
+        pair=symbol,
+        request_id=request_id,
+        timeframe=PREDICTION_TIMEFRAME,
+        manager=manager,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="ASTRA Autonomous Scheduler")
     parser.add_argument("--init", action="store_true", help="Generate initial datasets")
     parser.add_argument("--timeframe", type=str, help="Run cycle for H1/H4/D1")
     parser.add_argument("--status", action="store_true", help="Print system health JSON")
     parser.add_argument("--add-symbol", type=str, help="Add a new symbol (e.g. EURUSD)")
+    parser.add_argument(
+        "--manual-quality-retrain",
+        metavar="SYMBOL",
+        help="Run one deliberate H1 quality retrain for a single symbol",
+    )
+    parser.add_argument(
+        "--request-id",
+        help="Required idempotency key for --manual-quality-retrain",
+    )
     args = parser.parse_args()
+    manual_symbol = (
+        "".join(
+            character for character in args.manual_quality_retrain.upper()
+            if character.isalnum()
+        )
+        if args.manual_quality_retrain
+        else None
+    )
+
+    def manual_error_payload(status: str, error: str) -> dict:
+        return {
+            "ok": False,
+            "run_id": None,
+            "request_id": args.request_id,
+            "symbol": manual_symbol,
+            "trigger": "manual_quality_retrain",
+            "status": status,
+            "model_deployed": False,
+            "source_sha256": None,
+            "candidate_path": None,
+            "candidate_sha256": None,
+            "eligibility": {"eligible": False},
+            "failed_gate": None,
+            "error": error,
+        }
 
     try:
         db = get_database()
     except Exception as exc:
-        if args.init or args.timeframe:
-            payload = {
-                "ok": False,
-                "error": f"{type(exc).__name__}: {exc}",
-            }
+        if args.init or args.timeframe or args.manual_quality_retrain:
+            payload = (
+                manual_error_payload("ERROR", f"{type(exc).__name__}: {exc}")
+                if args.manual_quality_retrain
+                else {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            )
             if args.init:
                 payload["init"] = []
             print(json.dumps(payload, indent=2, default=str))
             raise SystemExit(1)
         raise
+
+    if args.manual_quality_retrain:
+        symbol = manual_symbol
+        if not args.request_id:
+            print(json.dumps(manual_error_payload(
+                "REJECTED", "MANUAL_QUALITY_RETRAIN_REQUIRES_REQUEST_ID"
+            ), indent=2))
+            raise SystemExit(2)
+        try:
+            # Keep stdout machine-readable JSON even when ML libraries print
+            # progress; operational diagnostics remain available on stderr.
+            with contextlib.redirect_stdout(sys.stderr):
+                result = run_manual_quality_retrain(db, symbol, args.request_id)
+        except (ValueError, FileNotFoundError, PersistenceConflictError) as exc:
+            print(json.dumps(manual_error_payload(
+                "REJECTED", f"{type(exc).__name__}: {exc}"
+            ), indent=2, default=str))
+            raise SystemExit(2)
+        except Exception as exc:
+            print(json.dumps(manual_error_payload(
+                "ERROR", f"{type(exc).__name__}: {exc}"
+            ), indent=2, default=str))
+            raise SystemExit(1)
+        print(json.dumps(result, indent=2, default=str))
+        if result.get("ok") is not True:
+            raise SystemExit(2)
+        return
 
     if args.status:
         health = get_status(db)

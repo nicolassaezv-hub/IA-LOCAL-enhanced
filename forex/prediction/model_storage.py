@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 import joblib
+from filelock import FileLock
 
 from runtime_paths import forex_model_root
 
@@ -110,6 +111,10 @@ class ModelStorage:
         *,
         pair: str,
         validator: Callable[[object], bool] | None = None,
+        expected_latest_path: str | Path | None = None,
+        expected_latest_sha256: str | None = None,
+        require_latest_absent: bool = False,
+        rollback_path: str | Path | None = None,
         _authority: object | None = None,
     ) -> Path:
         if _authority is not _PROMOTION_AUTHORITY:
@@ -119,6 +124,12 @@ class ModelStorage:
         source = Path(artifact_path)
         self.validate_artifact(source, validator)
         latest = self.base_dir / f"latest_{_clean_pair(pair)}.pkl"
+        if expected_latest_sha256 and require_latest_absent:
+            raise ValueError("latest alias cannot be both expected and absent")
+        if expected_latest_path is not None:
+            expected = Path(expected_latest_path).resolve()
+            if expected != latest.resolve():
+                raise ValueError("SOURCE_ALIAS_CONFLICT: source path is not current alias")
         temporary: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -134,12 +145,58 @@ class ModelStorage:
             self.validate_artifact(temporary, validator)
             if self.checksum(temporary) != self.checksum(source):
                 raise ValueError("promoted model copy does not match staged artifact")
-            os.replace(temporary, latest)
-            temporary = None
+            lock = FileLock(str(latest.with_suffix(latest.suffix + ".promotion.lock")))
+            with lock:
+                if require_latest_absent and latest.exists():
+                    raise ValueError(
+                        "SOURCE_ALIAS_CONFLICT: initial alias appeared before promotion"
+                    )
+                if expected_latest_sha256:
+                    if (
+                        not latest.is_file()
+                        or self.checksum(latest) != expected_latest_sha256
+                    ):
+                        raise ValueError(
+                            "SOURCE_ALIAS_CONFLICT: alias changed before promotion"
+                        )
+                if rollback_path is not None:
+                    rollback = Path(rollback_path)
+                    shutil.copyfile(latest, rollback)
+                    with rollback.open("r+b") as handle:
+                        os.fsync(handle.fileno())
+                    if self.checksum(rollback) != expected_latest_sha256:
+                        raise ValueError(
+                            "SOURCE_ALIAS_CONFLICT: rollback copy does not match source"
+                        )
+                os.replace(temporary, latest)
+                temporary = None
             return latest
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
+
+    def rollback_promotion(
+        self,
+        rollback_path: str | Path | None,
+        *,
+        pair: str,
+        promoted_sha256: str,
+        _authority: object | None = None,
+    ) -> bool:
+        """Restore/remove only the alias still owned by the failed promotion."""
+        if _authority is not _PROMOTION_AUTHORITY:
+            raise RuntimeError("alias rollback requires RetrainManager authority")
+        latest = self.base_dir / f"latest_{_clean_pair(pair)}.pkl"
+        rollback = Path(rollback_path) if rollback_path is not None else None
+        lock = FileLock(str(latest.with_suffix(latest.suffix + ".promotion.lock")))
+        with lock:
+            if not latest.is_file() or self.checksum(latest) != promoted_sha256:
+                return False
+            if rollback is None:
+                latest.unlink()
+            else:
+                os.replace(rollback, latest)
+            return True
 
     def save_model(
         self,

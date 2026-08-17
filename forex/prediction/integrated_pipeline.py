@@ -37,6 +37,16 @@ PREDICTION_TIMEFRAME = "H1"
 _TRADE_ACTIONS = ("BUY", "SELL")
 
 
+def _quality_gate_metadata(approved: bool, report) -> dict:
+    return {
+        "passed": approved is True,
+        "approved": getattr(report, "approved", approved) is True,
+        "score": float(getattr(report, "global_score", 0.0)),
+        "critical_count": int(getattr(report, "critical_count", 0)),
+        "warning_count": int(getattr(report, "warning_count", 0)),
+    }
+
+
 def _protection_failure(
     component: str,
     code: str,
@@ -229,6 +239,99 @@ class ForexIntegratedPipeline:
             provenance["training_horizon_candles"] = int(horizon)
         return provenance
 
+    @staticmethod
+    def _candidate_metadata(
+        *,
+        symbol: str,
+        timeframe: str,
+        promotion_type: str,
+        dataset_provenance: dict,
+        quality_gate: dict,
+        trainer,
+        wfv_result: dict,
+        accuracy: float,
+        precision: float,
+        extra: dict | None = None,
+    ) -> dict:
+        from forex.prediction.retrain_manager import RetrainManager
+        from forex.prediction.xgb_trainer import wfv_quality_passed
+
+        return {
+            **(extra or {}),
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "promotion_type": promotion_type,
+            "dataset_provenance_sha256": (
+                RetrainManager.dataset_provenance_sha256(dataset_provenance)
+            ),
+            "quality_gate": quality_gate,
+            "accuracy": accuracy,
+            "precision": precision,
+            "wfv": wfv_result,
+            "eligibility": {
+                "quality_gate_passed": quality_gate.get("passed") is True,
+                "calibration_passed": bool(
+                    getattr(trainer, "calibration_sufficient", False)
+                ),
+                "validation_passed": bool(
+                    getattr(trainer, "validation_sufficient", False)
+                ),
+                "validation_precision": float(precision),
+                "wfv_passed": bool(wfv_quality_passed(wfv_result)),
+                "model_valid": bool(getattr(trainer, "model_valid", False)),
+            },
+        }
+
+    def _train_quality_candidate(
+        self,
+        df: pd.DataFrame,
+        *,
+        symbol: str,
+        horizon: int,
+        rr_ratio: float,
+        dataset_provenance: dict,
+        promotion_type: str,
+    ) -> dict:
+        """Build one candidate under the complete, non-bypassable gate order."""
+        from forex.prediction.roadmap_v_integration import run_quality_gate
+
+        approved, quality_report = run_quality_gate(
+            df,
+            pair=symbol,
+            timeframe=PREDICTION_TIMEFRAME,
+            verbose=False,
+        )
+        quality = _quality_gate_metadata(approved, quality_report)
+        if not approved:
+            raise ValueError(
+                f"QUALITY_GATE: dataset rejected (score={quality['score']})"
+            )
+        builder = DatasetBuilder(df)
+        X, y = builder.build(horizon=horizon, rr_ratio=rr_ratio)
+        if len(X) < 300:
+            raise ValueError("QUALITY_GATE: WFV requires at least 300 rows")
+        trainer, wfv_result, accuracy, precision = train_with_wfv(
+            X, y, pair=symbol, save=False, force=False
+        )
+        if trainer.model is None:
+            raise ValueError("QUALITY_GATE: MODEL_NOT_TRAINED")
+        metadata = self._candidate_metadata(
+            symbol=symbol,
+            timeframe=PREDICTION_TIMEFRAME,
+            promotion_type=promotion_type,
+            dataset_provenance=dataset_provenance,
+            quality_gate=quality,
+            trainer=trainer,
+            wfv_result=wfv_result,
+            accuracy=accuracy,
+            precision=precision,
+        )
+        return {
+            "model": trainer.model,
+            "feature_names": list(X.columns),
+            "metadata": metadata,
+        }
+
     def _promote_initial_training(
         self,
         model: object,
@@ -248,15 +351,23 @@ class ForexIntegratedPipeline:
             if database is not None
             else RetrainManager(storage=self.storage)
         )
+        provenance = self._dataset_provenance(filepath, df, horizon=horizon)
+        complete_metadata = {
+            **(metadata or {}),
+            "symbol": pair,
+            "timeframe": PREDICTION_TIMEFRAME,
+            "promotion_type": "initial_training",
+            "dataset_provenance_sha256": (
+                RetrainManager.dataset_provenance_sha256(provenance)
+            ),
+        }
         return manager.promote_initial_model(
             model,
             pair=pair,
             timeframe=PREDICTION_TIMEFRAME,
-            dataset_provenance=self._dataset_provenance(
-                filepath, df, horizon=horizon
-            ),
+            dataset_provenance=provenance,
             feature_names=feature_names,
-            metadata=metadata,
+            metadata=complete_metadata,
         )
 
     def bootstrap_revalidate(
@@ -303,52 +414,14 @@ class ForexIntegratedPipeline:
             }
 
         def train_candidate(_symbol: str, _timeframe: str, _context: dict) -> dict:
-            from forex.prediction.roadmap_v_integration import run_quality_gate
-            from forex.prediction.xgb_trainer import wfv_quality_passed
-
-            approved, quality_report = run_quality_gate(
+            return self._train_quality_candidate(
                 df,
-                pair=symbol,
-                timeframe=PREDICTION_TIMEFRAME,
-                verbose=False,
+                symbol=symbol,
+                horizon=horizon,
+                rr_ratio=rr_ratio,
+                dataset_provenance=provenance,
+                promotion_type="bootstrap_revalidation",
             )
-            if not approved:
-                score = getattr(quality_report, "global_score", "unknown")
-                raise ValueError(f"QUALITY_GATE: dataset rejected (score={score})")
-
-            builder = DatasetBuilder(df)
-            X, y = builder.build(horizon=horizon, rr_ratio=rr_ratio)
-            if len(X) < 300:
-                raise ValueError("QUALITY_GATE: WFV requires at least 300 rows")
-            trainer, wfv_result, accuracy, precision = train_with_wfv(
-                X, y, pair=symbol, save=False, force=False
-            )
-            metadata = {
-                "accuracy": accuracy,
-                "precision": precision,
-                "wfv": wfv_result,
-                "eligibility": {
-                    "calibration_passed": bool(
-                        getattr(trainer, "calibration_sufficient", False)
-                    ),
-                    "validation_passed": bool(
-                        getattr(trainer, "validation_sufficient", False)
-                    ),
-                    "validation_precision": float(precision),
-                    "wfv_passed": bool(wfv_quality_passed(wfv_result)),
-                },
-                "promotion_type": "bootstrap_revalidation",
-            }
-            eligibility_error = manager._initial_eligibility_error(metadata)
-            if trainer.model is None or eligibility_error:
-                raise ValueError(
-                    f"QUALITY_GATE: {eligibility_error or 'MODEL_NOT_TRAINED'}"
-                )
-            return {
-                "model": trainer.model,
-                "feature_names": list(X.columns),
-                "metadata": metadata,
-            }
 
         result = manager.execute_retrain(
             run["run_id"],
@@ -367,6 +440,94 @@ class ForexIntegratedPipeline:
             "quality_gate_failed": "QUALITY_GATE:" in error,
             "error": error,
             "eligibility": audit,
+        }
+
+    def manual_quality_retrain(
+        self,
+        *,
+        pair: str,
+        request_id: str,
+        timeframe: str = PREDICTION_TIMEFRAME,
+        manager=None,
+    ) -> dict:
+        """Run one deliberate quality retrain against an immutable MTF snapshot."""
+        from forex.prediction.retrain_manager import RetrainManager
+
+        database = getattr(self, "closed_loop_database", None)
+        if manager is None:
+            manager = (
+                RetrainManager(database=database, storage=self.storage)
+                if database is not None
+                else RetrainManager(storage=self.storage)
+            )
+        run = manager.ensure_manual_quality_retrain(
+            pair,
+            request_id=request_id,
+            timeframe=timeframe,
+        )
+
+        def train_candidate(symbol: str, _timeframe: str, context: dict) -> dict:
+            provenance = context["dataset_provenance"]
+            snapshot = provenance["snapshot"]
+            manager.validate_training_snapshot(snapshot)
+            datasets = snapshot["datasets"]
+            frame = _load(
+                datasets["H1"]["canonical_path"],
+                pair=symbol,
+                path_h4=datasets["H4"]["canonical_path"],
+                path_d1=datasets["D1"]["canonical_path"],
+            )
+            manager.validate_training_snapshot(snapshot)
+            frame = build_features(frame)
+            horizon, rr_ratio = self._pair_params(symbol)
+            return self._train_quality_candidate(
+                frame,
+                symbol=symbol,
+                horizon=horizon,
+                rr_ratio=rr_ratio,
+                dataset_provenance=provenance,
+                promotion_type="manual_quality_retrain",
+            )
+
+        result = manager.execute_retrain(
+            run["run_id"],
+            train_candidate,
+            validator=lambda model: getattr(model, "sufficient", True) is True,
+        )
+        audit = manager.audit_pair_model(pair)
+        error = result.get("error") or ""
+        failed_gate = None
+        for gate in (
+            "WFV_GATE",
+            "CALIBRATION_GATE",
+            "VALIDATION_GATE",
+            "MODEL_VALID_GATE",
+            "PRECISION_EVIDENCE_MISSING",
+            "PRECISION_EVIDENCE_MISMATCH",
+            "DATASET_PROVENANCE_MISMATCH",
+            "DATASET_SNAPSHOT_CONFLICT",
+            "SOURCE_ALIAS_CONFLICT",
+            "QUALITY_GATE",
+        ):
+            if gate in error:
+                failed_gate = gate
+                break
+        return {
+            "ok": bool(result["status"] == "PROMOTED" and audit.get("eligible")),
+            "run_id": result["run_id"],
+            "request_id": result.get("request_id") or request_id,
+            "symbol": result["symbol"],
+            "trigger": result["trigger"],
+            "status": result["status"],
+            "model_deployed": bool(
+                result["status"] == "PROMOTED" and audit.get("eligible")
+            ),
+            "source_sha256": result.get("source_model_sha256"),
+            "candidate_path": result.get("artifact_path"),
+            "candidate_sha256": result.get("artifact_sha256"),
+            "eligibility": audit,
+            "failed_gate": failed_gate,
+            "error": error,
         }
 
     def _model_identity(self, pair: str) -> str | None:
@@ -402,6 +563,7 @@ class ForexIntegratedPipeline:
                     "error": f"Quality gate rechazado (score={_qr.global_score:.0f}/100). "
                              f"Críticos: {_qr.critical_count}. {_qr.recommendation}"
                 }
+            quality_gate = _quality_gate_metadata(_approved, _qr)
         except Exception as exc:
             logger.error(
                 "V.5 Quality Gate no pudo verificar %s: %s. Entrenamiento bloqueado.",
@@ -461,10 +623,12 @@ class ForexIntegratedPipeline:
                     feature_names=list(X.columns),
                     horizon=horizon,
                     metadata={
+                        "quality_gate": quality_gate,
                         "accuracy": acc,
                         "precision": prec,
                         "wfv": wfv_r,
                         "eligibility": {
+                            "quality_gate_passed": True,
                             "calibration_passed": bool(
                                 getattr(trainer, "calibration_sufficient", False)
                             ),
@@ -473,6 +637,9 @@ class ForexIntegratedPipeline:
                             ),
                             "validation_precision": float(prec),
                             "wfv_passed": True,
+                            "model_valid": bool(
+                                getattr(trainer, "model_valid", False)
+                            ),
                         },
                     },
                 )
@@ -869,6 +1036,23 @@ class ForexIntegratedPipeline:
 
         storage = self.storage
 
+        try:
+            from forex.prediction.roadmap_v_integration import run_quality_gate
+
+            multi_approved, multi_report = run_quality_gate(
+                df,
+                pair=pair,
+                timeframe=PREDICTION_TIMEFRAME,
+                verbose=False,
+            )
+            multi_quality_gate = _quality_gate_metadata(
+                multi_approved, multi_report
+            )
+        except Exception as exc:
+            return {"error": f"Quality gate no disponible: {exc}"}
+        if not multi_approved:
+            return {"error": "Quality gate rechazado para multi-horizon"}
+
         votes       = []
         horizons    = [5, 10, 20]
         _, rr_ratio = self._pair_params(pair)
@@ -911,11 +1095,13 @@ class ForexIntegratedPipeline:
                         feature_names=list(X.columns),
                         horizon=h,
                         metadata={
+                            "quality_gate": multi_quality_gate,
                             "model_name": model_name,
                             "accuracy": horizon_acc,
                             "precision": horizon_prec,
                             "wfv": horizon_wfv,
                             "eligibility": {
+                                "quality_gate_passed": True,
                                 "calibration_passed": bool(
                                     getattr(trainer, "calibration_sufficient", False)
                                 ),
@@ -924,6 +1110,9 @@ class ForexIntegratedPipeline:
                                 ),
                                 "validation_precision": float(horizon_prec),
                                 "wfv_passed": True,
+                                "model_valid": bool(
+                                    getattr(trainer, "model_valid", False)
+                                ),
                             },
                         },
                     )
@@ -1042,42 +1231,17 @@ class ForexIntegratedPipeline:
         best  = tuner.tune(X_tr, y_tr, X_val, y_val, n_trials=n_trials)
 
         trainer, wfv_r, acc, prec = train_with_wfv(X, y, pair=pair, save=False)
-        deployed = bool(
-            wfv_r.get("wfv_passed", False)
-            and trainer.model is not None
-            and getattr(trainer, "model_valid", False)
-        )
-        if deployed:
-            promotion = self._promote_initial_training(
-                trainer.model,
-                pair=pair,
-                filepath=filepath,
-                df=df,
-                feature_names=list(X.columns),
-                horizon=hz,
-                metadata={
-                    "accuracy": acc,
-                    "precision": prec,
-                    "wfv": wfv_r,
-                    "tuning_trials": n_trials,
-                    "eligibility": {
-                        "calibration_passed": bool(
-                            getattr(trainer, "calibration_sufficient", False)
-                        ),
-                        "validation_passed": bool(
-                            getattr(trainer, "validation_sufficient", False)
-                        ),
-                        "validation_precision": float(prec),
-                        "wfv_passed": True,
-                    },
-                },
-            )
-            deployed = promotion.get("status") == "PROMOTED"
+        # Tuning is diagnostic/parameter generation only.  Production aliases
+        # are published exclusively by train() or explicit retrain contracts.
+        deployed = False
         wfv_r["model_deployed"] = deployed
         self.predictor.invalidate_cache(pair=pair)
 
-        X_pred = DatasetBuilder(df).predict_features(n_rows=1)
-        signal = self.predictor.signal(X_pred, pair=pair) if len(X_pred) > 0 else {}
+        signal = {}
+        if self.storage.latest_exists(pair=pair):
+            X_pred = DatasetBuilder(df).predict_features(n_rows=1)
+            if len(X_pred) > 0:
+                signal = self.predictor.signal(X_pred, pair=pair)
 
         return {
             "type":      "tune_complete",
@@ -1087,6 +1251,7 @@ class ForexIntegratedPipeline:
             "accuracy":  round(acc,  4),
             "precision": round(prec, 4),
             "wfv":       wfv_r,
+            "model_deployed": False,
             "signal":    signal,
         }
 

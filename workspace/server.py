@@ -1717,7 +1717,12 @@ class _RetrainBody(BaseModel):
 
 @app.post("/api/retrain/force")
 def retrain_force(body: _RetrainBody) -> JSONResponse:
-    """Fuerza reentrenamiento de un par en background (V.13)."""
+    """Legacy-named full run that cannot bypass production promotion gates.
+
+    The route name remains for compatibility and is semantically misleading:
+    tune is diagnostic-only, while train can publish solely through the full
+    RetrainManager eligibility contract.
+    """
     try:
         pair = _normalized_asset(body.pair)
         tf = _normalized_timeframe(body.timeframe)

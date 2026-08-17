@@ -18,12 +18,52 @@ from scheduler.run_state import is_scheduler_run_stale
 FIXED_NOW = datetime(2026, 8, 16, 6, 0, tzinfo=timezone.utc)
 
 
+def _eligible_result(symbol, timeframe, context):
+    provenance = context["dataset_provenance"]
+    return {
+        "model": SimpleNamespace(version="eligible", sufficient=True),
+        "metadata": {
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "promotion_type": context["trigger"],
+            "dataset_provenance_sha256": (
+                RetrainManager.dataset_provenance_sha256(provenance)
+            ),
+            "quality_gate": {
+                "passed": True,
+                "approved": True,
+                "score": 90.0,
+            },
+            "precision": 0.70,
+            "wfv": {
+                "folds": [{"fold": 1, "precision": 0.70}],
+                "avg_precision": 0.70,
+                "median_precision": 0.70,
+                "wfv_passed": True,
+            },
+            "eligibility": {
+                "quality_gate_passed": True,
+                "wfv_passed": True,
+                "calibration_passed": True,
+                "validation_passed": True,
+                "validation_precision": 0.70,
+                "model_valid": True,
+            },
+        },
+    }
+
+
 def _legacy_alias(monkeypatch, manager: RetrainManager, storage: ModelStorage):
     with monkeypatch.context() as patch:
         patch.setattr(
             RetrainManager,
             "_initial_eligibility_error",
             staticmethod(lambda _metadata: ""),
+        )
+        patch.setattr(
+            RetrainManager,
+            "_production_eligibility_error",
+            classmethod(lambda _cls, *_args, **_kwargs: ""),
         )
         manager.promote_initial_model(
             SimpleNamespace(version="legacy", sufficient=True),
@@ -73,7 +113,7 @@ def test_stale_running_bootstrap_reuses_identity_and_runs_normally(monkeypatch, 
     assert recovered["status"] == "PENDING"
     promoted = manager.execute_retrain(
         recovered["run_id"],
-        lambda *_args: SimpleNamespace(version="replacement", sufficient=True),
+        _eligible_result,
         validator=lambda model: model.sufficient is True,
     )
     assert promoted["status"] == "PROMOTED"
@@ -300,7 +340,7 @@ def test_readiness_accepts_integrity_valid_promoted_eligible_model(tmp_path):
     })
     promoted = manager.execute_retrain(
         run["run_id"],
-        lambda *_args: SimpleNamespace(version="eligible", sufficient=True),
+        _eligible_result,
         validator=lambda model: model.sufficient is True,
     )
     assert promoted["status"] == "PROMOTED"

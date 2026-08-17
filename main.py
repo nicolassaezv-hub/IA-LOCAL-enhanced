@@ -362,7 +362,7 @@ def _forex_predict_multi(csv_paths: list):
 
 
 def _forex_tune(csv_path: str):
-    """Run Optuna hyperparameter search (~50 trials) then auto-train."""
+    """Run Optuna and diagnostic WFV without publishing a production alias."""
     from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
     print(Fore.CYAN + f"\n[ASTRA] Optuna Hyperparameter Search on: {csv_path}" + Style.RESET_ALL)
     print(Fore.YELLOW + "  This takes 5–15 min. Best params will be saved and auto-loaded next train." + Style.RESET_ALL)

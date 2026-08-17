@@ -111,13 +111,32 @@ def _manager(tmp_path, database, *, minimum=2):
     return manager, storage
 
 
-def _initial_eligibility_metadata() -> dict:
+def _production_eligibility_metadata(
+    dataset_provenance: dict,
+    *,
+    symbol: str = "EURUSD",
+    trigger: str = "initial_training",
+) -> dict:
     return {
+        "symbol": symbol,
+        "timeframe": "H1",
+        "promotion_type": trigger,
+        "dataset_provenance_sha256": (
+            RetrainManager.dataset_provenance_sha256(dataset_provenance)
+        ),
+        "quality_gate": {
+            "passed": True,
+            "approved": True,
+            "score": 90.0,
+        },
+        "precision": 0.70,
         "eligibility": {
+            "quality_gate_passed": True,
             "calibration_passed": True,
             "validation_passed": True,
             "validation_precision": 0.70,
             "wfv_passed": True,
+            "model_valid": True,
         },
         "wfv": {
             "folds": [{"fold": 1, "precision": 0.70}],
@@ -128,14 +147,30 @@ def _initial_eligibility_metadata() -> dict:
     }
 
 
+def _eligible_training_result(version=2):
+    def train(symbol, timeframe, context):
+        assert timeframe == "H1"
+        return {
+            "model": {"version": version},
+            "metadata": _production_eligibility_metadata(
+                context["dataset_provenance"],
+                symbol=symbol,
+                trigger=context["trigger"],
+            ),
+        }
+
+    return train
+
+
 def _pending_run(tmp_path, database, *, minimum=2):
     _seed_finalized_outcomes(database, minimum)
     manager, storage = _manager(tmp_path, database, minimum=minimum)
+    initial_provenance = {"registry_id": 1, "snapshot": "initial-v1"}
     initial = manager.promote_initial_model(
         {"version": 1},
         pair="EURUSD",
-        dataset_provenance={"registry_id": 1, "snapshot": "initial-v1"},
-        metadata=_initial_eligibility_metadata(),
+        dataset_provenance=initial_provenance,
+        metadata=_production_eligibility_metadata(initial_provenance),
     )
     assert initial["status"] == "PROMOTED"
     run = manager.ensure_pending_from_outcomes(
@@ -152,12 +187,13 @@ def test_pair_specific_load_never_falls_back_to_generic_latest(tmp_path):
     storage.save_model(
         {"symbol": "GENERIC_EURUSD"}, name="legacy", version="generic"
     )
+    provenance = {"path": "EURUSD_H1.csv"}
     manager.promote_initial_model(
         {"symbol": "EURUSD"},
         pair="EURUSD",
-        dataset_provenance={"path": "EURUSD_H1.csv"},
+        dataset_provenance=provenance,
         feature_names=["close"],
-        metadata=_initial_eligibility_metadata(),
+        metadata=_production_eligibility_metadata(provenance),
     )
 
     assert storage.load_model("EURUSD") == {"symbol": "EURUSD"}
@@ -176,11 +212,12 @@ def test_pipeline_model_identity_never_crosses_symbol(tmp_path):
     storage.save_model(
         {"symbol": "GENERIC_EURUSD"}, name="legacy", version="generic-eurusd"
     )
+    provenance = {"path": "EURUSD_H1.csv"}
     manager.promote_initial_model(
         {"symbol": "EURUSD"},
         pair="EURUSD",
-        dataset_provenance={"path": "EURUSD_H1.csv"},
-        metadata=_initial_eligibility_metadata(),
+        dataset_provenance=provenance,
+        metadata=_production_eligibility_metadata(provenance),
     )
     from forex.prediction.integrated_pipeline import ForexIntegratedPipeline
 
@@ -205,11 +242,12 @@ def test_pair_promotion_requires_canonical_provenance_boundary(tmp_path):
     assert not (storage.base_dir / "latest_EURUSD.pkl").exists()
     assert database.get_model_provenance() == []
 
+    provenance_evidence = {"path": "EURUSD_H1.csv", "rows": 2000}
     run = manager.promote_initial_model(
         {"version": 1},
         pair="EURUSD",
-        dataset_provenance={"path": "EURUSD_H1.csv", "rows": 2000},
-        metadata=_initial_eligibility_metadata(),
+        dataset_provenance=provenance_evidence,
+        metadata=_production_eligibility_metadata(provenance_evidence),
     )
 
     latest = storage.base_dir / "latest_EURUSD.pkl"
@@ -577,7 +615,7 @@ def test_validation_failure_preserves_previous_latest(tmp_path):
     previous = latest.read_bytes()
 
     result = manager.execute_retrain(
-        run["run_id"], lambda *_args: {"model": {"version": 2}},
+        run["run_id"], _eligible_training_result(),
         validator=lambda _model: False,
     )
 
@@ -596,7 +634,7 @@ def test_promotion_failure_preserves_latest_and_never_claims_success(tmp_path, m
 
     monkeypatch.setattr(storage, "promote_artifact", fail_promotion)
     result = manager.execute_retrain(
-        run["run_id"], lambda *_args: {"model": {"version": 2}}
+        run["run_id"], _eligible_training_result()
     )
 
     assert result["status"] == "FAILED"
@@ -618,7 +656,7 @@ def test_db_finalize_failure_rolls_back_promoted_alias(tmp_path, monkeypatch):
         lambda *_args, **_kwargs: (_ for _ in ()).throw(sqlite3.OperationalError("db down")),
     )
     result = manager.execute_retrain(
-        run["run_id"], lambda *_args: {"model": {"version": 2}}
+        run["run_id"], _eligible_training_result()
     )
 
     assert result["status"] == "FAILED"
@@ -634,7 +672,7 @@ def test_successful_retrain_validates_promotes_and_persists_provenance(tmp_path)
 
     result = manager.execute_retrain(
         run["run_id"],
-        lambda *_args: {"model": {"version": 2}, "metadata": {"accuracy": 0.7}},
+        _eligible_training_result(),
         validator=lambda model: model["version"] == 2,
     )
 
@@ -650,7 +688,7 @@ def test_model_provenance_links_source_dataset_outcomes_and_run(tmp_path):
     database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
     manager, _storage, run = _pending_run(tmp_path, database)
     result = manager.execute_retrain(
-        run["run_id"], lambda *_args: {"model": {"version": 2}}
+        run["run_id"], _eligible_training_result()
     )
 
     provenance = database.get_model_provenance("EURUSD")[0]
@@ -664,7 +702,7 @@ def test_model_provenance_links_source_dataset_outcomes_and_run(tmp_path):
 def test_promoted_db_record_with_missing_latest_is_detected_fail_closed(tmp_path):
     database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
     manager, storage, run = _pending_run(tmp_path, database)
-    manager.execute_retrain(run["run_id"], lambda *_args: {"model": {"version": 2}})
+    manager.execute_retrain(run["run_id"], _eligible_training_result())
     (storage.base_dir / "latest_EURUSD.pkl").unlink()
 
     report = manager.reconcile()
@@ -844,7 +882,7 @@ def test_concurrent_duplicate_retrain_attempt_trains_once(tmp_path):
 
     def train(*_args):
         calls.append("trained")
-        return {"model": {"version": 2}}
+        return _eligible_training_result()(*_args)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         results = list(executor.map(

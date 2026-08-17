@@ -199,6 +199,7 @@ class SQLiteDatabase(DatabaseAdapter):
             CREATE TABLE IF NOT EXISTS retrain_runs (
                 run_id TEXT PRIMARY KEY,
                 evidence_key TEXT UNIQUE NOT NULL,
+                request_id TEXT,
                 symbol TEXT NOT NULL,
                 timeframe TEXT NOT NULL,
                 trigger TEXT NOT NULL,
@@ -222,6 +223,7 @@ class SQLiteDatabase(DatabaseAdapter):
             CREATE TABLE IF NOT EXISTS model_provenance (
                 model_id TEXT PRIMARY KEY,
                 retrain_run_id TEXT UNIQUE NOT NULL,
+                trigger TEXT,
                 symbol TEXT NOT NULL,
                 timeframe TEXT NOT NULL,
                 artifact_path TEXT NOT NULL,
@@ -296,6 +298,10 @@ class SQLiteDatabase(DatabaseAdapter):
         self._add_columns(c, "retrain_runs", {
             "owner_token": "TEXT",
             "heartbeat_at": "TEXT",
+            "request_id": "TEXT",
+        })
+        self._add_columns(c, "model_provenance", {
+            "trigger": "TEXT",
         })
         c.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_predictions_uid "
@@ -312,6 +318,17 @@ class SQLiteDatabase(DatabaseAdapter):
         c.execute(
             "CREATE INDEX IF NOT EXISTS idx_outcomes_finalized "
             "ON outcomes(status, symbol, timeframe, id)"
+        )
+        c.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_manual_retrain_request "
+            "ON retrain_runs(symbol, timeframe, trigger, request_id) "
+            "WHERE trigger='manual_quality_retrain' AND request_id IS NOT NULL"
+        )
+        c.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_manual_retrain_active "
+            "ON retrain_runs(symbol, timeframe) "
+            "WHERE trigger='manual_quality_retrain' "
+            "AND status IN ('PENDING','RUNNING','VALIDATED')"
         )
 
     def get_supported_symbols(self) -> list[dict]:
@@ -667,13 +684,14 @@ class SQLiteDatabase(DatabaseAdapter):
         with self._connection() as c:
             c.execute("""
                 INSERT INTO retrain_runs (
-                    run_id, evidence_key, symbol, timeframe, trigger, status,
+                    run_id, evidence_key, request_id, symbol, timeframe, trigger, status,
                     source_model_path, source_model_sha256, dataset_provenance,
                     outcome_ids, last_outcome_id, created_at, updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(evidence_key) DO NOTHING
             """, (
-                run["run_id"], run["evidence_key"], run["symbol"], run["timeframe"],
+                run["run_id"], run["evidence_key"], run.get("request_id"),
+                run["symbol"], run["timeframe"],
                 run["trigger"], run.get("status", "PENDING"),
                 run.get("source_model_path"), run.get("source_model_sha256"),
                 json.dumps(run.get("dataset_provenance") or {}, sort_keys=True),
@@ -682,6 +700,66 @@ class SQLiteDatabase(DatabaseAdapter):
             ))
             row = c.execute(
                 "SELECT * FROM retrain_runs WHERE evidence_key=?", (run["evidence_key"],)
+            ).fetchone()
+        return dict(row)
+
+    def create_manual_quality_retrain_run(self, run: dict) -> dict:
+        """Atomically enforce idempotency and one active run per symbol/H1."""
+        trigger = "manual_quality_retrain"
+        if run.get("trigger") != trigger or not run.get("request_id"):
+            raise ValueError("manual quality retrain requires trigger and request_id")
+        with self._connection() as c:
+            c.execute("BEGIN IMMEDIATE")
+            existing_request = c.execute(
+                """
+                SELECT * FROM retrain_runs
+                WHERE symbol=? AND timeframe=? AND trigger=? AND request_id=?
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (
+                    run["symbol"], run["timeframe"], trigger, run["request_id"],
+                ),
+            ).fetchone()
+            if existing_request is not None:
+                if existing_request["evidence_key"] != run["evidence_key"]:
+                    raise PersistenceConflictError(
+                        "manual quality retrain request_id conflicts with different evidence"
+                    )
+                return dict(existing_request)
+
+            active = c.execute(
+                """
+                SELECT * FROM retrain_runs
+                WHERE symbol=? AND timeframe=?
+                  AND status IN ('PENDING','RUNNING','VALIDATED')
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (run["symbol"], run["timeframe"]),
+            ).fetchone()
+            if active is not None:
+                raise PersistenceConflictError(
+                    "an active retrain already exists for symbol/timeframe: "
+                    f"{active['run_id']}"
+                )
+
+            c.execute("""
+                INSERT INTO retrain_runs (
+                    run_id, evidence_key, request_id, symbol, timeframe, trigger,
+                    status, source_model_path, source_model_sha256,
+                    dataset_provenance, outcome_ids, last_outcome_id,
+                    created_at, updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                run["run_id"], run["evidence_key"], run["request_id"],
+                run["symbol"], run["timeframe"], run["trigger"],
+                run.get("status", "PENDING"), run.get("source_model_path"),
+                run.get("source_model_sha256"),
+                json.dumps(run.get("dataset_provenance") or {}, sort_keys=True),
+                json.dumps(run.get("outcome_ids") or []), run.get("last_outcome_id"),
+                run["created_at"], run["updated_at"],
+            ))
+            row = c.execute(
+                "SELECT * FROM retrain_runs WHERE run_id=?", (run["run_id"],)
             ).fetchone()
         return dict(row)
 
@@ -791,14 +869,15 @@ class SQLiteDatabase(DatabaseAdapter):
                 )
             c.execute("""
                 INSERT INTO model_provenance (
-                    model_id, retrain_run_id, symbol, timeframe, artifact_path,
+                    model_id, retrain_run_id, trigger, symbol, timeframe, artifact_path,
                     artifact_sha256, source_model_path, source_model_sha256,
                     dataset_provenance, outcome_ids, trained_at, validated_at,
                     promoted_at, status
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(retrain_run_id) DO NOTHING
             """, (
-                provenance["model_id"], run_id, provenance["symbol"],
+                provenance["model_id"], run_id, provenance.get("trigger"),
+                provenance["symbol"],
                 provenance["timeframe"], provenance["artifact_path"],
                 provenance["artifact_sha256"], provenance.get("source_model_path"),
                 provenance.get("source_model_sha256"),
