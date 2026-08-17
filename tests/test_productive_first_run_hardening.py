@@ -1084,6 +1084,73 @@ def test_calibration_success_does_not_override_failed_validation(monkeypatch):
     assert trainer.model_valid is False
 
 
+def test_clamped_calibration_reports_metrics_at_effective_threshold(capsys):
+    import numpy as np
+    from forex.prediction.xgb_trainer import CalibratedEnsemble
+
+    class Base:
+        @staticmethod
+        def predict_proba(X):
+            probabilities = np.asarray(X["probability"], dtype=float)
+            return np.column_stack([1.0 - probabilities, probabilities])
+
+    X_cal = pd.DataFrame({"probability": [0.8] * 10 + [0.9]})
+    y_cal = pd.Series([1] * 9 + [0, 1])
+
+    calibrated = CalibratedEnsemble(Base()).fit(X_cal, y_cal)
+    output = capsys.readouterr().out
+
+    assert "Umbral óptimo 1.000 > 0.9" in output
+    assert calibrated.threshold == pytest.approx(0.90)
+    assert calibrated.precision_at_threshold == pytest.approx(10 / 11)
+    assert calibrated.precision_at_threshold != pytest.approx(1.0)
+    assert calibrated.recall_at_threshold == pytest.approx(1.0)
+    assert calibrated.recall_at_threshold != pytest.approx(1 / 10)
+    assert calibrated.signals_at_threshold == 11
+    assert "precision=90.91% recall=100.00% señales=11/11" in output
+    assert "CALIBRACIÓN APROBADA" in output
+    assert "MODELO VÁLIDO" not in output
+    assert calibrated.sufficient is True
+
+
+def test_clamped_calibration_rejects_insufficient_effective_metrics(capsys):
+    import numpy as np
+    from forex.prediction.xgb_trainer import CalibratedEnsemble
+
+    class Base:
+        @staticmethod
+        def predict_proba(X):
+            probabilities = np.asarray(X["probability"], dtype=float)
+            return np.column_stack([1.0 - probabilities, probabilities])
+
+    class IdentityCalibration:
+        @staticmethod
+        def fit(_probabilities, _targets):
+            return None
+
+        @staticmethod
+        def predict(probabilities):
+            return probabilities
+
+    X_cal = pd.DataFrame({
+        "probability": [1.0] + [0.1] * 9 + [0.9, 0.9],
+    })
+    y_cal = pd.Series([1] * 10 + [0, 0])
+    calibrated = CalibratedEnsemble(Base())
+    calibrated.cal_1 = IdentityCalibration()
+
+    calibrated.fit(X_cal, y_cal)
+    output = capsys.readouterr().out
+
+    assert "Umbral óptimo 1.000 > 0.9" in output
+    assert calibrated.threshold == pytest.approx(0.90)
+    assert calibrated.precision_at_threshold == pytest.approx(1 / 3)
+    assert calibrated.recall_at_threshold == pytest.approx(1 / 10)
+    assert calibrated.signals_at_threshold == 3
+    assert calibrated.sufficient is False
+    assert "← CALIBRACIÓN NO APROBADA" in output
+
+
 def test_loopback_api_auth_never_returns_or_logs_secret(monkeypatch):
     import deployment.pipeline_report as pipeline_report
     import requests

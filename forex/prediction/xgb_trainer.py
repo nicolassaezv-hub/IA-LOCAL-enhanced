@@ -22,6 +22,7 @@ from sklearn.metrics import (
     accuracy_score,
     classification_report,
     precision_score,
+    recall_score,
     f1_score,
     precision_recall_curve,
 )
@@ -131,7 +132,20 @@ class CalibratedEnsemble:
         self.threshold               = 0.5
         self.classes_                = np.array([0, 1])
         self.precision_at_threshold  = 0.0
+        self.recall_at_threshold     = 0.0
+        self.signals_at_threshold    = 0
         self.sufficient              = False
+
+    def _set_reported_metrics(self, y_true, probabilities) -> None:
+        """Report calibration metrics at the threshold that will be applied."""
+        predictions = (probabilities >= self.threshold).astype(int)
+        self.precision_at_threshold = float(
+            precision_score(y_true, predictions, zero_division=0)
+        )
+        self.recall_at_threshold = float(
+            recall_score(y_true, predictions, zero_division=0)
+        )
+        self.signals_at_threshold = int(predictions.sum())
 
     def fit(self, X_cal, y_cal):
         y_arr = y_cal.values if hasattr(y_cal, "values") else np.array(y_cal)
@@ -146,7 +160,9 @@ class CalibratedEnsemble:
         # Estrategia: entre los umbrales con prec>=65% Y recall>=5%,
         # elegir el que maximiza precision (más conservador = más confiable).
         # Si no hay ninguno, tomar el de mayor precision con recall>5%.
-        MIN_RECALL = 0.05   # al menos 5% de señales para que sea útil
+        # Recall mide positivos reales recuperados; no equivale a cobertura
+        # ni a porcentaje de señales emitidas.
+        MIN_RECALL = 0.05
         mask_prec  = prec_arr >= MIN_PRECISION_THRESHOLD
         mask_rec   = rec_arr[:-1] >= MIN_RECALL
         mask       = mask_prec & mask_rec
@@ -156,24 +172,42 @@ class CalibratedEnsemble:
             raw_thresh = float(thresh_arr[mask][best_idx])
             # Clamp: threshold > 0.90 significa pocos datos en cal set → 
             # el calibrador no tiene suficiente resolución y bloquearía todas las señales.
-            # En ese caso, usar 0.85 como techo conservador pero funcional.
+            # En ese caso, usar 0.90 como techo conservador pero funcional.
             MAX_THRESHOLD = 0.90
             if raw_thresh > MAX_THRESHOLD:
                 print(f"[CALIBRATOR] ⚠ Umbral óptimo {raw_thresh:.3f} > {MAX_THRESHOLD} (cal set pequeño) → clamped a {MAX_THRESHOLD}")
                 raw_thresh = MAX_THRESHOLD
-            self.threshold               = raw_thresh
-            self.precision_at_threshold  = float(prec_arr[mask][best_idx])
-            self.sufficient              = True
-            n_signals = int((rec_arr[:-1][mask][best_idx]) * len(y_arr))
-            print(f"[CALIBRATOR] ✓ Umbral {self.threshold:.3f} → precision={self.precision_at_threshold:.2%} ← MODELO VÁLIDO")
+            self.threshold = raw_thresh
+            self._set_reported_metrics(y_arr, cal_probs)
+            self.sufficient = bool(
+                self.precision_at_threshold >= MIN_PRECISION_THRESHOLD
+                and self.recall_at_threshold >= MIN_RECALL
+            )
+            calibration_status = (
+                "APROBADA" if self.sufficient else "NO APROBADA"
+            )
+            calibration_marker = "✓" if self.sufficient else "⚠"
+            print(
+                f"[CALIBRATOR] {calibration_marker} Umbral {self.threshold:.3f} → "
+                f"precision={self.precision_at_threshold:.2%} "
+                f"recall={self.recall_at_threshold:.2%} "
+                f"señales={self.signals_at_threshold}/{len(y_arr)} "
+                f"← CALIBRACIÓN {calibration_status}"
+            )
         else:
             # Fallback: máxima precisión con algo de recall
             mask_rec_only = mask_rec if mask_rec.any() else np.ones(len(prec_arr), dtype=bool)
             best_idx = np.argmax(prec_arr[mask_rec_only])
-            self.threshold               = float(thresh_arr[mask_rec_only][best_idx])
-            self.precision_at_threshold  = float(prec_arr[mask_rec_only][best_idx])
-            self.sufficient              = False
-            print(f"[CALIBRATOR] ⚠ Mejor precision: {self.precision_at_threshold:.2%} — bajo mínimo {MIN_PRECISION_THRESHOLD:.0%}")
+            self.threshold = float(thresh_arr[mask_rec_only][best_idx])
+            self._set_reported_metrics(y_arr, cal_probs)
+            self.sufficient = False
+            print(
+                f"[CALIBRATOR] ⚠ Mejor resultado al umbral {self.threshold:.3f}: "
+                f"precision={self.precision_at_threshold:.2%} "
+                f"recall={self.recall_at_threshold:.2%} "
+                f"señales={self.signals_at_threshold}/{len(y_arr)} "
+                f"— bajo mínimo {MIN_PRECISION_THRESHOLD:.0%}"
+            )
         return self
 
     def predict_proba(self, X) -> np.ndarray:
