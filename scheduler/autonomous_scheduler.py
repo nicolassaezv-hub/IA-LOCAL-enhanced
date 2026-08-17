@@ -595,6 +595,111 @@ def detect_new_symbols(db: DatabaseAdapter) -> list:
     return generated
 
 
+def _evaluate_h1_model_gate(
+    db: DatabaseAdapter,
+    symbol: str,
+    timeframe: str,
+) -> dict:
+    """Evaluate model eligibility after the cycle's dataset update attempt."""
+    if timeframe != PREDICTION_TIMEFRAME:
+        return {"prediction_eligible": False, "reason": "prediction_is_h1_only"}
+
+    bootstrap_revalidation = False
+    if hasattr(db, "get_retrain_runs"):
+        try:
+            from forex.prediction.retrain_manager import RetrainManager
+            from forex.prediction.model_storage import ModelStorage
+
+            manager = RetrainManager(
+                database=db,
+                storage=ModelStorage(PROJECT_ROOT / "models" / "forex"),
+            )
+            reconciliation = manager.reconcile()
+            symbol_issues = [
+                issue for issue in reconciliation["issues"]
+                if issue.get("symbol") == symbol
+            ]
+            audit = manager.audit_pair_model(symbol)
+            bootstrap_revalidation = (
+                len(symbol_issues) == 1
+                and symbol_issues[0].get("code")
+                == BOOTSTRAP_REVALIDATION_ISSUE
+                and audit.get("bootstrap_revalidation") is True
+            )
+            if symbol_issues and not bootstrap_revalidation:
+                logger.error(
+                    "Model provenance mismatch - blocking H1 prediction for %s",
+                    symbol,
+                )
+                return {
+                    "prediction_eligible": False,
+                    "reason": "model_provenance_reconciliation_failed",
+                    "issues": symbol_issues,
+                    "audit_reason": audit.get("reason"),
+                }
+            if not audit.get("eligible") and not bootstrap_revalidation:
+                logger.warning(
+                    "Model for %s is not production eligible - blocking H1 prediction: %s",
+                    symbol,
+                    audit.get("reason", "unknown"),
+                )
+                return {
+                    "prediction_eligible": False,
+                    "reason": "model_not_production_eligible",
+                    "audit_reason": audit.get("reason", "UNKNOWN"),
+                }
+            if bootstrap_revalidation:
+                logger.info(
+                    "Legacy alias restricted to bootstrap revalidation for %s",
+                    symbol,
+                )
+                return {
+                    "prediction_eligible": False,
+                    "bootstrap_revalidation": True,
+                    "reason": "bootstrap_revalidation_required",
+                    "audit_reason": audit.get("reason"),
+                }
+        except Exception as exc:
+            logger.error(
+                "Model provenance reconciliation failed closed for %s: %s",
+                symbol,
+                exc,
+            )
+            return {
+                "prediction_eligible": False,
+                "reason": "model_provenance_check_failed",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+
+    try:
+        from robustness.model_integrity_checker import check_model_before_cycle
+
+        if not check_model_before_cycle(symbol, timeframe):
+            logger.warning(
+                "Model for %s %s failed integrity check - prediction blocked",
+                symbol,
+                timeframe,
+            )
+            return {
+                "prediction_eligible": False,
+                "reason": "model_integrity_check_failed",
+            }
+    except Exception as exc:
+        logger.error(
+            "Model integrity check failed closed for %s %s: %s",
+            symbol,
+            timeframe,
+            exc,
+        )
+        return {
+            "prediction_eligible": False,
+            "reason": "model_integrity_check_error",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+    return {"prediction_eligible": True, "reason": "production_eligible"}
+
+
 def run_cycle(db: DatabaseAdapter, timeframe: str):
     """Update one timeframe and run a prediction only for the H1 cycle."""
     from scheduler.run_state import is_scheduler_run_stale, utc_timestamp
@@ -629,73 +734,6 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
 
     symbols = db.get_supported_symbols()
     symbols_processed = 0
-    bootstrap_only_symbols: set[str] = set()
-    provenance_blocked_symbols: set[str] = set()
-
-    # A promoted model is executable only while DB provenance and both file
-    # identities reconcile.  Ambiguous crash states block that symbol.
-    if timeframe == PREDICTION_TIMEFRAME and hasattr(db, "get_retrain_runs"):
-        try:
-            from forex.prediction.retrain_manager import RetrainManager
-            from forex.prediction.model_storage import ModelStorage
-
-            recovery_manager = RetrainManager(
-                database=db,
-                storage=ModelStorage(PROJECT_ROOT / "models" / "forex"),
-            )
-            recovery = recovery_manager.reconcile()
-            issues_by_symbol: dict[str, list[dict]] = {}
-            for issue in recovery["issues"]:
-                issue_symbol = issue.get("symbol")
-                if issue_symbol:
-                    issues_by_symbol.setdefault(issue_symbol, []).append(issue)
-            for issue_symbol, symbol_issues in issues_by_symbol.items():
-                audit = recovery_manager.audit_pair_model(issue_symbol)
-                bootstrap_allowed = (
-                    len(symbol_issues) == 1
-                    and symbol_issues[0].get("code")
-                    == BOOTSTRAP_REVALIDATION_ISSUE
-                    and audit.get("bootstrap_revalidation") is True
-                )
-                if bootstrap_allowed:
-                    bootstrap_only_symbols.add(issue_symbol)
-                else:
-                    provenance_blocked_symbols.add(issue_symbol)
-            if provenance_blocked_symbols:
-                logger.error(
-                    "Model provenance mismatch — blocking H1 prediction for %s",
-                    sorted(provenance_blocked_symbols),
-                )
-                symbols = [
-                    symbol for symbol in symbols
-                    if symbol["symbol_code"] not in provenance_blocked_symbols
-                ]
-            if bootstrap_only_symbols:
-                logger.info(
-                    "Legacy aliases restricted to bootstrap revalidation for %s",
-                    sorted(bootstrap_only_symbols),
-                )
-        except Exception as exc:
-            logger.error("Model provenance reconciliation failed closed: %s", exc)
-            symbols = []
-
-    # ── Model integrity check before executable prediction cycles ──
-    if timeframe == PREDICTION_TIMEFRAME:
-        try:
-            from robustness.model_integrity_checker import check_model_before_cycle
-            blocked_symbols = []
-            for sym in symbols:
-                code = sym["symbol_code"]
-                if code in bootstrap_only_symbols:
-                    continue
-                if not check_model_before_cycle(code, timeframe):
-                    blocked_symbols.append(code)
-                    logger.warning(f"Model for {code} {timeframe} failed integrity check — BLOCKED for this cycle")
-            if blocked_symbols:
-                symbols = [s for s in symbols if s["symbol_code"] not in blocked_symbols]
-                logger.info(f"Blocked {len(blocked_symbols)} symbols due to model issues: {blocked_symbols}")
-        except Exception as e:
-            logger.warning(f"Model integrity check skipped: {e}")
     predictions_generated = 0
     errors_count = 0
     results = []
@@ -704,10 +742,7 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
     new = detect_new_symbols(db)
     if new:
         logger.info(f"New symbol datasets generated: {len(new)}")
-        symbols = [
-            symbol for symbol in db.get_supported_symbols()
-            if symbol["symbol_code"] not in provenance_blocked_symbols
-        ]  # refresh without reintroducing fail-closed symbols
+        symbols = db.get_supported_symbols()
 
     # 2. Rolling update + prediction for each symbol
     for sym in symbols:
@@ -717,6 +752,30 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
         update_result = run_rolling_update(db, code, timeframe)
         results.append({"symbol": code, "update": update_result})
 
+        model_gate = None
+        if timeframe == PREDICTION_TIMEFRAME:
+            model_gate = _evaluate_h1_model_gate(db, code, timeframe)
+
+        if update_result.get("action") == "error":
+            errors_count += 1
+
+        if model_gate is not None and not (
+            model_gate.get("prediction_eligible")
+            or model_gate.get("bootstrap_revalidation")
+        ):
+            errors_count += 1
+            results.append({
+                "symbol": code,
+                "predict": {
+                    "action": "skip",
+                    **{
+                        key: value for key, value in model_gate.items()
+                        if key != "prediction_eligible"
+                    },
+                },
+            })
+            continue
+
         if (
             timeframe == PREDICTION_TIMEFRAME
             and update_result.get("action") in ("updated", "generated")
@@ -725,7 +784,7 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
             results.append({"symbol": code, "closed_loop": closed_loop_result})
             if closed_loop_result.get("action") == "error":
                 errors_count += 1
-            if code in bootstrap_only_symbols:
+            if model_gate and model_gate.get("bootstrap_revalidation"):
                 try:
                     from forex.prediction.retrain_manager import RetrainManager
                     from forex.prediction.model_storage import ModelStorage
@@ -751,6 +810,8 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
                     )
                     production_eligible = False
                 if not production_eligible:
+                    if closed_loop_result.get("action") != "error":
+                        errors_count += 1
                     logger.error(
                         "Bootstrap revalidation did not produce an eligible alias; "
                         "prediction remains blocked for %s",
@@ -770,8 +831,6 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
                 predictions_generated += 1
             elif pred_result.get("action") == "error":
                 errors_count += 1
-        elif update_result.get("action") == "error":
-            errors_count += 1
 
     # 3. Update scheduler run
     db.update_scheduler_run(run_id, {
@@ -837,12 +896,14 @@ def main():
     try:
         db = get_database()
     except Exception as exc:
-        if args.init:
-            print(json.dumps({
+        if args.init or args.timeframe:
+            payload = {
                 "ok": False,
-                "init": [],
                 "error": f"{type(exc).__name__}: {exc}",
-            }, indent=2, default=str))
+            }
+            if args.init:
+                payload["init"] = []
+            print(json.dumps(payload, indent=2, default=str))
             raise SystemExit(1)
         raise
 
@@ -889,8 +950,21 @@ def main():
         if tf not in TIMEFRAMES:
             print(json.dumps({"ok": False, "error": f"Invalid timeframe: {tf}. Must be H1, H4, or D1"}))
             sys.exit(1)
-        result = run_cycle(db, tf)
-        print(json.dumps({"ok": True, "cycle": result}, indent=2, default=str))
+        try:
+            result = run_cycle(db, tf)
+        except Exception as exc:
+            print(json.dumps({
+                "ok": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            }, indent=2, default=str))
+            raise SystemExit(1)
+        partial = int(result.get("errors_count", 0)) > 0
+        print(json.dumps({
+            "ok": not partial,
+            "cycle": result,
+        }, indent=2, default=str))
+        if partial:
+            raise SystemExit(2)
         return
 
     parser.print_help()

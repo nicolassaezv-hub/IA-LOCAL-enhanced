@@ -244,6 +244,12 @@ def _run_isolated_e2e_cycle(root: Path):
     with patch.dict(
         sys.modules,
         {"robustness.model_integrity_checker": integrity_module},
+    ), patch(
+        "forex.prediction.retrain_manager.RetrainManager.reconcile",
+        return_value={"issues": []},
+    ), patch(
+        "forex.prediction.retrain_manager.RetrainManager.audit_pair_model",
+        return_value={"eligible": True, "reason": "PRODUCTION_ELIGIBLE"},
     ), patch("scheduler.autonomous_scheduler.PROJECT_ROOT",root), patch(
         "scheduler.autonomous_scheduler.fetch_market_data",
         return_value=(new_data,"test"),

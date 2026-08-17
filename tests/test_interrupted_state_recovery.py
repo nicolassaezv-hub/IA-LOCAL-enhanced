@@ -349,3 +349,71 @@ def test_init_cli_exit_code_matches_deployment_result(
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is expected_ok
     assert payload["init"] == result["init_results"]
+
+
+@pytest.mark.parametrize(
+    ("errors_count", "expected_code", "expected_ok"),
+    [
+        (0, 0, True),
+        (3, 2, False),
+    ],
+)
+def test_timeframe_cli_exit_code_matches_cycle_errors(
+    monkeypatch, capsys, errors_count, expected_code, expected_ok
+):
+    from scheduler import autonomous_scheduler
+
+    cycle = {
+        "run_id": 42,
+        "timeframe": "H1",
+        "symbols_processed": 4,
+        "predictions_generated": 0,
+        "errors_count": errors_count,
+        "results": [{"symbol": "EURUSD", "update": {"action": "updated"}}],
+    }
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["autonomous_scheduler.py", "--timeframe", "H1"],
+    )
+    monkeypatch.setattr(autonomous_scheduler, "get_database", lambda: object())
+    monkeypatch.setattr(autonomous_scheduler, "run_cycle", lambda *_a: cycle)
+
+    if expected_code:
+        with pytest.raises(SystemExit) as exited:
+            autonomous_scheduler.main()
+        assert exited.value.code == expected_code
+    else:
+        autonomous_scheduler.main()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is expected_ok
+    assert payload["cycle"] == cycle
+
+
+def test_timeframe_cli_internal_exception_is_json_error_and_exit_one(
+    monkeypatch, capsys
+):
+    from scheduler import autonomous_scheduler
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["autonomous_scheduler.py", "--timeframe", "H1"],
+    )
+    monkeypatch.setattr(autonomous_scheduler, "get_database", lambda: object())
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_cycle",
+        lambda *_a: (_ for _ in ()).throw(RuntimeError("cycle persistence failed")),
+    )
+
+    with pytest.raises(SystemExit) as exited:
+        autonomous_scheduler.main()
+
+    assert exited.value.code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "ok": False,
+        "error": "RuntimeError: cycle persistence failed",
+    }

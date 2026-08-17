@@ -896,6 +896,10 @@ python scheduler/autonomous_scheduler.py --status
 python scheduler/autonomous_scheduler.py --add-symbol NZDUSD
 ```
 
+`--timeframe` devuelve JSON y usa códigos de salida operacionales: `0` cuando
+el ciclo termina sin errores, `2` cuando el ciclo queda `partial` y conserva su
+resultado completo, y `1` cuando una excepción interna impide completarlo.
+
 ---
 
 ### 5.7 -- Capa de persistencia desacoplada

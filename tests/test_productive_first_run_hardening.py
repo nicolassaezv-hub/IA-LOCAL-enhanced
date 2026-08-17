@@ -506,6 +506,161 @@ def test_run_cycle_bootstraps_legacy_alias_before_prediction(monkeypatch, tmp_pa
     ] == "PROMOTED"
 
 
+def test_h1_updates_all_active_symbols_before_model_eligibility_gate(
+    monkeypatch, tmp_path
+):
+    from robustness import model_integrity_checker
+    from scheduler import autonomous_scheduler
+
+    database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
+    symbols = ("EURUSD", "GBPUSD", "USDJPY", "AUDUSD")
+    for symbol in symbols:
+        database.add_symbol(symbol)
+
+    events = []
+    predictions = []
+
+    def audit(_manager, symbol):
+        events.append(("gate", symbol))
+        if symbol == "GBPUSD":
+            return {"eligible": False, "reason": "MODEL_NOT_DEPLOYED"}
+        return {"eligible": True, "reason": "PRODUCTION_ELIGIBLE"}
+
+    def update(_db, symbol, timeframe):
+        events.append(("update", symbol))
+        assert timeframe == "H1"
+        return {"action": "updated"}
+
+    def predict(_db, symbol, timeframe):
+        predictions.append(symbol)
+        return {"action": "predicted", "prediction": {"symbol": symbol}}
+
+    monkeypatch.setattr(autonomous_scheduler, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(autonomous_scheduler, "detect_new_symbols", lambda _db: [])
+    monkeypatch.setattr(autonomous_scheduler, "run_rolling_update", update)
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_closed_loop_maintenance",
+        lambda *_a, **_k: {"action": "maintained"},
+    )
+    monkeypatch.setattr(autonomous_scheduler, "run_prediction", predict)
+    monkeypatch.setattr(RetrainManager, "reconcile", lambda _self: {"issues": []})
+    monkeypatch.setattr(RetrainManager, "audit_pair_model", audit)
+    monkeypatch.setattr(
+        model_integrity_checker,
+        "check_model_before_cycle",
+        lambda *_a, **_k: True,
+    )
+
+    result = autonomous_scheduler.run_cycle(database, "H1")
+
+    assert result["symbols_processed"] == 4
+    assert result["errors_count"] == 1
+    assert [event for event in events if event[0] == "update"] == [
+        ("update", symbol) for symbol in symbols
+    ]
+    for symbol in symbols:
+        assert events.index(("update", symbol)) < events.index(("gate", symbol))
+    assert predictions == ["EURUSD", "USDJPY", "AUDUSD"]
+    gbp_predict = next(
+        item["predict"] for item in result["results"]
+        if item.get("symbol") == "GBPUSD" and "predict" in item
+    )
+    assert gbp_predict == {
+        "action": "skip",
+        "reason": "model_not_production_eligible",
+        "audit_reason": "MODEL_NOT_DEPLOYED",
+    }
+
+
+def test_h1_counts_independent_update_and_model_gate_failures_once_each(
+    monkeypatch, tmp_path
+):
+    from scheduler import autonomous_scheduler
+
+    database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
+    database.add_symbol("GBPUSD")
+
+    monkeypatch.setattr(autonomous_scheduler, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(autonomous_scheduler, "detect_new_symbols", lambda _db: [])
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_rolling_update",
+        lambda *_a, **_k: {"action": "error", "error": "provider unavailable"},
+    )
+    monkeypatch.setattr(RetrainManager, "reconcile", lambda _self: {"issues": []})
+    monkeypatch.setattr(
+        RetrainManager,
+        "audit_pair_model",
+        lambda _self, _symbol: {
+            "eligible": False,
+            "reason": "MODEL_NOT_DEPLOYED",
+        },
+    )
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_prediction",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            AssertionError("blocked model must not reach prediction")
+        ),
+    )
+
+    result = autonomous_scheduler.run_cycle(database, "H1")
+
+    assert result["symbols_processed"] == 1
+    assert result["errors_count"] == 2
+    stored = database.get_scheduler_runs()[0]
+    assert stored["status"] == "partial"
+    assert stored["errors_count"] == 2
+
+
+def test_h1_closed_loop_failure_counts_once_and_preserves_prediction(
+    monkeypatch, tmp_path
+):
+    from robustness import model_integrity_checker
+    from scheduler import autonomous_scheduler
+
+    database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
+    database.add_symbol("EURUSD")
+
+    monkeypatch.setattr(autonomous_scheduler, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(autonomous_scheduler, "detect_new_symbols", lambda _db: [])
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_rolling_update",
+        lambda *_a, **_k: {"action": "updated"},
+    )
+    monkeypatch.setattr(RetrainManager, "reconcile", lambda _self: {"issues": []})
+    monkeypatch.setattr(
+        RetrainManager,
+        "audit_pair_model",
+        lambda _self, _symbol: {
+            "eligible": True,
+            "reason": "PRODUCTION_ELIGIBLE",
+        },
+    )
+    monkeypatch.setattr(
+        model_integrity_checker,
+        "check_model_before_cycle",
+        lambda *_a, **_k: True,
+    )
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_closed_loop_maintenance",
+        lambda *_a, **_k: {"action": "error", "error": "tracker failed"},
+    )
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_prediction",
+        lambda *_a, **_k: {"action": "predicted", "prediction": {}},
+    )
+
+    result = autonomous_scheduler.run_cycle(database, "H1")
+
+    assert result["errors_count"] == 1
+    assert result["predictions_generated"] == 1
+
+
 @pytest.mark.parametrize("failure", ["CHECKSUM_MISMATCH", "ARTIFACT_INVALID"])
 def test_run_cycle_blocks_integrity_failures_before_bootstrap_and_prediction(
     monkeypatch, tmp_path, failure
@@ -532,11 +687,12 @@ def test_run_cycle_blocks_integrity_failures_before_bootstrap_and_prediction(
 
     monkeypatch.setattr(autonomous_scheduler, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(autonomous_scheduler, "detect_new_symbols", lambda _db: [])
+    update_calls = []
     monkeypatch.setattr(
         autonomous_scheduler,
         "run_rolling_update",
-        lambda *_a, **_k: (_ for _ in ()).throw(
-            AssertionError("blocked symbol must not enter the update/prediction loop")
+        lambda _db, symbol, timeframe: (
+            update_calls.append((symbol, timeframe)) or {"action": "updated"}
         ),
     )
     monkeypatch.setattr(
@@ -556,8 +712,147 @@ def test_run_cycle_blocks_integrity_failures_before_bootstrap_and_prediction(
 
     result = autonomous_scheduler.run_cycle(database, "H1")
 
-    assert result["symbols_processed"] == 0
+    assert update_calls == [("EURUSD", "H1")]
+    assert result["symbols_processed"] == 1
     assert result["predictions_generated"] == 0
+    assert result["errors_count"] == 1
+    predict_result = next(
+        item["predict"] for item in result["results"] if "predict" in item
+    )
+    assert predict_result["action"] == "skip"
+    assert predict_result["reason"] in {
+        "model_provenance_reconciliation_failed",
+        "model_not_production_eligible",
+    }
+
+
+def test_failed_legacy_bootstrap_updates_data_without_new_retrain_or_prediction(
+    monkeypatch, tmp_path
+):
+    from scheduler import autonomous_scheduler
+
+    database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
+    database.add_symbol("EURUSD")
+    storage = ModelStorage(tmp_path / "models" / "forex")
+    manager = RetrainManager(database=database, storage=storage)
+    _legacy_initial_alias(monkeypatch, manager, storage)
+    frame = _patch_bootstrap_training(monkeypatch)
+    path = tmp_path / "EURUSD_H1.csv"
+    frame.to_csv(path, index=False)
+    database.upsert_dataset_registry({
+        "symbol": "EURUSD",
+        "timeframe": "H1",
+        "status": "ready",
+        "candle_count": len(frame),
+        "rolling_window_size": 2000,
+        "last_candle_timestamp": str(frame["timestamp"].iloc[-1]),
+        "blob_path": str(path),
+    })
+    failed = manager.ensure_bootstrap_revalidation(
+        "EURUSD",
+        dataset_provenance={"registry_id": 1},
+    )
+    database.update_retrain_run(failed["run_id"], {
+        "status": "FAILED",
+        "error": "quality evidence failed",
+        "updated_at": failed["updated_at"],
+    })
+    run_ids_before = {
+        run["run_id"] for run in database.get_retrain_runs("EURUSD")
+    }
+    updates = []
+
+    monkeypatch.setattr(autonomous_scheduler, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(autonomous_scheduler, "detect_new_symbols", lambda _db: [])
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_rolling_update",
+        lambda _db, symbol, timeframe: (
+            updates.append((symbol, timeframe)) or {"action": "updated"}
+        ),
+    )
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_prediction",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            AssertionError("failed bootstrap must not reach prediction")
+        ),
+    )
+
+    result = autonomous_scheduler.run_cycle(database, "H1")
+
+    assert updates == [("EURUSD", "H1")]
+    assert result["symbols_processed"] == 1
+    assert result["predictions_generated"] == 0
+    assert result["errors_count"] == 1
+    assert {
+        run["run_id"] for run in database.get_retrain_runs("EURUSD")
+    } == run_ids_before
+    stored_failed = next(
+        run for run in database.get_retrain_runs("EURUSD")
+        if run["run_id"] == failed["run_id"]
+    )
+    assert stored_failed["status"] == "FAILED"
+    predict_result = next(
+        item["predict"] for item in result["results"] if "predict" in item
+    )
+    assert predict_result == {
+        "action": "skip",
+        "reason": "bootstrap_revalidation_not_production_eligible",
+    }
+
+
+def test_integrity_gate_runs_after_dataset_update_and_blocks_prediction(
+    monkeypatch, tmp_path
+):
+    from robustness import model_integrity_checker
+    from scheduler import autonomous_scheduler
+
+    database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
+    database.add_symbol("EURUSD")
+    events = []
+
+    monkeypatch.setattr(autonomous_scheduler, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(autonomous_scheduler, "detect_new_symbols", lambda _db: [])
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_rolling_update",
+        lambda *_a, **_k: events.append("update") or {"action": "updated"},
+    )
+    monkeypatch.setattr(RetrainManager, "reconcile", lambda _self: {"issues": []})
+    monkeypatch.setattr(
+        RetrainManager,
+        "audit_pair_model",
+        lambda _self, _symbol: {
+            "eligible": True,
+            "reason": "PRODUCTION_ELIGIBLE",
+        },
+    )
+    monkeypatch.setattr(
+        model_integrity_checker,
+        "check_model_before_cycle",
+        lambda *_a, **_k: events.append("integrity") or False,
+    )
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_prediction",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            AssertionError("invalid model must not reach prediction")
+        ),
+    )
+
+    result = autonomous_scheduler.run_cycle(database, "H1")
+
+    assert events == ["update", "integrity"]
+    assert result["symbols_processed"] == 1
+    assert result["errors_count"] == 1
+    predict_result = next(
+        item["predict"] for item in result["results"] if "predict" in item
+    )
+    assert predict_result == {
+        "action": "skip",
+        "reason": "model_integrity_check_failed",
+    }
 
 
 def test_bootstrap_quality_failure_preserves_alias_and_stops_stage_6(
