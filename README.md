@@ -6,11 +6,10 @@
 
 - Sigue avanzando con la rama forex, consigue como minimo:
 
-  - Una prediccion real en timeframes H1/H4/D1
-  - Conexion correcta entre el proyecto y la API VM para finalizar la automatizacion de la rama
   - Integrar informe automatico en primera iteracion entre la rama forex y el servidor de flujo automatizado
 
 - Configura el servidor VM a usar, aplica tests end-end para verificar viabilidad y finalizar la consolidacion del proyecto (Version Final)
+
 - Usa herramientas para avanzar
 
    - ### Base44 (Integracion y testeo)
@@ -19,6 +18,7 @@
    - ### Lovable (Integracion y Planificacion)
    - ### Github Copilot (Diagnostico y Planificacion)
    - ### Claude (solo de diagnostico)
+   - ### Codex CLI/Chatgpt (Integracion y testeo)
 
 - Para comprobaciones de calidad de usuario (UX) o estetica consulta con Base44, asegurate de mencionar que la estetica es propia del Workspace en servidor (modificar HTML constantemente)
   
