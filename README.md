@@ -50,9 +50,21 @@ Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 
 - name: NICO'S LOCAL AI
 
-- ID: key_3uC3DbwL1KZFUHJa
+- ID: "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"
 
-- model="llama-3.3-70b-versatile"
+- model="openai/gpt-oss-120"
+
+  # Configuracion VM
+Para automatizar la rama FOREX y el display grafico se logro migrar el Workspace a una VM (Virtual Machine) para optimizar tiempos de ejecucion del Pipeline
+En la comparativa practica se demostro que la "prediccion completa" de un solo simbolo tomaba entre 7-15 minutos, hubo una rebaja a 9 minutos usando una implementacion caché.
+Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cuenta que en hay mas de 80 Simbolos (Divisa,Commodities y Cripto)
+
+# - HASTA EL MOMENTO SOLO HAY
+  Imagen: Ubuntu 24.04
+  Sistema Operativo: Canonical Ubuntu
+  Memoria:12GB RAM
+  Almacenamiento: 57 GB
+  
 # POR ACTUALIZAR!!!!!
 # Estructura
 
@@ -66,78 +78,19 @@ Se incluyen 5 codigos adicionales para verificar la integridad de los modulos pr
 - check_skeleton
 
 - check_pipeline
+
+
 Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
-# Comandos y Programa Puente (main.py + iniciar_astra.bat)
+# Comandos y Programa Puente (main.py + .env)
 ### Comandos
 
 El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos 
 
 <details>
 <summary>Ver comandos</summary>
-
-
-- `aiohttp demo`    
-- `analiza audio [nombre_archivo]`
-- `analiza codigo [archivos]`      
-- `analiza csv [nombre_archivo] [directorio]`
-- `azure`                                          
-- `barra progreso`            
-- `bloquear archivo <archivo>` 
-- `cifra archivo [nombre_archivo]`
-- `convertir audio [nombre_archivo] [formato_salida]`
-- `crea py <archivo> <contenido>`                    
-- `crear jwt [datos]`
-- `crear pdf <archivo> <texto>`  
-- `descargar audio youtube [URL]`
-- `escribe csv [nombre_archivo] [contenido del archivo]`
-- `escribe excel [nombre_archivo] [contenido del archivo]`
-- `escribe pdf [nombre_archivo] [contenido del archivo]`
-- `escribe word [nombre_archivo] [contenido del archivo]`
-- `estado pc`                 
-- `extrae web <url>` 
-- `fastapi demo`     
-- `fecha`                                      
-- `flask demo`           
-- `grafica csv [nombre_archivo] [directorio]`
-- `grpc`                                             
-- `gui`                                            
-- `hash pass [contraseña]`
-- `httpx demo`      
-- `imagen`                                   
-- `integral`                                  
-- `json`                                      
-- `keras demo`     
-- `lee csv [nombre_archivo] [directorio]`
-- `lee excel [nombre_archivo] [directorio]`
-- `lee pdf [nombre_archivo] [directorio]`
-- `lee word [nombre_archivo] [directorio]`
-- `monitor archivos <ruta>`    
-- `paramiko demo`                   
-- `passlib hash <contraseña>`       
-- `passlib verify <password> <hash>`                                  
-- `reproducir audio [nombre_archivo]`
-- `rich [nombre_archivo] [directorio]`
-- `salir` / `exit` / `quit`                        
-- `simular click`              
-- `simular tecla <tecla>`     
-- `sklearn demo`  
-- `sklearn`                                        
-- `socketio demo`    
-- `tabla [nombre_archivo] [directorio]`
-- `tarea programada`           
-- `tensorflow demo` 
-- `texto a voz [texto]`
-- `torch demo`      
-- `traducir <texto>` 
-- `verificar jwt [token]`
-- `verify pass [contraseña] [hash]`
-- `voz a texto`
-- `youtube <url>`    
-
-</details>
 
 
 ## CSVs Disponibles para Analisis y Prediccion Forex
