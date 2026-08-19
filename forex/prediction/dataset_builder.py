@@ -109,10 +109,14 @@ class DatasetBuilder:
             for j in range(i + 1, min(i + 1 + horizon, n)):
                 high = self.df["high"].iloc[j]
                 low  = self.df["low"].iloc[j]
-                if high >= tp_price:
+                tp_hit = high >= tp_price
+                sl_hit = low <= sl_price
+                if tp_hit and sl_hit:
+                    break
+                if tp_hit:
                     hit_tp = True
                     break
-                if low <= sl_price:
+                if sl_hit:
                     hit_sl = True
                     break
 
