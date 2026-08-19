@@ -88,12 +88,24 @@ Se incluyen 5 codigos adicionales para verificar la integridad de los modulos pr
 
 - check_pipeline
 
+# Requisitos Obligatorios
 
-Notese que se necesita activar un entorno virtual (activate.bat) antes de ejecutar el main.
+Para correr el sistema Workspace ASTRA se debe OBLIGATORIAMENTE
+
+## 1.Instalar localmente el proyecto:
+
+## 2.Activar entorno virtual:
+
+## 3.Descargar dependencias:
+
+## 4a. Inicializar main.py
+
+## 4b. Inicializar server
+
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
-# Comandos y Programa Puente (main.py + .env)
+# Comandos y Programa Puente (???? + .env)
 ### Comandos
 
 El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos 
