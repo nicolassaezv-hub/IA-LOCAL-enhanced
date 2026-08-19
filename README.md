@@ -46,20 +46,23 @@ GPU:
 
 # API
 
-Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
+## Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
 
-- ## name: NICO'S LOCAL AI
+-  name: NICO'S LOCAL AI
 
-- ## ID: "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"
+-  ID: "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"
 
-- ## model="openai/gpt-oss-120"
+-  model="openai/gpt-oss-120"
 
   # Configuracion VM
+  
 Para automatizar la rama FOREX y el display grafico se logro migrar el Workspace a una VM (Virtual Machine) para optimizar tiempos de ejecucion del Pipeline
+
 En la comparativa practica se demostro que la "prediccion completa" de un solo simbolo tomaba entre 7-15 minutos, hubo una rebaja a 9 minutos usando una implementacion caché.
+
 Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cuenta que en hay mas de 80 Simbolos (Divisa,Commodities y Cripto)
 
-- # HASTA EL MOMENTO SOLO HAY TESTS. NINGUNA ACTIVIDAD 24/7 (Scheduler,Rolling Dataset y Watcher desactivados) HASTA COMPROBAR LA FIABILIDAD PRODUCTIVA
+- ### HASTA EL MOMENTO SOLO HAY TESTS. NINGUNA ACTIVIDAD 24/7 (Scheduler,Rolling Dataset y Watcher desactivados) HASTA COMPROBAR LA FIABILIDAD PRODUCTIVA
 
   ## Imagen: Ubuntu 24.04
   ## Sistema Operativo: Canonical Ubuntu
