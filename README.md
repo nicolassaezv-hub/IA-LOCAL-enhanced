@@ -66,13 +66,13 @@ Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cu
 
 ### *(Scheduler,Rolling Dataset y Watcher desactivados)*
 
-  ## Imagen: Ubuntu 24.04
+  - Imagen: Ubuntu 24.04
   
-  ## Sistema Operativo: Canonical Ubuntu
+  - Sistema Operativo: Canonical Ubuntu
   
-  ## Memoria: 12GB RAM
+  - Memoria: 12GB RAM
   
-  ## Almacenamiento: 57 GB
+  - Almacenamiento: 57 GB
   
 # POR ACTUALIZAR!!!!!
 # Estructura
