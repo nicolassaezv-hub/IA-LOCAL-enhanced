@@ -46,13 +46,13 @@ GPU:
 
 # API
 
-## Actualmente el funcionamiento de esta IA es gracias a la API de Open AI
+## Actualmente el funcionamiento de esta IA es gracias a la conexion por GroqCloud
 
 -  name: NICO'S LOCAL AI
 
 -  ID: "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"
 
--  model="openai/gpt-oss-120"
+-  model= "openai/gpt-oss-120"
 
   # Configuracion VM
   
@@ -65,8 +65,11 @@ Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cu
 - ### HASTA EL MOMENTO SOLO HAY TESTS. NINGUNA ACTIVIDAD 24/7 (Scheduler,Rolling Dataset y Watcher desactivados) HASTA COMPROBAR LA FIABILIDAD PRODUCTIVA
 
   ## Imagen: Ubuntu 24.04
+  
   ## Sistema Operativo: Canonical Ubuntu
-  ## Memoria:12GB RAM
+  
+  ## Memoria: 12GB RAM
+  
   ## Almacenamiento: 57 GB
   
 # POR ACTUALIZAR!!!!!
