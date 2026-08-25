@@ -59,9 +59,31 @@ _LEGACY_PROVENANCE_COLUMNS = (
 )
 
 
+def _set_active_fixture(database: SQLiteDatabase, symbol: str = "EURUSD") -> None:
+    from forex.data.symbol_catalog import get_symbol_spec
+
+    spec = get_symbol_spec(symbol)
+    database.register_candidate(
+        spec.symbol_code, spec.display_name, spec.asset_class, spec.pip_value
+    )
+    with database._connection() as connection:
+        connection.execute(
+            "UPDATE supported_symbols SET status='active' WHERE symbol_code=?",
+            (symbol,),
+        )
+
+
 def _create_prepatch_database(path):
     with sqlite3.connect(path) as connection:
         connection.executescript("""
+            CREATE TABLE supported_symbols (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol_code TEXT UNIQUE NOT NULL,
+                display_name TEXT,
+                pip_value REAL DEFAULT 0.0001,
+                status TEXT DEFAULT 'active',
+                added_at TEXT
+            );
             CREATE TABLE retrain_runs (
                 run_id TEXT PRIMARY KEY,
                 evidence_key TEXT UNIQUE NOT NULL,
@@ -159,6 +181,17 @@ def _create_prepatch_database(path):
                 dataset_provenance TEXT
             );
         """)
+        connection.executemany(
+            "INSERT INTO supported_symbols "
+            "(symbol_code,display_name,pip_value,status,added_at) "
+            "VALUES (?,?,?,?,?)",
+            [
+                ("EURUSD", "EUR/USD", 0.0001, "active", "2025-01-01"),
+                ("GBPUSD", "GBP/USD", 0.0001, "active", "2025-01-01"),
+                ("USDJPY", "USD/JPY", 0.01, "active", "2025-01-01"),
+                ("AUDUSD", "AUD/USD", 0.0001, "active", "2025-01-01"),
+            ],
+        )
 
 
 def _insert_legacy_run(connection, **overrides):
@@ -203,6 +236,7 @@ def _insert_legacy_provenance(connection, **values):
 
 
 def _legacy_alias(monkeypatch, manager, storage, pair="EURUSD"):
+    _set_active_fixture(manager.database, pair)
     with monkeypatch.context() as patch:
         patch.setattr(
             RetrainManager,
@@ -832,6 +866,7 @@ def test_two_concurrent_same_requests_return_one_idempotent_run(manual_env):
 
 def test_manual_retrain_requires_existing_source_alias(tmp_path):
     database = SQLiteDatabase(str(tmp_path / "manual.sqlite"))
+    _set_active_fixture(database, "GBPUSD")
     storage = ModelStorage(tmp_path / "models")
     manager = RetrainManager(
         database=database,
@@ -1275,6 +1310,12 @@ def test_tune_is_diagnostic_then_train_is_only_initial_publisher(
         ),
     )
     database = SQLiteDatabase(str(tmp_path / "pipeline.sqlite"))
+    _set_active_fixture(database, "EURUSD")
+    with database._connection() as connection:
+        connection.execute(
+            "UPDATE supported_symbols SET status='qualified' "
+            "WHERE symbol_code='EURUSD'"
+        )
     storage = ModelStorage(tmp_path / "models")
     pipeline = object.__new__(integrated_pipeline.ForexIntegratedPipeline)
     pipeline.storage = storage
@@ -1296,6 +1337,7 @@ def test_tune_is_diagnostic_then_train_is_only_initial_publisher(
     train_result = pipeline.train(filepath, pair="EURUSD", use_wfv=True, force=False)
 
     assert train_result["model_deployed"] is True
+    assert database.get_symbol("EURUSD")["status"] == "qualified"
     assert storage.latest_exists("EURUSD") is True
     provenance = database.get_model_provenance("EURUSD")
     assert len(provenance) == 1
@@ -1326,6 +1368,12 @@ def test_full_forex_tune_then_rejected_train_never_publishes(
 
     monkeypatch.setattr(integrated_pipeline, "ForexHyperparameterTuner", Tuner)
     database = SQLiteDatabase(str(tmp_path / "full-forex.sqlite"))
+    _set_active_fixture(database, "EURUSD")
+    with database._connection() as connection:
+        connection.execute(
+            "UPDATE supported_symbols SET status='qualified' "
+            "WHERE symbol_code='EURUSD'"
+        )
     storage = ModelStorage(tmp_path / "models")
     pipeline = object.__new__(integrated_pipeline.ForexIntegratedPipeline)
     pipeline.storage = storage

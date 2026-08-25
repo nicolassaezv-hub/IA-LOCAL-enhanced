@@ -1,6 +1,7 @@
 """A-08: evidence-based, fail-closed first-run and production readiness."""
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +14,7 @@ from deployment.production_readiness import (
 )
 from forex.data.indicator_delta import recalculate_tail_indicators
 from forex.data.rolling_dataset import ROLLING_WINDOW, validate_dataset
+from forex.data.symbol_catalog import get_symbol_spec
 from infra.db.database import SQLiteDatabase
 from robustness.first_run_wizard import FirstRunWizard
 import runtime_paths
@@ -34,8 +36,21 @@ def _frame(rows: int, *, indicators: bool = True) -> pd.DataFrame:
 
 def _database(tmp_path: Path) -> SQLiteDatabase:
     db = SQLiteDatabase(str(tmp_path / "readiness.db"))
-    db.add_symbol("EURUSD", "EUR/USD", 0.0001)
+    _insert_preexisting_active(db, "EURUSD")
     return db
+
+
+def _insert_preexisting_active(db: SQLiteDatabase, symbol: str) -> None:
+    """Represent an active row that predates the new lifecycle migration."""
+    spec = get_symbol_spec(symbol)
+    db.register_candidate(
+        spec.symbol_code, spec.display_name, spec.asset_class, spec.pip_value
+    )
+    with db._connection() as connection:
+        connection.execute(
+            "UPDATE supported_symbols SET status='active' WHERE symbol_code=?",
+            (spec.symbol_code,),
+        )
 
 
 def _register(
@@ -59,6 +74,15 @@ def _register(
             else last_timestamp
         ),
         "blob_path": str(path),
+        "provider_used": "Yahoo",
+        "external_ticker": "EURUSD=X",
+        "provider_class": "FX_REFERENCE",
+        "source_fetched_at": "2026-08-01T00:00:00+00:00",
+        "source_sha256": (
+            hashlib.sha256(path.read_bytes()).hexdigest()
+            if path.is_file() else "0" * 64
+        ),
+        "legacy_provenance_pending": 0,
     }
     return db.upsert_dataset_registry(entry)
 
@@ -145,6 +169,12 @@ def test_exactly_2000_valid_closed_candles_satisfy_dataset_contract(tmp_path):
         "rolling_window_size": ROLLING_WINDOW,
         "last_candle_timestamp": str(frame["timestamp"].iloc[-1]),
         "blob_path": str(path),
+        "provider_used": "Yahoo",
+        "external_ticker": "EURUSD=X",
+        "provider_class": "FX_REFERENCE",
+        "source_fetched_at": "2026-08-01T00:00:00+00:00",
+        "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "legacy_provenance_pending": 0,
     }
 
     evidence = evaluate_dataset_registry_entry(entry, base_dir=tmp_path)
@@ -155,6 +185,8 @@ def test_exactly_2000_valid_closed_candles_satisfy_dataset_contract(tmp_path):
         "path": str(path.resolve()),
         "actual_candle_count": ROLLING_WINDOW,
         "reasons": [],
+        "warnings": [],
+        "provenance_state": "VERIFIED",
     }
 
 
@@ -393,7 +425,7 @@ def test_first_run_and_readiness_share_canonical_database_registry(tmp_path):
 
     def initialize_registry(db):
         scheduler_backends.append(Path(db.db_path).resolve())
-        db.add_symbol("EURUSD", "EUR/USD", 0.0001)
+        _insert_preexisting_active(db, "EURUSD")
         _register(db, dataset_path, frame)
         return [{"action": "generated"}]
 
@@ -430,7 +462,7 @@ def test_readiness_and_factory_share_project_relative_database_across_cwd(
     monkeypatch.setenv("ASTRA_DB_PATH", "memory_db/astra_autonomous.db")
 
     database = get_database()
-    database.add_symbol("EURUSD", "EUR/USD", 0.0001)
+    _insert_preexisting_active(database, "EURUSD")
     canonical_path = Path(database.db_path)
     monkeypatch.chdir(unrelated_cwd)
 
@@ -601,7 +633,7 @@ def _provider_check(report):
 
 def test_active_forex_ok_and_crypto_failure_blocks_readiness(tmp_path):
     db = _database(tmp_path)
-    db.add_symbol("BTCUSDT", "BTC/USDT", 0.01)
+    _insert_preexisting_active(db, "BTCUSDT")
     _ProviderRouterStub.outcomes = {
         "forex": 2,
         "crypto": RuntimeError("crypto provider unavailable"),
@@ -627,8 +659,8 @@ def test_active_forex_ok_and_crypto_failure_blocks_readiness(tmp_path):
 
 def test_all_active_provider_routes_are_operational(tmp_path):
     db = _database(tmp_path)
-    db.add_symbol("GBPUSD", "GBP/USD", 0.0001)
-    db.add_symbol("BTCUSDT", "BTC/USDT", 0.01)
+    _insert_preexisting_active(db, "GBPUSD")
+    _insert_preexisting_active(db, "BTCUSDT")
     _ProviderRouterStub.outcomes = {"forex": 2, "crypto": 2}
     _ProviderRouterStub.calls = []
 

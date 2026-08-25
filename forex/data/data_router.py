@@ -7,20 +7,22 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional
 
+from forex.data.symbol_catalog import (
+    UnsupportedSymbolError,
+    get_symbol_spec,
+    symbols_by_asset_class,
+)
+
 
 class DataProviderError(RuntimeError):
     """No configured real provider could return market data."""
 
 
-_FOREX_PAIRS = {
-    "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "NZDUSD",
-    "USDCAD", "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD",
-    "GBPAUD", "EURCHF", "GBPCHF", "AUDCAD", "AUDCHF", "AUDNZD",
-    "CADCHF", "CADJPY", "CHFJPY", "NZDCAD", "NZDCHF", "NZDJPY",
-    "EURCAD", "EURNZD", "GBPCAD", "GBPNZD",
-}
-_COMMODITY_PAIRS = {"XAUUSD", "XAGUSD", "USOUSD", "UKOUSD", "XPTUSD"}
-_INDEX_PAIRS = {"SPX500", "NAS100", "GER40", "UK100", "JPN225", "AUS200"}
+_FOREX_PAIRS = set(symbols_by_asset_class("FOREX"))
+_COMMODITY_PAIRS = set(symbols_by_asset_class("COMMODITY")) | set(
+    symbols_by_asset_class("METAL")
+)
+_INDEX_PAIRS = set(symbols_by_asset_class("INDEX"))
 
 
 def _detect_asset_type(pair: str) -> str:
@@ -28,26 +30,8 @@ def _detect_asset_type(pair: str) -> str:
     Detecta si el par es Forex, Crypto, Commodity o Índice.
     Returns: 'forex' | 'crypto' | 'commodity' | 'index'
     """
-    p = pair.upper().replace("_", "").replace("/", "")
-    if p in _FOREX_PAIRS:
-        return "forex"
-    if p in _COMMODITY_PAIRS:
-        return "commodity"
-    if p in _INDEX_PAIRS:
-        return "index"
-    # Intentar detectar crypto
-    try:
-        from forex.data.binance_provider import is_crypto_pair
-        if is_crypto_pair(p):
-            return "crypto"
-    except ImportError:
-        pass
-    # Default: tratar como forex si termina con moneda conocida
-    forex_currencies = {"USD", "EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD"}
-    for c in forex_currencies:
-        if p.endswith(c) or p.startswith(c):
-            return "forex"
-    return "forex"
+    asset_class = get_symbol_spec(pair).asset_class
+    return "commodity" if asset_class == "METAL" else asset_class.lower()
 
 
 class DataRouter:
@@ -58,8 +42,11 @@ class DataRouter:
     """
 
     def __init__(self, pair: str, tf: str = "H1"):
-        self.pair = pair.upper().replace("_", "")
+        self.spec = get_symbol_spec(pair)
+        self.pair = self.spec.symbol_code
         self.tf = tf.upper()
+        if self.tf not in self.spec.supported_timeframes:
+            raise ValueError(f"Unsupported timeframe for {self.pair}: {self.tf}")
         self.asset_type = _detect_asset_type(self.pair)
         self._source_used: Optional[str] = None
         self._attempt_errors: list[str] = []
@@ -94,64 +81,71 @@ class DataRouter:
 
     def _fetch_forex(self, bars: int) -> tuple[Optional[pd.DataFrame], str]:
         """Intenta MT5 primero, luego Yahoo."""
-        try:
-            from forex.data.mt5_provider import get_mt5_provider
-            mt5 = get_mt5_provider()
-            if mt5.is_available():
-                # DataRouter owns fallback and must report the provider used.
-                df = mt5.fetch(self.pair, self.tf, bars, allow_fallback=False)
-                if df is not None and len(df) > 0:
-                    return df, "MT5"
-                self._attempt_errors.append("MT5 returned no data")
-            else:
-                self._attempt_errors.append("MT5 unavailable")
-        except Exception as exc:
-            self._attempt_errors.append(f"MT5: {exc}")
+        for route in (self.spec.primary, self.spec.fallback):
+            if route is None:
+                continue
+            try:
+                if route.provider == "MT5":
+                    from forex.data.mt5_provider import get_mt5_provider
 
-        try:
-            from forex.data.yahoo_provider import get_yahoo_provider
-            yp = get_yahoo_provider()
-            if yp.is_available():
-                df = yp.fetch(self.pair, self.tf, bars)
+                    provider = get_mt5_provider()
+                    kwargs = {"allow_fallback": False}
+                elif route.provider == "Yahoo":
+                    from forex.data.yahoo_provider import get_yahoo_provider
+
+                    provider = get_yahoo_provider()
+                    kwargs = {}
+                else:
+                    self._attempt_errors.append(
+                        f"Unsupported configured provider: {route.provider}"
+                    )
+                    continue
+                if not provider.is_available():
+                    self._attempt_errors.append(f"{route.provider} unavailable")
+                    continue
+                df = provider.fetch(self.pair, self.tf, bars, **kwargs)
                 if df is not None and len(df) > 0:
-                    return df, "Yahoo"
-                self._attempt_errors.append("Yahoo returned no data")
-            else:
-                self._attempt_errors.append("Yahoo unavailable")
-        except Exception as exc:
-            self._attempt_errors.append(f"Yahoo: {exc}")
+                    return df, route.provider
+                self._attempt_errors.append(f"{route.provider} returned no data")
+            except Exception as exc:
+                self._attempt_errors.append(f"{route.provider}: {exc}")
 
         return None, "none"
 
     def _fetch_crypto(self, bars: int) -> tuple[Optional[pd.DataFrame], str]:
-        """Binance para crypto, Yahoo como fallback."""
-        try:
-            from forex.data.binance_provider import get_binance_provider
-            bp = get_binance_provider()
-            if bp.is_available():
-                df = bp.fetch(self.pair, self.tf, bars)
+        """Use only explicit catalog routes; USD and USDT are never aliased."""
+        for route in (self.spec.primary, self.spec.fallback):
+            if route is None:
+                continue
+            try:
+                if route.provider != "Binance":
+                    self._attempt_errors.append(
+                        f"Unsupported crypto provider: {route.provider}"
+                    )
+                    continue
+                from forex.data.binance_provider import get_binance_provider
+
+                provider = get_binance_provider()
+                if not provider.is_available():
+                    self._attempt_errors.append("Binance unavailable")
+                    continue
+                df = provider.fetch(self.pair, self.tf, bars)
                 if df is not None and len(df) > 0:
                     return df, "Binance"
                 self._attempt_errors.append("Binance returned no data")
-            else:
-                self._attempt_errors.append("Binance unavailable")
-        except Exception as exc:
-            self._attempt_errors.append(f"Binance: {exc}")
-
-        try:
-            from forex.data.yahoo_provider import get_yahoo_provider
-            yp = get_yahoo_provider()
-            if yp.is_available():
-                df = yp.fetch(self.pair, self.tf, bars)
-                if df is not None and len(df) > 0:
-                    return df, "Yahoo"
-                self._attempt_errors.append("Yahoo returned no data")
-            else:
-                self._attempt_errors.append("Yahoo unavailable")
-        except Exception as exc:
-            self._attempt_errors.append(f"Yahoo: {exc}")
+            except Exception as exc:
+                self._attempt_errors.append(f"Binance: {exc}")
 
         return None, "none"
+
+    @property
+    def route_used(self):
+        if not self._source_used or self._source_used == "none":
+            return None
+        for route in (self.spec.primary, self.spec.fallback):
+            if route is not None and route.provider == self._source_used:
+                return route
+        return None
 
     def _save(self, df: pd.DataFrame, csv_dir: str = None):
         base = Path(csv_dir) if csv_dir else Path(__file__).parent.parent.parent / "CSVs" / self.tf
@@ -180,3 +174,11 @@ def fetch_data(pair: str, tf: str = "H1", bars: int = 500,
     """Atajo rápido para obtener datos de cualquier activo."""
     router = DataRouter(pair, tf)
     return router.fetch(bars=bars, save_csv=save_csv)
+
+
+__all__ = [
+    "DataProviderError",
+    "DataRouter",
+    "UnsupportedSymbolError",
+    "fetch_data",
+]

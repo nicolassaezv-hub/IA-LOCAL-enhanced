@@ -30,10 +30,10 @@ PAIR_CONFIG = {
     "GBPJPY": {"horizon":  8, "rr_ratio": 1.2},
     "XAUUSD": {"horizon":  8, "rr_ratio": 1.5},
     "XAGUSD": {"horizon":  8, "rr_ratio": 1.5},
-    "USOIL":  {"horizon":  8, "rr_ratio": 1.5},
-    "UKOIL":  {"horizon":  8, "rr_ratio": 1.5},
-    "BTCUSD": {"horizon":  6, "rr_ratio": 2.0},
-    "ETHUSD": {"horizon":  6, "rr_ratio": 2.0},
+    "USOUSD": {"horizon":  8, "rr_ratio": 1.5},
+    "UKOUSD": {"horizon":  8, "rr_ratio": 1.5},
+    "BTCUSDT": {"horizon": 6, "rr_ratio": 2.0},
+    "ETHUSDT": {"horizon": 6, "rr_ratio": 2.0},
 }
 
 DEFAULT_PAIR_CONFIG = {"horizon": 10, "rr_ratio": 1.0}
@@ -44,6 +44,21 @@ def get_pair_config(pair: str) -> dict:
         return DEFAULT_PAIR_CONFIG
     clean = pair.upper().replace("/", "").replace("_", "").replace("-", "")
     return PAIR_CONFIG.get(clean, DEFAULT_PAIR_CONFIG)
+
+
+def is_ml_configured(pair: str) -> bool:
+    """Return whether production ML horizon/RR is explicitly configured."""
+    if not pair:
+        return False
+    clean = pair.upper().replace("/", "").replace("_", "").replace("-", "")
+    return clean in PAIR_CONFIG
+
+
+def require_ml_config(pair: str) -> dict:
+    """Fail closed instead of promoting production ML through the default config."""
+    if not is_ml_configured(pair):
+        raise ValueError(f"ML_CONFIG_NOT_DEFINED: {pair}")
+    return get_pair_config(pair)
 
 
 class DatasetBuilder:

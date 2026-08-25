@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 from datetime import datetime
 
+from infra.db.database import SymbolLifecycleError, require_active_symbol
+
 
 _SCORE_THRESHOLD     = 60.0   # mínimo OpScore para entrar al ranking
 _RELIABILITY_MIN     = 70.0   # mínimo Reliability para entrar al ranking
@@ -149,15 +151,26 @@ class OpportunityRanker:
     a partir de una lista de señales activas.
     """
 
-    def __init__(self, top_n: int = 10):
+    def __init__(self, top_n: int = 10, *, database=None):
         self.top_n = top_n
+        self.database = database
 
     def rank(self, signals: list[SignalInput]) -> dict:
         """
         Calcula OpScore para cada señal y devuelve Top-N BUY y Top-N SELL.
         Solo incluye señales elegibles (OpScore ≥ 60, Reliability ≥ 70).
         """
-        results = [calculate_op_score(s) for s in signals]
+        active_signals = []
+        rejected = []
+        for signal in signals:
+            try:
+                require_active_symbol(signal.pair, database=self.database)
+            except SymbolLifecycleError as exc:
+                rejected.append({"pair": signal.pair, "reason": str(exc)})
+                continue
+            active_signals.append(signal)
+
+        results = [calculate_op_score(s) for s in active_signals]
         eligible = [r for r in results if r.eligible]
 
         buys  = sorted([r for r in eligible if r.direction == "BUY"],
@@ -169,6 +182,9 @@ class OpportunityRanker:
             "top_buy":   buys,
             "top_sell":  sells,
             "total_evaluated": len(signals),
+            "total_active": len(active_signals),
+            "total_rejected": len(rejected),
+            "rejected": rejected,
             "total_eligible":  len(eligible),
             "ts": datetime.now().isoformat(),
         }
@@ -203,5 +219,5 @@ class OpportunityRanker:
 _ranker = OpportunityRanker()
 
 
-def get_ranker(top_n: int = 10) -> OpportunityRanker:
-    return OpportunityRanker(top_n)
+def get_ranker(top_n: int = 10, *, database=None) -> OpportunityRanker:
+    return OpportunityRanker(top_n, database=database)

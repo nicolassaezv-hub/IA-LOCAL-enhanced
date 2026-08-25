@@ -20,6 +20,16 @@ class FakeDatabase:
         self.symbols = list(symbols or [])
         self.entries = dict(entries or {})
 
+    def get_active_symbols(self):
+        return [dict(row) for row in self.symbols if row.get("status") == "active"]
+
+    def get_data_symbols(self):
+        return [
+            dict(row)
+            for row in self.symbols
+            if row.get("status") in {"qualified", "active"}
+        ]
+
     def get_supported_symbols(self):
         return [dict(row) for row in self.symbols]
 
@@ -31,10 +41,12 @@ class FakeDatabase:
 
 
 def active_symbol(symbol: str, pip_value: float = 0.0001) -> dict:
+    spec = qualification.get_symbol_spec(symbol)
     return {
         "id": 1,
         "symbol_code": symbol,
-        "display_name": symbol,
+        "display_name": spec.display_name,
+        "asset_class": spec.asset_class,
         "pip_value": pip_value,
         "status": "active",
         "added_at": "2026-01-01T00:00:00",
@@ -77,6 +89,7 @@ def write_ready_dataset(
     path = root / "data" / "forex" / f"{symbol}_{timeframe}.csv"
     path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(path, index=False)
+    source_sha256 = qualification.sha256_file(path)
     entry = {
         "id": 1,
         "symbol": symbol,
@@ -88,6 +101,12 @@ def write_ready_dataset(
         "status": "ready",
         "last_error": None,
         "last_updated": "2026-08-01T00:00:00",
+        "provider_used": "Yahoo",
+        "external_ticker": qualification.get_symbol_spec(symbol).fallback.external_ticker,
+        "provider_class": "FX_REFERENCE",
+        "source_fetched_at": "2026-08-01T00:00:00+00:00",
+        "source_sha256": source_sha256,
+        "legacy_provenance_pending": 0,
     }
     return entry, frame
 
@@ -103,7 +122,7 @@ def test_symbol_contract(symbol):
     assert spec.symbol == symbol
     assert spec.declarations
     assert spec.asset_class in {"FOREX", "METAL", "COMMODITY", "CRYPTO", "INDEX"}
-    assert spec.astra_supported is (symbol not in {"USOIL", "UKOIL", "BTCUSD", "ETHUSD"})
+    assert spec.astra_supported is True
     assert (spec.h1_supported, spec.h4_supported, spec.d1_supported) == (
         True,
         True,
@@ -115,11 +134,9 @@ def test_declared_universe_includes_every_source_and_required_candidate():
     universe = set(qualification.DECLARED_CODE_SYMBOLS)
 
     assert set(qualification.PAIR_CONFIG) <= universe
-    assert set(qualification._FOREX_PAIRS) <= universe
-    assert set(qualification._COMMODITY_PAIRS) <= universe
-    assert set(qualification._INDEX_PAIRS) <= universe
-    assert set(qualification._CRYPTO_PAIRS) <= universe
-    assert {"USOIL", "UKOIL", "BTCUSD", "ETHUSD"} <= universe
+    assert universe == set(qualification.catalog_codes())
+    assert {"USOUSD", "UKOUSD", "BTCUSDT", "ETHUSDT"} <= universe
+    assert not ({"USOIL", "UKOIL", "BTCUSD", "ETHUSD"} & universe)
 
 
 @pytest.mark.parametrize("timeframe", ["H1", "H4", "D1"])
@@ -140,26 +157,27 @@ def test_provider_mapping_reports_primary_fallback_and_external_tickers():
         "Binance",
         "BTCUSDT",
     )
-    assert metal.fallback_external_ticker == "GC=F"
+    assert metal.fallback_external_ticker is None
+    assert any("GC=F" in reason for reason in metal.blocked_routes)
 
 
 @pytest.mark.parametrize("symbol", ["USOIL", "UKOIL"])
-def test_pair_config_oil_names_expose_router_asset_mismatch(symbol):
+def test_legacy_oil_names_are_not_canonical_aliases(symbol):
     harness = qualification.SymbolQualificationHarness(FakeDatabase())
     stage, _spec = harness._routing_stage(symbol)
 
     assert stage["status"] == "FAIL"
-    assert any("Asset routing mismatch" in error for error in stage["errors"])
+    assert any("Unsupported symbol" in error for error in stage["errors"])
 
 
 @pytest.mark.parametrize("symbol", ["BTCUSD", "ETHUSD"])
-def test_pair_config_crypto_names_are_not_claimed_as_binance_catalogued(symbol):
+def test_usd_crypto_names_are_not_silently_treated_as_usdt(symbol):
     harness = qualification.SymbolQualificationHarness(FakeDatabase())
     stage, spec = harness._routing_stage(symbol)
 
     assert spec.primary_ticker_catalogued is False
     assert stage["status"] == "FAIL"
-    assert any("not in ASTRA's Binance catalog" in error for error in stage["errors"])
+    assert any("Unsupported symbol" in error for error in stage["errors"])
 
 
 def test_ready_frame_contract_checks_all_2000_rows_and_indicators():
@@ -302,6 +320,7 @@ def test_registry_and_physical_file_must_match(tmp_path):
     stage, loaded = harness._timeframe_stage("EURUSD", "H1", frame, {
         "provider_used": "Yahoo",
         "external_ticker": "EURUSD=X",
+        "provider_class": "FX_REFERENCE",
     })
 
     assert stage["status"] == "PASS"
@@ -322,7 +341,11 @@ def test_provider_overlap_without_the_latest_2000_candles_blocks_qualification(t
         "EURUSD",
         "H1",
         newer_provider_frame,
-        {"provider_used": "Yahoo", "external_ticker": "EURUSD=X"},
+        {
+            "provider_used": "Yahoo",
+            "external_ticker": "EURUSD=X",
+            "provider_class": "FX_REFERENCE",
+        },
     )
 
     assert stage["status"] == "WARNING"
@@ -445,8 +468,17 @@ def test_unsupported_symbol_fails_closed_without_provider_call():
 
 
 def test_active_registry_row_does_not_turn_an_unknown_symbol_into_provider_support():
+    unknown = {
+        "id": 1,
+        "symbol_code": "ZZZQQQ",
+        "display_name": "Unknown",
+        "asset_class": "UNKNOWN",
+        "pip_value": 0.0001,
+        "status": "active",
+        "added_at": "2026-01-01T00:00:00",
+    }
     harness = qualification.SymbolQualificationHarness(
-        FakeDatabase([active_symbol("ZZZQQQ")]), probe_providers=True
+        FakeDatabase([unknown]), probe_providers=True
     )
 
     with patch.object(
@@ -541,7 +573,7 @@ def test_default_registry_reader_opens_existing_sqlite_database_read_only(tmp_pa
 
     with patch.object(qualification.sqlite3, "connect", side_effect=connect):
         database = qualification.ReadOnlySQLiteDatabase(path)
-        assert database.get_supported_symbols()[0]["symbol_code"] == "EURUSD"
+        assert database.get_data_symbols()[0]["symbol_code"] == "EURUSD"
         assert database.get_dataset_registry("EURUSD", "H1") == [
             {"symbol": "EURUSD", "timeframe": "H1"}
         ]

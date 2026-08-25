@@ -630,6 +630,9 @@ class CanonicalRiskConfigTests(unittest.TestCase):
             }
         )
         pipeline._pair_params = lambda _pair: (5, 2.0)
+        pipeline.closed_loop_database = types.SimpleNamespace(
+            get_symbol=lambda symbol: {"symbol_code": symbol, "status": "active"}
+        )
 
         with patch.object(integrated_pipeline, "_load", return_value=frame), patch.object(
             integrated_pipeline,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import math
 import os
@@ -23,20 +24,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from forex.data.binance_provider import _CRYPTO_PAIRS, is_crypto_pair
-from forex.data.data_router import (
-    _COMMODITY_PAIRS,
-    _FOREX_PAIRS,
-    _INDEX_PAIRS,
-    DataRouter,
-    _detect_asset_type,
-)
+from forex.data.data_router import DataRouter, _detect_asset_type
 from forex.data.indicator_delta import INDICATOR_MIN_HISTORY
 from forex.data.rolling_dataset import ROLLING_WINDOW, exclude_incomplete_candles
-from forex.data.yahoo_provider import FOREX_TICKER_MAP, to_yahoo_ticker
+from forex.data.symbol_catalog import UnsupportedSymbolError, catalog_codes, get_symbol_spec
 from infra.db.database import DatabaseAdapter, configured_sqlite_path
 from runtime_paths import forex_dataset_path
-from scheduler.autonomous_scheduler import DEFAULT_SYMBOLS, TIMEFRAMES
+from scheduler.autonomous_scheduler import TIMEFRAMES
 
 
 def _read_pair_config() -> dict[str, dict[str, float]]:
@@ -71,12 +65,6 @@ TIMEFRAME_DURATION = {
     "H4": pd.Timedelta(hours=4),
     "D1": pd.Timedelta(days=1),
 }
-KNOWN_CRYPTO_CODES = {
-    "BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "DOGE", "AVAX",
-    "MATIC", "DOT", "LTC", "LINK", "UNI", "ATOM", "NEAR",
-}
-METAL_SYMBOLS = {"XAUUSD", "XAGUSD", "XPTUSD"}
-OIL_SYMBOLS = {"USOIL", "UKOIL", "USOUSD", "UKOUSD"}
 
 
 class ReadOnlySQLiteDatabase:
@@ -94,9 +82,15 @@ class ReadOnlySQLiteDatabase:
             rows = connection.execute(query, parameters).fetchall()
         return [dict(row) for row in rows]
 
-    def get_supported_symbols(self) -> list[dict]:
+    def get_active_symbols(self) -> list[dict]:
         return self._query(
             "SELECT * FROM supported_symbols WHERE status='active' ORDER BY symbol_code"
+        )
+
+    def get_data_symbols(self) -> list[dict]:
+        return self._query(
+            "SELECT * FROM supported_symbols "
+            "WHERE status IN ('qualified','active') ORDER BY symbol_code"
         )
 
     def get_dataset_registry(self, symbol: str = None, tf: str = None) -> list[dict]:
@@ -122,37 +116,22 @@ def get_read_only_database() -> ReadOnlySQLiteDatabase:
 
 
 def normalize_symbol(value: str) -> str:
-    return "".join(character for character in str(value).upper() if character.isalnum())
+    return str(value or "").strip().upper()
 
 
 def declared_code_universe() -> tuple[str, ...]:
-    """Return every symbol advertised by any executable ASTRA source."""
-    scheduler_defaults = {row[0] for row in DEFAULT_SYMBOLS}
-    symbols = (
-        set(_FOREX_PAIRS)
-        | set(_COMMODITY_PAIRS)
-        | set(_INDEX_PAIRS)
-        | set(_CRYPTO_PAIRS)
-        | set(PAIR_CONFIG)
-        | scheduler_defaults
-    )
-    return tuple(sorted(normalize_symbol(symbol) for symbol in symbols))
+    """Return the central operational catalog; PAIR_CONFIG is not authority."""
+    return tuple(sorted(catalog_codes()))
 
 
 DECLARED_CODE_SYMBOLS = declared_code_universe()
 
 
 def expected_asset_class(symbol: str) -> str:
-    symbol = normalize_symbol(symbol)
-    if symbol in _INDEX_PAIRS:
-        return "INDEX"
-    if symbol in METAL_SYMBOLS:
-        return "METAL"
-    if symbol in OIL_SYMBOLS:
-        return "COMMODITY"
-    if symbol in _CRYPTO_PAIRS or is_crypto_pair(symbol):
-        return "CRYPTO"
-    return "FOREX"
+    try:
+        return get_symbol_spec(symbol).asset_class
+    except UnsupportedSymbolError:
+        return "UNKNOWN"
 
 
 def _routing_asset_class(asset_class: str) -> str:
@@ -166,66 +145,62 @@ class RouteSpec:
     astra_supported: bool
     declarations: tuple[str, ...]
     pair_config: bool
-    provider_primary: str
-    provider_fallback: str
-    primary_external_ticker: str
-    fallback_external_ticker: str
+    provider_primary: str | None
+    provider_fallback: str | None
+    primary_external_ticker: str | None
+    fallback_external_ticker: str | None
     primary_ticker_catalogued: bool
     fallback_ticker_explicit: bool
     h1_supported: bool
     h4_supported: bool
     d1_supported: bool
+    blocked_routes: tuple[str, ...]
 
 
 def route_spec(symbol: str) -> RouteSpec:
     symbol = normalize_symbol(symbol)
-    asset_class = expected_asset_class(symbol)
-    declarations: list[str] = []
-    if symbol in {row[0] for row in DEFAULT_SYMBOLS}:
+    try:
+        spec = get_symbol_spec(symbol)
+    except UnsupportedSymbolError:
+        return RouteSpec(
+            symbol=symbol,
+            asset_class="UNKNOWN",
+            astra_supported=False,
+            declarations=(),
+            pair_config=symbol in PAIR_CONFIG,
+            provider_primary=None,
+            provider_fallback=None,
+            primary_external_ticker=None,
+            fallback_external_ticker=None,
+            primary_ticker_catalogued=False,
+            fallback_ticker_explicit=False,
+            h1_supported=False,
+            h4_supported=False,
+            d1_supported=False,
+            blocked_routes=(),
+        )
+    declarations = ["symbol_catalog"]
+    if spec.legacy_default_active:
         declarations.append("scheduler_default")
     if symbol in PAIR_CONFIG:
         declarations.append("pair_config")
-    if symbol in _FOREX_PAIRS:
-        declarations.append("router_forex")
-    if symbol in _COMMODITY_PAIRS:
-        declarations.append("router_commodity")
-    if symbol in _INDEX_PAIRS:
-        declarations.append("router_index")
-    if symbol in _CRYPTO_PAIRS:
-        declarations.append("binance_catalog")
-    if symbol in FOREX_TICKER_MAP:
-        declarations.append("yahoo_explicit_map")
-
-    crypto_route = asset_class == "CRYPTO"
-    primary = "Binance" if crypto_route else "MT5"
-    fallback = "Yahoo"
-    primary_ticker = symbol
-    fallback_ticker = to_yahoo_ticker(symbol)
-    astra_supported = symbol in (
-        set(_FOREX_PAIRS)
-        | set(_COMMODITY_PAIRS)
-        | set(_INDEX_PAIRS)
-        | set(_CRYPTO_PAIRS)
-    )
-    primary_catalogued = symbol in _CRYPTO_PAIRS if crypto_route else (
-        symbol in _FOREX_PAIRS or symbol in _COMMODITY_PAIRS or symbol in _INDEX_PAIRS
-    )
-    fallback_explicit = symbol in FOREX_TICKER_MAP
+    fallback = spec.fallback
     return RouteSpec(
         symbol=symbol,
-        asset_class=asset_class,
-        astra_supported=astra_supported,
+        asset_class=spec.asset_class,
+        astra_supported=True,
         declarations=tuple(declarations),
         pair_config=symbol in PAIR_CONFIG,
-        provider_primary=primary,
-        provider_fallback=fallback,
-        primary_external_ticker=primary_ticker,
-        fallback_external_ticker=fallback_ticker,
-        primary_ticker_catalogued=primary_catalogued,
-        fallback_ticker_explicit=fallback_explicit,
-        h1_supported=True,
-        h4_supported=True,
-        d1_supported=True,
+        provider_primary=spec.primary.provider,
+        provider_fallback=fallback.provider if fallback else None,
+        primary_external_ticker=spec.primary.external_ticker,
+        fallback_external_ticker=fallback.external_ticker if fallback else None,
+        primary_ticker_catalogued=True,
+        fallback_ticker_explicit=fallback is not None,
+        h1_supported="H1" in spec.supported_timeframes,
+        h4_supported="H4" in spec.supported_timeframes,
+        d1_supported="D1" in spec.supported_timeframes,
+        blocked_routes=spec.blocked_routes,
     )
 
 
@@ -258,6 +233,14 @@ def _utc_naive(value: Any) -> pd.Timestamp:
     if timestamp.tzinfo is not None:
         timestamp = timestamp.tz_convert("UTC").tz_localize(None)
     return timestamp
+
+
+def sha256_file(path: Path | str) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _independent_indicators(frame: pd.DataFrame) -> dict[str, pd.Series]:
@@ -311,7 +294,13 @@ def _independent_indicators(frame: pd.DataFrame) -> dict[str, pd.Series]:
 
 def _indicator_start(column: str) -> int:
     minimum = INDICATOR_MIN_HISTORY[column]
-    if column in {"BB_upper", "BB_lower", "returns", "volatility_24h"}:
+    if column == "returns":
+        return 1
+    if column == "volatility_24h":
+        # The persisted first return may use the candle immediately before the
+        # rolling-2000 slice.  The first independent 24-return window is index 24.
+        return minimum
+    if column in {"BB_upper", "BB_lower"}:
         return minimum - 1
     return min(ROLLING_WINDOW - 1, minimum * 5 - 1)
 
@@ -454,7 +443,13 @@ def _match_provider_frame(
     }
 
 
-def _normalize_probe_frame(frame: pd.DataFrame, symbol: str, timeframe: str) -> pd.DataFrame:
+def _normalize_probe_frame(
+    frame: pd.DataFrame,
+    symbol: str,
+    timeframe: str,
+    *,
+    now: Any = None,
+) -> pd.DataFrame:
     if not isinstance(frame, pd.DataFrame) or frame.empty:
         raise ValueError("provider returned no rows")
     missing = set(REQUIRED_COLUMNS) - set(frame.columns)
@@ -472,7 +467,7 @@ def _normalize_probe_frame(frame: pd.DataFrame, symbol: str, timeframe: str) -> 
     if not normalized["timestamp"].is_monotonic_increasing:
         raise ValueError("provider frame is not chronologically ordered")
     normalized = normalized.reset_index(drop=True)
-    normalized = exclude_incomplete_candles(normalized, timeframe)
+    normalized = exclude_incomplete_candles(normalized, timeframe, now=now)
     if "pair" in normalized.columns:
         observed = {normalize_symbol(value) for value in normalized["pair"].dropna().unique()}
         if observed and observed != {symbol}:
@@ -689,6 +684,52 @@ def _aggregate_comparison(
     }
 
 
+def validate_cross_timeframes(frames: dict[str, pd.DataFrame]) -> dict[str, Any]:
+    """Apply the harness cross-timeframe contract to any isolated frame set."""
+    stage = _new_stage("CROSS-TIMEFRAME")
+    if set(frames) != set(TIMEFRAMES):
+        _fail(
+            stage,
+            f"Missing validated timeframe frames: "
+            f"{sorted(set(TIMEFRAMES) - set(frames))}",
+        )
+        return stage
+
+    latest_prices = {
+        timeframe: float(frames[timeframe]["close"].iloc[-1])
+        for timeframe in TIMEFRAMES
+    }
+    scale_ratio = max(latest_prices.values()) / min(latest_prices.values())
+    stage["details"]["latest_close"] = latest_prices
+    stage["details"]["latest_scale_ratio"] = scale_ratio
+    if not math.isfinite(scale_ratio) or scale_ratio > 1.5:
+        _fail(stage, f"Cross-timeframe price scale mismatch: ratio={scale_ratio:.6g}")
+
+    h1_h4 = _aggregate_comparison(
+        frames["H1"],
+        frames["H4"],
+        lower_duration=pd.Timedelta(hours=1),
+        candles_per_group=4,
+    )
+    h4_d1 = _aggregate_comparison(
+        frames["H4"],
+        frames["D1"],
+        lower_duration=pd.Timedelta(hours=4),
+        candles_per_group=6,
+    )
+    stage["details"]["h1_to_h4"] = h1_h4
+    stage["details"]["h4_to_d1"] = h4_d1
+    for label, comparison in (("H1→H4", h1_h4), ("H4→D1", h4_d1)):
+        if comparison["status"] != "PASS":
+            _warn(
+                stage,
+                f"{label} aggregation is {comparison['status']}; "
+                "quantify provider/calendar differences before activation",
+                blocking=True,
+            )
+    return stage
+
+
 class SymbolQualificationHarness:
     """Sequential, read-only orchestrator for registry, provider and CSV evidence."""
 
@@ -704,25 +745,25 @@ class SymbolQualificationHarness:
         self.project_root = Path(project_root).resolve()
         self.probe_providers = probe_providers
         self.now = now
-        self._active_rows = list(database.get_supported_symbols())
-        self._active_by_symbol = {
+        self._data_rows = list(database.get_data_symbols())
+        self._data_by_symbol = {
             normalize_symbol(row.get("symbol_code", "")): dict(row)
-            for row in self._active_rows
+            for row in self._data_rows
             if row.get("symbol_code")
         }
 
     def universe(self) -> tuple[str, ...]:
-        return tuple(sorted(set(DECLARED_CODE_SYMBOLS) | set(self._active_by_symbol)))
+        return tuple(sorted(set(DECLARED_CODE_SYMBOLS) | set(self._data_by_symbol)))
 
     def _registry_stage(self, symbol: str) -> dict[str, Any]:
         stage = _new_stage("REGISTRY")
-        row = self._active_by_symbol.get(symbol)
+        row = self._data_by_symbol.get(symbol)
         stage["details"]["row"] = row
-        stage["details"]["source"] = "DatabaseAdapter.get_supported_symbols"
+        stage["details"]["source"] = "DatabaseAdapter.get_data_symbols"
         if row is None:
             _warn(
                 stage,
-                "Symbol is declared in code but is not active in supported_symbols",
+                "Symbol is declared in code but is not qualified/active for data",
                 blocking=True,
             )
             return stage
@@ -736,8 +777,11 @@ class SymbolQualificationHarness:
                 raise ValueError
         except (TypeError, ValueError):
             _fail(stage, f"supported_symbols pip_value is invalid: {row.get('pip_value')!r}")
-        if str(row.get("status") or "").lower() != "active":
-            _fail(stage, f"supported_symbols status is not active: {row.get('status')!r}")
+        if str(row.get("status") or "").lower() not in {"qualified", "active"}:
+            _fail(
+                stage,
+                f"supported_symbols status is not data-enabled: {row.get('status')!r}",
+            )
         try:
             added_at = pd.Timestamp(row.get("added_at"))
             if pd.isna(added_at):
@@ -749,8 +793,11 @@ class SymbolQualificationHarness:
     def _routing_stage(self, symbol: str) -> tuple[dict[str, Any], RouteSpec]:
         stage = _new_stage("ROUTING")
         spec = route_spec(symbol)
-        router_asset = _detect_asset_type(symbol)
         stage["details"].update(asdict(spec))
+        try:
+            router_asset = _detect_asset_type(symbol)
+        except UnsupportedSymbolError:
+            router_asset = "unsupported"
         stage["details"]["router_asset_type"] = router_asset
         if not spec.astra_supported:
             _fail(
@@ -764,22 +811,17 @@ class SymbolQualificationHarness:
                 stage,
                 f"Asset routing mismatch: expected {expected_route}, DataRouter uses {router_asset}",
             )
-        if spec.asset_class == "CRYPTO" and not spec.primary_ticker_catalogued:
-            _fail(
-                stage,
-                f"Binance primary ticker {spec.primary_external_ticker} is not in ASTRA's Binance catalog",
-            )
-        if not spec.fallback_ticker_explicit:
+        if spec.astra_supported and spec.provider_fallback is None:
             _warn(
                 stage,
-                f"Yahoo fallback uses implicit ticker passthrough {spec.fallback_external_ticker!r}",
-                blocking=True,
+                "No semantically exact fallback is configured; primary provider is required",
+                blocking=False,
             )
-        if symbol == "USDCHF" and spec.fallback_external_ticker.startswith("CHFUSD"):
+        for blocked_route in spec.blocked_routes:
             _warn(
                 stage,
-                "Yahoo fallback ticker direction is CHF/USD while ASTRA symbol is USD/CHF",
-                blocking=True,
+                blocked_route,
+                blocking=False,
             )
         if spec.provider_primary == "MT5":
             _warn(
@@ -845,15 +887,13 @@ class SymbolQualificationHarness:
                         f"provider returned {int(malformed.sum())} malformed OHLC rows"
                     )
                 source = router.source_used or "unknown"
-                ticker = (
-                    spec.primary_external_ticker
-                    if source in {"MT5", "Binance"}
-                    else spec.fallback_external_ticker
-                )
+                route = router.route_used
+                ticker = route.external_ticker if route else None
                 frames[timeframe] = closed
                 metadata[timeframe] = {
                     "provider_used": source,
                     "external_ticker": ticker,
+                    "provider_class": route.provider_class if route else None,
                     "attempt_errors": list(router.attempt_errors),
                     "closed_rows": len(closed),
                     "gaps": probe_gaps,
@@ -970,13 +1010,54 @@ class SymbolQualificationHarness:
                 f"Registry last timestamp differs from CSV: {registry_last} != {physical_last}",
             )
 
-        if provider_frame is None:
+        persisted_provenance = {
+            field: entry.get(field)
+            for field in (
+                "provider_used",
+                "external_ticker",
+                "provider_class",
+                "source_fetched_at",
+                "source_sha256",
+            )
+        }
+        stage["details"]["persisted_provenance"] = persisted_provenance
+        missing_provenance = [
+            field for field, value in persisted_provenance.items() if not value
+        ]
+        if missing_provenance:
+            legacy_pending = entry.get("legacy_provenance_pending") in (1, True)
             _warn(
                 stage,
-                "Stored CSV has no persisted provider/ticker provenance and no live match was available",
-                blocking=True,
+                (
+                    "LEGACY_PROVENANCE_PENDING: " if legacy_pending else ""
+                ) + f"Registry provenance is incomplete: {missing_provenance}",
+                blocking=not legacy_pending,
             )
         else:
+            route = next(
+                (
+                    candidate
+                    for candidate in (
+                        get_symbol_spec(symbol).primary,
+                        get_symbol_spec(symbol).fallback,
+                    )
+                    if candidate is not None
+                    and candidate.provider == persisted_provenance["provider_used"]
+                ),
+                None,
+            )
+            if (
+                route is None
+                or route.external_ticker != persisted_provenance["external_ticker"]
+                or route.provider_class != persisted_provenance["provider_class"]
+            ):
+                _fail(stage, "Registry provenance does not match the canonical route")
+            actual_sha256 = sha256_file(physical_path)
+            stage["details"]["physical_sha256"] = actual_sha256
+            if persisted_provenance["source_sha256"] != actual_sha256:
+                _fail(stage, "Registry source_sha256 differs from the physical CSV")
+
+        if provider_frame is not None:
             provenance = _match_provider_frame(normalized, provider_frame)
             provenance.update(provider_metadata or {})
             stage["details"]["provider_provenance"] = provenance
@@ -992,43 +1073,7 @@ class SymbolQualificationHarness:
         self,
         frames: dict[str, pd.DataFrame],
     ) -> dict[str, Any]:
-        stage = _new_stage("CROSS-TIMEFRAME")
-        if set(frames) != set(TIMEFRAMES):
-            _fail(stage, f"Missing validated timeframe frames: {sorted(set(TIMEFRAMES) - set(frames))}")
-            return stage
-
-        latest_prices = {
-            timeframe: float(frames[timeframe]["close"].iloc[-1])
-            for timeframe in TIMEFRAMES
-        }
-        scale_ratio = max(latest_prices.values()) / min(latest_prices.values())
-        stage["details"]["latest_close"] = latest_prices
-        stage["details"]["latest_scale_ratio"] = scale_ratio
-        if not math.isfinite(scale_ratio) or scale_ratio > 1.5:
-            _fail(stage, f"Cross-timeframe price scale mismatch: ratio={scale_ratio:.6g}")
-
-        h1_h4 = _aggregate_comparison(
-            frames["H1"],
-            frames["H4"],
-            lower_duration=pd.Timedelta(hours=1),
-            candles_per_group=4,
-        )
-        h4_d1 = _aggregate_comparison(
-            frames["H4"],
-            frames["D1"],
-            lower_duration=pd.Timedelta(hours=4),
-            candles_per_group=6,
-        )
-        stage["details"]["h1_to_h4"] = h1_h4
-        stage["details"]["h4_to_d1"] = h4_d1
-        for label, comparison in (("H1→H4", h1_h4), ("H4→D1", h4_d1)):
-            if comparison["status"] != "PASS":
-                _warn(
-                    stage,
-                    f"{label} aggregation is {comparison['status']}; quantify provider/calendar differences before activation",
-                    blocking=True,
-                )
-        return stage
+        return validate_cross_timeframes(frames)
 
     @staticmethod
     def _final_stage(stages: dict[str, dict[str, Any]]) -> dict[str, Any]:

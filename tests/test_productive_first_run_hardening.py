@@ -13,6 +13,20 @@ from forex.prediction.retrain_manager import RetrainManager
 from infra.db.database import SQLiteDatabase
 
 
+def _set_active_fixture(database: SQLiteDatabase, symbol: str) -> None:
+    from forex.data.symbol_catalog import get_symbol_spec
+
+    spec = get_symbol_spec(symbol)
+    database.register_candidate(
+        spec.symbol_code, spec.display_name, spec.asset_class, spec.pip_value
+    )
+    with database._connection() as connection:
+        connection.execute(
+            "UPDATE supported_symbols SET status='active' WHERE symbol_code=?",
+            (spec.symbol_code,),
+        )
+
+
 def _csv(path):
     frame = pd.DataFrame({
         "timestamp": pd.date_range("2026-01-01", periods=2, freq="h"),
@@ -53,6 +67,7 @@ def _patch_report_data(monkeypatch, frame):
 
 
 def _legacy_initial_alias(monkeypatch, manager, storage, pair="EURUSD"):
+    _set_active_fixture(manager.database, pair)
     with monkeypatch.context() as patch:
         patch.setattr(
             RetrainManager,
@@ -311,6 +326,7 @@ def test_force_cannot_bypass_wfv_for_pair_specific_initial_promotion(
 
 def test_initial_promotion_requires_wfv_evidence_without_touching_alias(tmp_path):
     database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
+    _set_active_fixture(database, "EURUSD")
     storage = ModelStorage(tmp_path / "models")
     manager = RetrainManager(database=database, storage=storage)
 
@@ -329,6 +345,7 @@ def test_preexisting_bootstrap_alias_is_preserved_and_flagged_for_revalidation(
     monkeypatch, tmp_path
 ):
     database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
+    _set_active_fixture(database, "EURUSD")
     storage = ModelStorage(tmp_path / "models")
     manager = RetrainManager(database=database, storage=storage)
     monkeypatch.setattr(manager, "_initial_eligibility_error", lambda _metadata: "")
@@ -443,7 +460,7 @@ def test_run_cycle_bootstraps_legacy_alias_before_prediction(monkeypatch, tmp_pa
     from scheduler import autonomous_scheduler
 
     database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
-    database.add_symbol("EURUSD")
+    _set_active_fixture(database, "EURUSD")
     storage = ModelStorage(tmp_path / "models" / "forex")
     manager = RetrainManager(database=database, storage=storage)
     _legacy_initial_alias(monkeypatch, manager, storage)
@@ -523,7 +540,7 @@ def test_h1_updates_all_active_symbols_before_model_eligibility_gate(
     database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
     symbols = ("EURUSD", "GBPUSD", "USDJPY", "AUDUSD")
     for symbol in symbols:
-        database.add_symbol(symbol)
+        _set_active_fixture(database, symbol)
 
     events = []
     predictions = []
@@ -587,7 +604,7 @@ def test_h1_counts_independent_update_and_model_gate_failures_once_each(
     from scheduler import autonomous_scheduler
 
     database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
-    database.add_symbol("GBPUSD")
+    _set_active_fixture(database, "GBPUSD")
 
     monkeypatch.setattr(autonomous_scheduler, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(autonomous_scheduler, "detect_new_symbols", lambda _db: [])
@@ -629,7 +646,7 @@ def test_h1_closed_loop_failure_counts_once_and_preserves_prediction(
     from scheduler import autonomous_scheduler
 
     database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
-    database.add_symbol("EURUSD")
+    _set_active_fixture(database, "EURUSD")
 
     monkeypatch.setattr(autonomous_scheduler, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(autonomous_scheduler, "detect_new_symbols", lambda _db: [])
@@ -677,7 +694,7 @@ def test_run_cycle_blocks_integrity_failures_before_bootstrap_and_prediction(
     from scheduler import autonomous_scheduler
 
     database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
-    database.add_symbol("EURUSD")
+    _set_active_fixture(database, "EURUSD")
     storage = ModelStorage(tmp_path / "models" / "forex")
     manager = RetrainManager(database=database, storage=storage)
     latest = storage.base_dir / "latest_EURUSD.pkl"
@@ -740,7 +757,7 @@ def test_failed_legacy_bootstrap_updates_data_without_new_retrain_or_prediction(
     from scheduler import autonomous_scheduler
 
     database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
-    database.add_symbol("EURUSD")
+    _set_active_fixture(database, "EURUSD")
     storage = ModelStorage(tmp_path / "models" / "forex")
     manager = RetrainManager(database=database, storage=storage)
     _legacy_initial_alias(monkeypatch, manager, storage)
@@ -817,7 +834,7 @@ def test_integrity_gate_runs_after_dataset_update_and_blocks_prediction(
     from scheduler import autonomous_scheduler
 
     database = SQLiteDatabase(str(tmp_path / "db.sqlite"))
-    database.add_symbol("EURUSD")
+    _set_active_fixture(database, "EURUSD")
     events = []
 
     monkeypatch.setattr(autonomous_scheduler, "PROJECT_ROOT", tmp_path)
@@ -999,6 +1016,7 @@ def test_failed_bootstrap_is_one_shot_when_only_candle_provenance_changes(
 
 def test_corrupt_or_ambiguous_alias_never_auto_revalidates(monkeypatch, tmp_path):
     corrupt_db = SQLiteDatabase(str(tmp_path / "corrupt.sqlite"))
+    _set_active_fixture(corrupt_db, "EURUSD")
     corrupt_storage = ModelStorage(tmp_path / "corrupt-models")
     corrupt_manager = RetrainManager(database=corrupt_db, storage=corrupt_storage)
     corrupt = corrupt_storage.base_dir / "latest_EURUSD.pkl"

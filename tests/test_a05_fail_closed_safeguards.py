@@ -94,6 +94,7 @@ class FailClosedSafeguardTests(unittest.TestCase):
                 "forex.prediction.dataset_builder",
                 DatasetBuilder=object,
                 get_pair_config=lambda _pair: {"horizon": 5, "rr_ratio": 2.0},
+                require_ml_config=lambda _pair: {"horizon": 5, "rr_ratio": 2.0},
             ),
             "forex.prediction.predictor": _module(
                 "forex.prediction.predictor", ForexPredictor=object
@@ -223,7 +224,7 @@ class FailClosedSafeguardTests(unittest.TestCase):
         self.candlestick_module.detect_patterns = detect_patterns
 
         tracker = Mock()
-        self.outcome_module.OutcomeTracker = lambda: tracker
+        self.outcome_module.OutcomeTracker = lambda **_kwargs: tracker
 
         pipeline = object.__new__(self.pipeline_module.ForexIntegratedPipeline)
         pipeline.storage = types.SimpleNamespace(
@@ -237,6 +238,9 @@ class FailClosedSafeguardTests(unittest.TestCase):
             }
         )
         pipeline._pair_params = lambda _pair: (5, 2.0)
+        pipeline.closed_loop_database = types.SimpleNamespace(
+            get_symbol=lambda symbol: {"symbol_code": symbol, "status": "active"}
+        )
 
         with patch.object(self.pipeline_module, "_load", return_value=frame), patch.object(
             self.pipeline_module, "build_features", side_effect=lambda df: df

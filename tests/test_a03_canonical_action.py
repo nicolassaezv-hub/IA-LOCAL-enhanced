@@ -96,6 +96,7 @@ class CanonicalActionTests(unittest.TestCase):
                 "forex.prediction.dataset_builder",
                 DatasetBuilder=object,
                 get_pair_config=lambda _pair: {"horizon": 5, "rr_ratio": 2.0},
+                require_ml_config=lambda _pair: {"horizon": 5, "rr_ratio": 2.0},
             ),
             "forex.prediction.predictor": _module(
                 "forex.prediction.predictor", ForexPredictor=object
@@ -151,7 +152,7 @@ class CanonicalActionTests(unittest.TestCase):
                 return frame
 
         tracker = Mock()
-        self.outcome_module.OutcomeTracker = lambda: tracker
+        self.outcome_module.OutcomeTracker = lambda **_kwargs: tracker
         if raw_action in ("BUY", "SELL"):
             self.context.risk = types.SimpleNamespace(
                 decision=raw_action,
@@ -186,6 +187,9 @@ class CanonicalActionTests(unittest.TestCase):
             }
         )
         pipeline._pair_params = lambda _pair: (5, 2.0)
+        pipeline.closed_loop_database = types.SimpleNamespace(
+            get_symbol=lambda symbol: {"symbol_code": symbol, "status": "active"}
+        )
 
         with patch.object(self.pipeline_module, "_load", return_value=frame), patch.object(
             self.pipeline_module, "build_features", side_effect=lambda df: df

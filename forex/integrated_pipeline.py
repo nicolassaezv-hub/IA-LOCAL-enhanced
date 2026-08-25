@@ -17,12 +17,13 @@ import numpy as np
 import pandas as pd
 
 from .feature_engineering  import build_features
-from .dataset_builder      import DatasetBuilder, get_pair_config
+from .dataset_builder      import DatasetBuilder, get_pair_config, require_ml_config
 from .predictor            import ForexPredictor
 from .backtester           import ForexBacktester
 from .xgb_trainer          import ForexEnsembleTrainer, train_with_wfv
 from .hyperparameter_tuner import ForexHyperparameterTuner
 from .csv_adapter          import adapt_csv
+from infra.db.database import require_active_symbol
 
 
 def _load(filepath: str, pair: str = None,
@@ -76,6 +77,7 @@ class ForexIntegratedPipeline:
               use_wfv: bool = True) -> dict:
         df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
         pair = _infer_pair(df, pair)
+        require_ml_config(pair)
         df   = build_features(df)
 
         horizon, rr_ratio = self._pair_params(pair)
@@ -133,6 +135,11 @@ class ForexIntegratedPipeline:
                 path_h4: str = None, path_d1: str = None) -> dict:
         df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
         pair = _infer_pair(df, pair)
+        require_ml_config(pair)
+        require_active_symbol(
+            pair,
+            database=getattr(self, "closed_loop_database", None),
+        )
         df   = build_features(df)
 
         # Cargar feature_names guardadas junto al modelo (evita mismatch)
@@ -158,6 +165,11 @@ class ForexIntegratedPipeline:
                                path_h4: str = None, path_d1: str = None) -> dict:
         df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
         pair = _infer_pair(df, pair)
+        require_ml_config(pair)
+        require_active_symbol(
+            pair,
+            database=getattr(self, "closed_loop_database", None),
+        )
         df   = build_features(df)
 
         from .model_storage import ModelStorage

@@ -683,7 +683,9 @@ def test_higher_timeframe_cycles_never_predict(timeframe):
     db = Mock()
     db.create_scheduler_run.return_value = {"id": 1}
     db.get_scheduler_runs.return_value = []
-    db.get_supported_symbols.return_value = [{"symbol_code": "EURUSD"}]
+    db.get_data_symbols.return_value = [
+        {"symbol_code": "EURUSD", "status": "active"}
+    ]
     with patch.object(autonomous_scheduler, "detect_new_symbols", return_value=[]), patch.object(
         autonomous_scheduler, "run_rolling_update", return_value={"action": "updated"}
     ), patch.object(autonomous_scheduler, "run_prediction") as predict:

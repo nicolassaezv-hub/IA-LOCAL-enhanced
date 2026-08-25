@@ -27,6 +27,16 @@ from infra.db.database import (
 BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
+def _ensure_active(database: SQLiteDatabase, symbol: str = "EURUSD") -> None:
+    if database.get_symbol(symbol) is None:
+        database.add_symbol(symbol, "EUR/USD", 0.0001)
+    with database._connection() as connection:
+        connection.execute(
+            "UPDATE supported_symbols SET status='active' WHERE symbol_code=?",
+            (symbol,),
+        )
+
+
 @pytest.fixture
 def closed_loop(tmp_path):
     db_path = tmp_path / "closed-loop.db"
@@ -49,6 +59,7 @@ def _record(
     horizon: int = 2,
     entry: float = 100.0,
 ) -> str:
+    _ensure_active(tracker.database)
     return tracker.record_prediction(
         "EURUSD",
         "H1",
@@ -102,6 +113,7 @@ def _seed_finalized_outcomes(database: SQLiteDatabase, count: int) -> list[int]:
 
 
 def _manager(tmp_path, database, *, minimum=2):
+    _ensure_active(database)
     storage = ModelStorage(tmp_path / "models")
     manager = RetrainManager(
         database=database,
@@ -273,7 +285,7 @@ def test_scheduler_service_delegates_to_canonical_closed_loop(monkeypatch):
 
     class Database:
         @staticmethod
-        def get_supported_symbols():
+        def get_active_symbols():
             return [{"symbol_code": "EURUSD"}, {"symbol_code": "USDJPY"}]
 
     def canonical(database, symbol, timeframe):

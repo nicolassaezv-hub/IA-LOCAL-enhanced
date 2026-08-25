@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import re
 import tempfile
 import time
 import uuid
@@ -140,6 +141,45 @@ class RetrainManager:
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
+
+    def _require_lifecycle_status(
+        self,
+        pair: str,
+        *,
+        allowed: set[str],
+        operation: str,
+    ) -> None:
+        """Apply the explicit data/training/production lifecycle boundary."""
+        getter = getattr(self.database, "get_symbol", None)
+        if not callable(getter):
+            return
+        symbol = _clean_pair(pair)
+        row = getter(symbol)
+        if row is None:
+            raise ValueError(
+                f"SYMBOL_LIFECYCLE_BLOCKED: {operation}: "
+                f"{symbol} status=unregistered allowed={sorted(allowed)}"
+            )
+        status = str(row.get("status") or "").lower()
+        if status not in allowed:
+            raise ValueError(
+                f"SYMBOL_LIFECYCLE_BLOCKED: {operation}: "
+                f"{symbol} status={status} allowed={sorted(allowed)}"
+            )
+
+    def _require_registered_ml_config(self, pair: str) -> None:
+        """Require explicit ML capability, preserving internal horizon aliases."""
+        getter = getattr(self.database, "get_symbol", None)
+        from .dataset_builder import require_ml_config
+
+        symbol = _clean_pair(pair)
+        row = getter(symbol) if callable(getter) else None
+        if row is None:
+            horizon_alias = re.fullmatch(r"(.+)H\d+", symbol)
+            if horizon_alias is not None:
+                require_ml_config(horizon_alias.group(1))
+                return
+        require_ml_config(symbol)
 
     @staticmethod
     def dataset_provenance_sha256(dataset_provenance: dict) -> str:
@@ -377,6 +417,9 @@ class RetrainManager:
     ) -> dict | None:
         """Persist eligibility once enough new finalized outcomes exist."""
         symbol = pair.upper()
+        self._require_lifecycle_status(
+            symbol, allowed={"active"}, operation="autonomous_retrain"
+        )
         tf = timeframe.upper()
         existing = self.database.get_retrain_runs(symbol)
         active = next(
@@ -434,6 +477,9 @@ class RetrainManager:
     ) -> dict | None:
         """Create one durable replacement run for a provable legacy alias."""
         symbol = _clean_pair(pair)
+        self._require_lifecycle_status(
+            symbol, allowed={"active"}, operation="bootstrap_revalidation"
+        )
         tf = str(timeframe).upper().strip()
         if tf != "H1":
             return None
@@ -518,6 +564,12 @@ class RetrainManager:
     ) -> dict:
         """Create one new, explicit quality retrain without reopening bootstrap."""
         symbol = _clean_pair(pair)
+        self._require_lifecycle_status(
+            symbol,
+            allowed={"qualified", "active"},
+            operation="manual_quality_retrain",
+        )
+        self._require_registered_ml_config(symbol)
         tf = str(timeframe).upper().strip()
         request = str(request_id).strip()
         if tf != "H1":
@@ -709,6 +761,15 @@ class RetrainManager:
         validator: Callable[[object], bool] | None = None,
     ) -> dict:
         """Train, validate and promote without exposing a partial latest model."""
+        run = self._get_run(run_id)
+        allowed = (
+            {"qualified", "active"}
+            if run.get("trigger") == RetrainTrigger.MANUAL_QUALITY_RETRAIN.value
+            else {"active"}
+        )
+        self._require_lifecycle_status(
+            run["symbol"], allowed=allowed, operation="execute_retrain"
+        )
         return self._execute_run(
             run_id,
             train_func,
@@ -729,6 +790,12 @@ class RetrainManager:
     ) -> dict:
         """Publish the first symbol model with explicit non-retrain provenance."""
         symbol = _clean_pair(pair)
+        self._require_lifecycle_status(
+            symbol,
+            allowed={"qualified", "active"},
+            operation="initial_training",
+        )
+        self._require_registered_ml_config(symbol)
         tf = str(timeframe).upper().strip()
         if not tf:
             raise ValueError("initial training timeframe is required")
@@ -1328,6 +1395,14 @@ class RetrainManager:
         old_accuracy: float = 0.0,
     ) -> RetrainRecord:
         """Persistently reject the legacy path that cannot provide provenance."""
+        allowed = (
+            {"qualified", "active"}
+            if trigger == RetrainTrigger.MANUAL
+            else {"active"}
+        )
+        self._require_lifecycle_status(
+            pair, allowed=allowed, operation="legacy_retrain"
+        )
         started = time.monotonic()
         timestamp = _now()
         evidence_key = hashlib.sha256(

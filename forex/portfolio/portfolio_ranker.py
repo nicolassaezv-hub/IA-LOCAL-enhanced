@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from infra.db.database import SymbolLifecycleError, require_active_symbol
+
 try:
     from colorama import Fore, Style
     HAS_COLOR = True
@@ -70,6 +72,9 @@ class PortfolioRanking:
     ranking: list[PortfolioOpportunity] = field(default_factory=list)
     filter_signal: str = ""
     min_reliability: float = 0.0
+    total_active: int = 0
+    total_rejected: int = 0
+    rejected: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -78,6 +83,9 @@ class PortfolioRanking:
             "active_signals": self.active_signals,
             "filter_signal": self.filter_signal,
             "min_reliability": self.min_reliability,
+            "total_active": self.total_active,
+            "total_rejected": self.total_rejected,
+            "rejected": self.rejected,
             "ranking": [o.to_dict() for o in self.ranking],
         }
 
@@ -119,9 +127,16 @@ FAVORABLE_REGIMES = {
 class PortfolioRanker:
     """Motor de ranking de oportunidades de portfolio."""
 
-    def __init__(self, db_path: str = "memoria.db", weights: dict | None = None):
+    def __init__(
+        self,
+        db_path: str = "memoria.db",
+        weights: dict | None = None,
+        *,
+        database=None,
+    ):
         self.db_path = db_path
         self.weights = {**DEFAULT_WEIGHTS, **(weights or {})}
+        self.database = database
         self._init_db()
 
     def _init_db(self):
@@ -191,8 +206,15 @@ class PortfolioRanker:
 
         opps: list[PortfolioOpportunity] = []
         for o in opportunities:
+            pair = str(o.get("pair", "")).upper()
+            try:
+                require_active_symbol(pair, database=self.database)
+            except SymbolLifecycleError as exc:
+                ranking.rejected.append({"pair": pair, "reason": str(exc)})
+                continue
+            ranking.total_active += 1
             opp = PortfolioOpportunity(
-                pair=o.get("pair", ""),
+                pair=pair,
                 timeframe=o.get("timeframe", "H1"),
                 signal=o.get("signal", "HOLD"),
                 decision=o.get("decision", "HOLD"),
@@ -230,14 +252,20 @@ class PortfolioRanker:
             ranking.ranking.append(opp)
 
         ranking.active_signals = len(opps)
+        ranking.total_rejected = len(ranking.rejected)
 
-        if save:
+        if save and ranking.total_active:
             self._save_ranking(ranking)
 
         return ranking
 
     # ── Save ranking ──
     def _save_ranking(self, ranking: PortfolioRanking):
+        for opportunity in ranking.ranking:
+            require_active_symbol(
+                opportunity.pair,
+                database=self.database,
+            )
         try:
             conn = sqlite3.connect(self.db_path)
             conn.execute(

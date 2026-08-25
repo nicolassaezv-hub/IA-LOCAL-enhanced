@@ -24,18 +24,29 @@ class AutoUpdater:
     Usa RollingDataset para actualización validada, bloqueada y atómica.
     """
 
-    def __init__(self):
+    def __init__(self, database=None):
         self._last_update: dict[str, datetime] = {}
         self._update_log: list[dict] = []
+        if database is None:
+            from infra.db.database import get_database
+
+            database = get_database()
+        self.database = database
 
     def _load_active_pairs(self) -> list[dict]:
-        """Carga el índice de CSVs activos."""
+        """Intersect the legacy CSV index with lifecycle-active symbols."""
         try:
             if not _INDEX_PATH.exists():
                 return []
             with open(_INDEX_PATH) as f:
                 index = json.load(f)
-            return list(index.values())
+            active_symbols = {
+                row["symbol_code"] for row in self.database.get_data_symbols()
+            }
+            return [
+                entry for entry in index.values()
+                if str(entry.get("pair", "")).upper() in active_symbols
+            ]
         except Exception:
             return []
 
@@ -48,6 +59,13 @@ class AutoUpdater:
         result = {"pair": pair, "tf": tf, "ts": datetime.now().isoformat(),
                   "ok": False, "rows_added": 0, "source": None, "error": None}
         try:
+            active_symbols = {
+                row["symbol_code"] for row in self.database.get_data_symbols()
+            }
+            if pair.upper() not in active_symbols:
+                result["error"] = "Símbolo no activo en supported_symbols"
+                return result
+
             from forex.data.data_router import DataRouter
             router = DataRouter(pair, tf)
             df_new = router.fetch(bars=bars_fetch)

@@ -5,12 +5,10 @@ Datos de criptomonedas via python-binance (API pública, sin auth para datos his
 import pandas as pd
 from typing import Optional
 
+from forex.data.symbol_catalog import get_symbol_spec, symbols_by_asset_class
 
-_CRYPTO_PAIRS = {
-    "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
-    "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "MATICUSDT", "DOTUSDT",
-    "LTCUSDT", "LINKUSDT", "UNIUSDT", "ATOMUSDT", "NEARUSDT",
-}
+
+_CRYPTO_PAIRS = set(symbols_by_asset_class("CRYPTO"))
 
 _TF_MAP = {
     "M1": "1m", "M3": "3m", "M5": "5m", "M15": "15m", "M30": "30m",
@@ -22,16 +20,11 @@ _BINANCE_BASE = "https://api.binance.com/api/v3/klines"
 
 
 def is_crypto_pair(pair: str) -> bool:
-    """Determina si un par es criptográfico."""
-    p = pair.upper().replace("_", "").replace("/", "")
-    if p in _CRYPTO_PAIRS:
-        return True
-    crypto_currencies = {"BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "DOGE",
-                         "AVAX", "MATIC", "DOT", "LTC", "LINK", "UNI", "ATOM"}
-    for c in crypto_currencies:
-        if p.startswith(c) or p.endswith(c):
-            return True
-    return False
+    """Return True only for exact crypto instruments in the central catalog."""
+    try:
+        return get_symbol_spec(pair).asset_class == "CRYPTO"
+    except ValueError:
+        return False
 
 
 def _normalize_binance_klines(klines: list, pair: str) -> pd.DataFrame:

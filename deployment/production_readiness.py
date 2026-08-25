@@ -489,7 +489,7 @@ def run_production_readiness(
 
     if database is not None:
         try:
-            rows = database.get_supported_symbols()
+            rows = database.get_active_symbols()
             active_symbols = [
                 row["symbol_code"] for row in rows
                 if str(row.get("status", "active")).lower() == "active"
@@ -521,17 +521,24 @@ def run_production_readiness(
                     entry = entries[0] if entries else None
                     evidence = evaluate_dataset_registry_entry(entry, base_dir=root)
                     state = evidence["status"]
-                    check_status = "pass" if evidence["ready"] else (
+                    check_status = (
+                        "warn" if evidence["ready"] and evidence.get("warnings")
+                        else "pass" if evidence["ready"] else
                         "pending" if state in {"missing", "pending"} else "fail"
                     )
                     report.add_check(ReadinessCheck(
                         "5. Datasets", f"Dataset {symbol}/{timeframe}", check_status,
-                        "; ".join(evidence.get("reasons", [])) or (
+                        "; ".join(
+                            [
+                                *evidence.get("reasons", []),
+                                *evidence.get("warnings", []),
+                            ]
+                        ) or (
                             f"Canonical contract verified at {evidence.get('path')}"
                         ),
                         "Complete la rolling window canónica con datos reales"
                         if not evidence["ready"] else "",
-                        blocking=True,
+                        blocking=not evidence["ready"],
                         evidence_state=state.upper(),
                     ))
                 except Exception as exc:

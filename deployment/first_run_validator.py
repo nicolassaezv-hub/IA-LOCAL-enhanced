@@ -80,7 +80,7 @@ def run_first_deployment_check(
 
     # ── Descubrir simbolos ────────────────────────────────────
     if symbols is None:
-        db_symbols = db.get_supported_symbols()
+        db_symbols = db.get_active_symbols()
         symbols = [s["symbol_code"] for s in db_symbols] if db_symbols else []
 
     if not symbols:

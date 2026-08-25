@@ -176,6 +176,7 @@ class FirstRunWizard:
         )
         try:
             from infra.db.database import get_database
+            from forex.data.symbol_catalog import get_symbol_spec
 
             db = get_database()
 
@@ -185,14 +186,18 @@ class FirstRunWizard:
                 "EURJPY", "GBPJPY", "XAUUSD"
             ]
             for sym in default_symbols:
-                pip_val = 0.01 if ("JPY" in sym or "XAU" in sym) else 0.0001
-                db.add_symbol(code=sym, name=f"{sym} Pair", pip=pip_val)
+                spec = get_symbol_spec(sym)
+                db.add_symbol(
+                    code=spec.symbol_code,
+                    name=spec.display_name,
+                    pip=spec.pip_value,
+                )
 
             step.status = "PASS"
             backend = getattr(db, "db_path", type(db).__name__)
             step.detail = (
                 f"Canonical database initialized at {backend} with "
-                f"{len(default_symbols)} seeded symbols"
+                f"{len(default_symbols)} catalogued symbols seeded by lifecycle"
             )
         except Exception as e:
             step.status = "FAIL"

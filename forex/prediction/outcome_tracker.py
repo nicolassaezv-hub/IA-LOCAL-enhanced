@@ -15,7 +15,12 @@ from typing import Any, Iterable
 
 import pandas as pd
 
-from infra.db.database import SQLiteDatabase, stable_prediction_id
+from infra.db.database import (
+    SQLiteDatabase,
+    require_active_symbol,
+    stable_prediction_id,
+)
+from .dataset_builder import require_ml_config
 
 
 _TRADE_ACTIONS = ("BUY", "SELL")
@@ -133,15 +138,15 @@ class OutcomeTracker:
             raise ValueError("only final H1 predictions can enter the outcome loop")
         if not symbol or float(entry_price) <= 0:
             raise ValueError("prediction requires a symbol and positive entry price")
+        require_ml_config(symbol)
+        require_active_symbol(symbol, database=self.database)
         if candle_timestamp is None:
             candle_timestamp = prediction_timestamp
         if candle_timestamp is None:
             raise ValueError("prediction requires its closed candle identity")
         candle_iso = _utc_iso(candle_timestamp)
         if horizon_candles is None:
-            from .dataset_builder import get_pair_config
-
-            horizon_candles = int(get_pair_config(symbol)["horizon"])
+            horizon_candles = int(require_ml_config(symbol)["horizon"])
         if int(horizon_candles) <= 0:
             raise ValueError("outcome horizon must be a positive candle count")
         uid = prediction_id or stable_prediction_id(symbol, tf, candle_iso, action)

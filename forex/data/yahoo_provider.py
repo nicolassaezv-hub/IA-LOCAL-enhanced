@@ -6,19 +6,13 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional
 
+from forex.data.symbol_catalog import SYMBOL_CATALOG, route_for_provider
+
 
 _FOREX_TICKER_MAP = {
-    "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "JPY=X",
-    "USDCHF": "CHFUSD=X", "AUDUSD": "AUDUSD=X", "NZDUSD": "NZDUSD=X",
-    "USDCAD": "CAD=X",    "EURGBP": "EURGBP=X", "EURJPY": "EURJPY=X",
-    "GBPJPY": "GBPJPY=X", "AUDJPY": "AUDJPY=X", "EURAUD": "EURAUD=X",
-    "GBPAUD": "GBPAUD=X", "EURCHF": "EURCHF=X", "GBPCHF": "GBPCHF=X",
-    "AUDCAD": "AUDCAD=X", "AUDCHF": "AUDCHF=X", "AUDNZD": "AUDNZD=X",
-    "CADCHF": "CADCHF=X", "CADJPY": "CADJPY=X", "CHFJPY": "CHFJPY=X",
-    "NZDCAD": "NZDCAD=X", "NZDCHF": "NZDCHF=X", "NZDJPY": "NZDJPY=X",
-    "XAUUSD": "GC=F",     "XAGUSD": "SI=F",
-    "USOUSD": "CL=F",     "UKOUSD": "BZ=F",
-    "SPX500": "^GSPC",    "NAS100": "^NDX",     "GER40": "^GDAXI",
+    code: route.external_ticker
+    for code in SYMBOL_CATALOG
+    if (route := route_for_provider(code, "Yahoo")) is not None
 }
 FOREX_TICKER_MAP = _FOREX_TICKER_MAP
 
@@ -29,8 +23,10 @@ _TF_MAP = {
 
 
 def _to_yahoo_ticker(pair: str) -> str:
-    p = pair.upper().replace("_", "")
-    return _FOREX_TICKER_MAP.get(p, p)
+    route = route_for_provider(pair, "Yahoo")
+    if route is None:
+        raise ValueError(f"No semantically exact Yahoo route for {pair}")
+    return route.external_ticker
 
 
 to_yahoo_ticker = _to_yahoo_ticker

@@ -29,7 +29,7 @@ def run_closed_loop_job(database=None) -> list[dict]:
             "symbol": symbol["symbol_code"],
             **run_closed_loop_maintenance(db, symbol["symbol_code"], "H1"),
         }
-        for symbol in db.get_supported_symbols()
+        for symbol in db.get_active_symbols()
     ]
 
 

@@ -11,16 +11,16 @@ Usage:
     python scheduler/autonomous_scheduler.py --timeframe H4    # Update H4 context only
     python scheduler/autonomous_scheduler.py --timeframe D1    # Update D1 context only
     python scheduler/autonomous_scheduler.py --status          # System health JSON
-    python scheduler/autonomous_scheduler.py --add-symbol NZDUSD  # Add new symbol
     python scheduler/autonomous_scheduler.py --manual-quality-retrain EURUSD --request-id UUID
 """
 import sys
 import os
 import json
+import hashlib
 import logging
 import argparse
 import contextlib
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -31,10 +31,13 @@ from astra_version import ASTRA_VERSION
 from infra.db.database import (
     DatabaseAdapter,
     PersistenceConflictError,
+    SymbolLifecycleError,
     get_database,
+    require_active_symbol,
 )
 from runtime_paths import forex_dataset_path, forex_dataset_root, forex_model_root
 from forex.data.data_router import DataRouter
+from forex.data.symbol_catalog import legacy_default_specs, route_for_provider
 from forex.data.rolling_dataset import (
     ROLLING_WINDOW,
     RollingDataset,
@@ -61,10 +64,8 @@ TIMEFRAMES = ["H1", "H4", "D1"]
 PREDICTION_TIMEFRAME = "H1"
 BOOTSTRAP_REVALIDATION_ISSUE = "initial_training_not_production_eligible"
 DEFAULT_SYMBOLS = [
-    ("EURUSD", "EUR/USD", 0.0001),
-    ("GBPUSD", "GBP/USD", 0.0001),
-    ("USDJPY", "USD/JPY", 0.01),
-    ("AUDUSD", "AUD/USD", 0.0001),
+    (spec.symbol_code, spec.display_name, spec.pip_value)
+    for spec in legacy_default_specs()
 ]
 
 def fetch_market_data(symbol: str, timeframe: str, count: int = FETCH_BARS):
@@ -72,6 +73,14 @@ def fetch_market_data(symbol: str, timeframe: str, count: int = FETCH_BARS):
     router = DataRouter(symbol, timeframe)
     df = router.fetch(bars=count, raise_on_failure=True)
     return df, router.source_used
+
+
+def _file_sha256(path: Path | str) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _dataset_path(symbol: str, timeframe: str) -> Path:
@@ -117,6 +126,7 @@ def registry_entry_readiness(
     validation contract, exactly 2000 rows, and only closed candles.
     """
     reasons: list[str] = []
+    warnings: list[str] = []
     if not entry:
         return {
             "ready": False,
@@ -204,6 +214,33 @@ def registry_entry_readiness(
                     "Registry last_candle_timestamp does not match the persisted CSV "
                     f"({entry.get('last_candle_timestamp')!r} != {actual_last!r})"
                 )
+            provenance_fields = (
+                "provider_used",
+                "external_ticker",
+                "provider_class",
+                "source_fetched_at",
+                "source_sha256",
+            )
+            missing_provenance = [
+                field for field in provenance_fields if not entry.get(field)
+            ]
+            legacy_pending = entry.get("legacy_provenance_pending") in (1, True)
+            if missing_provenance:
+                message = f"Registry provenance is incomplete: {missing_provenance}"
+                if legacy_pending:
+                    warnings.append(f"LEGACY_PROVENANCE_PENDING: {message}")
+                else:
+                    reasons.append(message)
+            else:
+                route = route_for_provider(entry["symbol"], entry["provider_used"])
+                if (
+                    route is None
+                    or route.external_ticker != entry["external_ticker"]
+                    or route.provider_class != entry["provider_class"]
+                ):
+                    reasons.append("Registry provenance does not match canonical route")
+                if entry["source_sha256"] != _file_sha256(path):
+                    reasons.append("Registry source_sha256 differs from persisted CSV")
     except Exception as exc:
         reasons.append(f"Dataset verification raised {type(exc).__name__}: {exc}")
 
@@ -217,6 +254,10 @@ def registry_entry_readiness(
         "path": str(path),
         "actual_candle_count": actual_count,
         "reasons": reasons,
+        "warnings": warnings,
+        "provenance_state": (
+            "LEGACY_PROVENANCE_PENDING" if warnings else "VERIFIED"
+        ),
     }
 
 
@@ -230,11 +271,12 @@ def _upsert_successful_dataset(
     symbol: str,
     timeframe: str,
     stored: dict,
+    provenance: dict | None = None,
 ) -> str:
     """Update registry only after the dataset transaction has committed."""
     candle_count = int(stored["rows"])
     status = "ready" if candle_count == ROLLING_WINDOW else "pending"
-    db.upsert_dataset_registry({
+    entry = {
         "symbol": symbol,
         "timeframe": timeframe,
         "candle_count": candle_count,
@@ -243,18 +285,20 @@ def _upsert_successful_dataset(
         "blob_path": stored["path"],
         "status": status,
         "last_error": None,
-    })
+    }
+    entry.update(provenance or {})
+    db.upsert_dataset_registry(entry)
     return status
 
 
 def run_init(db: DatabaseAdapter):
-    """First-run: generate datasets for all supported symbols × all timeframes."""
-    symbols = db.get_supported_symbols()
+    """First-run: generate datasets for qualified/active data symbols."""
+    symbols = db.get_data_symbols()
     if not symbols:
         logger.info("No symbols in DB — seeding defaults...")
         for code, name, pip in DEFAULT_SYMBOLS:
             db.add_symbol(code, name, pip)
-        symbols = db.get_supported_symbols()
+        symbols = db.get_data_symbols()
 
     results = []
     for sym in symbols:
@@ -293,7 +337,17 @@ def run_rolling_update(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict
             symbol, timeframe, max_rows=ROLLING_WINDOW, csv_path=path
         )
         stored = dataset.update_frame(df_new)
-        status = _upsert_successful_dataset(db, symbol, timeframe, stored)
+        route = route_for_provider(symbol, source)
+        provenance = {
+            "provider_used": source,
+            "external_ticker": route.external_ticker if route else symbol,
+            "provider_class": route.provider_class if route else "UNKNOWN",
+            "source_fetched_at": datetime.now(timezone.utc).isoformat(),
+            "source_sha256": _file_sha256(stored["path"]),
+        }
+        status = _upsert_successful_dataset(
+            db, symbol, timeframe, stored, provenance
+        )
     except Exception as exc:
         logger.error("UPDATE FAILED %s %s: %s", symbol, timeframe, exc)
         return {"action": "error", "error": str(exc)}
@@ -372,6 +426,21 @@ def run_prediction(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict:
     H4 and D1 scheduler cycles maintain context datasets only.  The integrated
     predictor uses an H1 primary dataset enriched with those higher timeframes.
     """
+    try:
+        require_active_symbol(symbol, database=db)
+    except SymbolLifecycleError:
+        getter = getattr(db, "get_symbol", None)
+        symbol_row = getter(symbol) if callable(getter) else None
+        return {
+            "action": "skip",
+            "reason": "symbol_not_active",
+            "symbol": symbol,
+            "status": (
+                symbol_row.get("status")
+                if isinstance(symbol_row, dict)
+                else "unregistered"
+            ),
+        }
     if timeframe != PREDICTION_TIMEFRAME:
         logger.info(
             "  PREDICT SKIPPED %s %s — executable predictions are %s-only",
@@ -585,8 +654,8 @@ def run_closed_loop_maintenance(
 
 
 def detect_new_symbols(db: DatabaseAdapter) -> list:
-    """Find symbols in supported_symbols without datasets. Generate missing."""
-    symbols = db.get_supported_symbols()
+    """Generate missing datasets for qualified/active data symbols."""
+    symbols = db.get_data_symbols()
     generated = []
     for sym in symbols:
         code = sym["symbol_code"]
@@ -738,7 +807,7 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
     run_id = run["id"]
     logger.info(f"=== CYCLE START: {timeframe} (run #{run_id}) ===")
 
-    symbols = db.get_supported_symbols()
+    symbols = db.get_data_symbols()
     symbols_processed = 0
     predictions_generated = 0
     errors_count = 0
@@ -748,19 +817,32 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
     new = detect_new_symbols(db)
     if new:
         logger.info(f"New symbol datasets generated: {len(new)}")
-        symbols = db.get_supported_symbols()
+        symbols = db.get_data_symbols()
 
     # 2. Rolling update + prediction for each symbol
     for sym in symbols:
         code = sym["symbol_code"]
+        lifecycle_status = str(sym.get("status") or "").lower()
         symbols_processed += 1
 
         update_result = run_rolling_update(db, code, timeframe)
         results.append({"symbol": code, "update": update_result})
 
         model_gate = None
-        if timeframe == PREDICTION_TIMEFRAME:
+        if timeframe == PREDICTION_TIMEFRAME and lifecycle_status == "active":
             model_gate = _evaluate_h1_model_gate(db, code, timeframe)
+
+        if lifecycle_status == "qualified":
+            results.append({
+                "symbol": code,
+                "data_only": {
+                    "action": (
+                        "error" if update_result.get("action") == "error" else "updated"
+                    ),
+                    "status": "qualified",
+                    "prediction": "disabled",
+                },
+            })
 
         if update_result.get("action") == "error":
             errors_count += 1
@@ -784,6 +866,7 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
 
         if (
             timeframe == PREDICTION_TIMEFRAME
+            and lifecycle_status == "active"
             and update_result.get("action") in ("updated", "generated")
         ):
             closed_loop_result = run_closed_loop_maintenance(db, code, timeframe)
@@ -864,7 +947,13 @@ def get_status(db: DatabaseAdapter) -> dict:
     """Return scheduler health backed by registry and persisted CSV evidence."""
     try:
         health = dict(db.get_system_health())
-        entries = db.get_dataset_registry()
+        active_codes = {
+            row["symbol_code"] for row in db.get_active_symbols()
+        }
+        entries = [
+            entry for entry in db.get_dataset_registry()
+            if entry.get("symbol") in active_codes
+        ]
         declared_ready = [
             entry for entry in entries if entry.get("status") == "ready"
         ]
@@ -923,7 +1012,11 @@ def main():
     parser.add_argument("--init", action="store_true", help="Generate initial datasets")
     parser.add_argument("--timeframe", type=str, help="Run cycle for H1/H4/D1")
     parser.add_argument("--status", action="store_true", help="Print system health JSON")
-    parser.add_argument("--add-symbol", type=str, help="Add a new symbol (e.g. EURUSD)")
+    parser.add_argument(
+        "--add-symbol",
+        metavar="SYMBOL",
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument(
         "--manual-quality-retrain",
         metavar="SYMBOL",
@@ -934,6 +1027,15 @@ def main():
         help="Required idempotency key for --manual-quality-retrain",
     )
     args = parser.parse_args()
+    if args.add_symbol:
+        print(json.dumps({
+            "ok": False,
+            "error": (
+                "--add-symbol is deprecated and cannot activate symbols; use "
+                "scripts/manage_symbol_lifecycle.py register-candidate SYMBOL"
+            ),
+        }))
+        raise SystemExit(64)
     manual_symbol = (
         "".join(
             character for character in args.manual_quality_retrain.upper()
@@ -1005,15 +1107,6 @@ def main():
     if args.status:
         health = get_status(db)
         print(json.dumps(health, indent=2, default=str))
-        return
-
-    if args.add_symbol:
-        code = args.add_symbol.upper()
-        if len(code) != 6 or not code.isalpha():
-            print(json.dumps({"ok": False, "error": "Symbol must be 6 letters"}))
-            sys.exit(1)
-        sym = db.add_symbol(code, code, 0.0001)
-        print(json.dumps({"ok": True, "symbol": code, "message": f"Added {code}. Datasets will generate on next cycle."}))
         return
 
     if args.init:

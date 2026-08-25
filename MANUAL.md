@@ -892,8 +892,17 @@ python scheduler/autonomous_scheduler.py --timeframe H1
 # Ver estado del sistema (JSON)
 python scheduler/autonomous_scheduler.py --status
 
-# Anadir un simbolo nuevo
-python scheduler/autonomous_scheduler.py --add-symbol NZDUSD
+# Registrar un símbolo del catálogo como candidate (nunca active directamente)
+python scripts/manage_symbol_lifecycle.py register-candidate NZDUSD
+
+# Consultar providers reales y validar H1/H4/D1 en el root aislado
+python scripts/manage_symbol_lifecycle.py qualify-symbol NZDUSD
+
+# Activar sólo con datasets READY/frescos y modelo H1 productivo elegible
+python scripts/manage_symbol_lifecycle.py activate-symbol NZDUSD
+
+# Retirar el símbolo de todos los consumidores normales
+python scripts/manage_symbol_lifecycle.py disable-symbol NZDUSD
 
 # Reentrenamiento de calidad deliberado (H1 + snapshot H1/H4/D1)
 python scheduler/autonomous_scheduler.py \
@@ -909,6 +918,42 @@ resultado completo, y `1` cuando una excepción interna impide completarlo.
 existente. Devuelve JSON; usa `0` sólo cuando el candidato fue promovido, `2`
 para rechazo por gates, precondición o conflicto, y `1` para errores internos.
 El comando no acepta `force` y no modifica la identidad one-shot de bootstrap.
+
+El lifecycle permitido es `candidate → qualified → active`; `disabled` retira
+el símbolo. Qualification escribe bajo `data/qualification/<SYMBOL>/`, no crea
+modelos ni predicciones y no modifica el registry canónico. `qualified` es un
+estado **data-only**: el scheduler mantiene sus rolling2000 H1/H4/D1 canónicos
+y permite entrenamiento initial/manual explícito, pero no ejecuta model gate,
+prediction, outcomes, autonomous retraining, Opportunity ni Portfolio. Sólo
+`active` entra en esos consumidores productivos y requiere modelo H1 elegible.
+
+La migración conserva sin reescribir el estado de los símbolos que ya estaban
+`active`. Esas filas quedan identificadas persistentemente con
+`activation_origin=legacy`: la marca sólo documenta que su activación ocurrió
+antes del contrato lifecycle y no acredita que entonces existiera un modelo
+elegible. Siguen apareciendo en `get_active_symbols()`, pero readiness y el
+scheduler auditan sus modelos y bloquean prediction exactamente igual que para
+cualquier otro símbolo. Invocar `activate-symbol` sobre uno de ellos reporta
+`LEGACY_ACTIVE_GRANDFATHERED`; no lo convierte en una activación administrada.
+Toda fila nueva nace con `activation_origin=managed` y sólo puede pasar de
+`qualified` a `active` después de qualification, registry/provenance/freshness,
+configuración ML explícita y auditoría productiva del modelo.
+
+La activación vuelve a consultar la ruta del provider y exige que los datasets
+canónicos coincidan con sus últimas velas cerradas; la edad del reporte no es
+prueba de frescura. `evidence.json` conserva provenance e integridad reproducible,
+pero no es una frontera de autenticación frente a una cuenta de servicio
+comprometida. `--add-symbol` del scheduler está deprecado y falla indicando el
+CLI de lifecycle; nunca activa automáticamente.
+
+El catálogo distingue soporte operativo de datos (`data_supported`) de una
+configuración ML explícita (`ml_configured`, definida por `PAIR_CONFIG`). Un
+símbolo data-only sin configuración ML puede quedar `qualified`, pero training
+productivo/activation falla con `ML_CONFIG_NOT_DEFINED`. Los identificadores
+`BTCUSD`, `ETHUSD`, `USOIL` y `UKOIL` pueden existir en namespaces de mercado o
+noticias, pero no son aliases operativos: el pipeline usa `BTCUSDT`, `ETHUSDT`,
+`USOUSD` y `UKOUSD`. `pip_value` continúa siendo metadata legacy inerte; no es
+un contrato universal de tick economics para todas las clases de activo.
 
 ---
 

@@ -23,6 +23,9 @@ class FakeDatabase:
             return []
         return [{"status": "ready", "blob_path": str(path)}]
 
+    def get_symbol(self, symbol):
+        return {"symbol_code": symbol, "status": "active"}
+
     def save_prediction(self, prediction):
         saved = {"id": len(self.saved_predictions) + 1, **prediction}
         self.saved_predictions.append(saved)
@@ -45,8 +48,8 @@ class FakeCycleDatabase:
         self.run_updates.append((run_id, updates))
         return {**self.run, **updates}
 
-    def get_supported_symbols(self):
-        return [{"symbol_code": "EURUSD"}]
+    def get_data_symbols(self):
+        return [{"symbol_code": "EURUSD", "status": "active"}]
 
 
 @contextmanager
@@ -220,6 +223,12 @@ class SchedulerPipelineContractTests(unittest.TestCase):
     def test_sqlite_persistence_maps_final_action_to_current_direction_schema(self):
         h1 = self.make_dataset("EURUSD", "H1")
         db = SQLiteDatabase(str(self.root / "scheduler-test.db"))
+        db.add_symbol("EURUSD", "EUR/USD", 0.0001)
+        with db._connection() as connection:
+            connection.execute(
+                "UPDATE supported_symbols SET status='active' "
+                "WHERE symbol_code='EURUSD'"
+            )
         db.upsert_dataset_registry(
             {
                 "symbol": "EURUSD",

@@ -60,8 +60,9 @@ def test_sqlite_database_releases_file_for_immediate_deletion(tmp_path):
     db_path = tmp_path / "release.db"
     db = SQLiteDatabase(str(db_path))
 
-    db.add_symbol("TESTUS", "TEST/US", 0.0001)
-    assert db.get_supported_symbols()[0]["symbol_code"] == "TESTUS"
+    db.add_symbol("EURUSD", "EUR/USD", 0.0001)
+    assert db.get_symbol("EURUSD")["status"] == "candidate"
+    assert db.get_supported_symbols() == []
 
     db_path.unlink()
     assert not db_path.exists()
@@ -91,9 +92,13 @@ def test_sqlite_database_consecutive_operations_do_not_accumulate_handles(
     opened = _track_connections(monkeypatch)
     db = SQLiteDatabase(str(tmp_path / "consecutive.db"))
 
-    for index in range(25):
-        db.add_symbol(f"T{index:05d}", f"Test {index}", 0.0001)
-        db.get_supported_symbols()
+    from forex.data.symbol_catalog import SYMBOL_CATALOG
+
+    for spec in list(SYMBOL_CATALOG.values())[:25]:
+        db.register_candidate(
+            spec.symbol_code, spec.display_name, spec.asset_class, spec.pip_value
+        )
+        db.get_symbols_by_status("candidate")
         assert all(connection.closed for connection in opened)
 
     assert len(opened) > 25

@@ -5,7 +5,7 @@ ASTRA Infrastructure Test Suite
 Run: python3 tests/test_infrastructure.py
 """
 import ast
-import sys, os, json, time, sqlite3, types
+import sys, os, json, time, sqlite3, types, hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
@@ -15,6 +15,20 @@ if __name__ == "__main__" and str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 PASS = 0; FAIL = 0; TESTS = []
+
+
+def _set_active_fixture(db, symbol):
+    from forex.data.symbol_catalog import get_symbol_spec
+
+    spec = get_symbol_spec(symbol)
+    db.register_candidate(
+        spec.symbol_code, spec.display_name, spec.asset_class, spec.pip_value
+    )
+    with db._connection() as connection:
+        connection.execute(
+            "UPDATE supported_symbols SET status='active' WHERE symbol_code=?",
+            (spec.symbol_code,),
+        )
 
 
 def _write_ready_dataset(path, pair="EURUSD"):
@@ -37,6 +51,19 @@ def _write_ready_dataset(path, pair="EURUSD"):
     validate_dataset(dataset, ROLLING_WINDOW)
     dataset.to_csv(path, index=False)
     return dataset
+
+
+def _registry_provenance(path, symbol="EURUSD"):
+    from forex.data.symbol_catalog import route_for_provider
+
+    route = route_for_provider(symbol, "Yahoo")
+    return {
+        "provider_used": route.provider,
+        "external_ticker": route.external_ticker,
+        "provider_class": route.provider_class,
+        "source_fetched_at": "2026-08-01T00:00:00+00:00",
+        "source_sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+    }
 
 
 def _run_test(name, fn):
@@ -62,14 +89,15 @@ def test_database():
             conn.close()
         for t in ["supported_symbols","dataset_registry","predictions","outcomes","model_quality","scheduler_runs","config"]:
             assert t in tables, f"missing {t}"
-        sym = db.add_symbol("TESTUS","TEST/US",0.0001)
-        assert sym["symbol_code"]=="TESTUS"
+        _set_active_fixture(db, "EURUSD")
+        sym = db.get_symbol("EURUSD")
+        assert sym["symbol_code"]=="EURUSD"
         assert len(db.get_supported_symbols())==1
-        db.upsert_dataset_registry({"symbol":"TESTUS","timeframe":"H1","candle_count":100,"status":"ready","blob_path":str(Path(tmpdir) / "dataset.csv")})
-        assert len(db.get_dataset_registry("TESTUS","H1"))==1
-        pred = db.save_prediction({"symbol":"TESTUS","timeframe":"H1","direction":"buy","confidence":0.72})
+        db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":"H1","candle_count":100,"status":"ready","blob_path":str(Path(tmpdir) / "dataset.csv")})
+        assert len(db.get_dataset_registry("EURUSD","H1"))==1
+        pred = db.save_prediction({"symbol":"EURUSD","timeframe":"H1","direction":"buy","confidence":0.72})
         assert pred["id"] is not None
-        assert len(db.get_predictions("TESTUS","H1"))==1
+        assert len(db.get_predictions("EURUSD","H1"))==1
         run = db.create_scheduler_run({"timeframe":"H1","status":"running"})
         upd = db.update_scheduler_run(run["id"],{"status":"completed"})
         assert upd["status"]=="completed"
@@ -94,22 +122,22 @@ def test_init_first_run():
         with patch("scheduler.autonomous_scheduler.PROJECT_ROOT",Path(tmpdir)):
             with patch("scheduler.autonomous_scheduler.fetch_market_data",return_value=(df,"test")):
                 results = run_init(db)
-        assert len(results)==len(DEFAULT_SYMBOLS)*3
-        assert all(r["action"]=="generated" for r in results)
-        assert len(db.get_dataset_registry())==len(DEFAULT_SYMBOLS)*3
+        assert results == []
+        assert len(db.get_symbols_by_status("candidate")) == len(DEFAULT_SYMBOLS)
+        assert db.get_dataset_registry() == []
 
 def test_rolling_update():
     from infra.db.database import SQLiteDatabase
     from scheduler.autonomous_scheduler import run_rolling_update, ROLLING_WINDOW
     with TemporaryDirectory() as tmpdir:
         db = SQLiteDatabase(str(Path(tmpdir) / "t.db"))
-        db.add_symbol("EURUSD","EUR/USD",0.0001)
+        _set_active_fixture(db, "EURUSD")
         import pandas as pd
         old = pd.date_range("2026-01-01",periods=2000,freq="1h")
         old_df = pd.DataFrame({"timestamp":old,"open":1.08,"high":1.085,"low":1.075,"close":1.082,"volume":1000,"pair":"EURUSD"})
         data_dir = Path(tmpdir)/"data"/"forex"; data_dir.mkdir(parents=True,exist_ok=True)
         csv = data_dir/"EURUSD_H1.csv"; old_df.to_csv(csv,index=False)
-        db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":"H1","candle_count":2000,"last_candle_timestamp":str(old[-1]),"blob_path":str(csv),"status":"ready"})
+        db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":"H1","candle_count":2000,"last_candle_timestamp":str(old[-1]),"blob_path":str(csv),"status":"ready", **_registry_provenance(csv)})
         new_all = pd.date_range("2026-01-01",periods=2003,freq="1h")
         new_df = pd.DataFrame({"timestamp":new_all,"open":1.08,"high":1.085,"low":1.075,"close":1.083,"volume":1000,"pair":"EURUSD"})
         with patch("scheduler.autonomous_scheduler.PROJECT_ROOT",Path(tmpdir)):
@@ -119,34 +147,34 @@ def test_rolling_update():
         assert result["total"]==ROLLING_WINDOW
         assert result["added"]==3
 
-def test_new_symbol_detection():
+def test_candidate_is_invisible_to_new_symbol_detection():
     from infra.db.database import SQLiteDatabase
     from scheduler.autonomous_scheduler import detect_new_symbols
     import pandas as pd
     with TemporaryDirectory() as tmpdir:
         db = SQLiteDatabase(str(Path(tmpdir) / "t.db"))
-        db.add_symbol("EURUSD","EUR/USD",0.0001); db.add_symbol("NZDUSD","NZD/USD",0.0001)
+        _set_active_fixture(db, "EURUSD"); db.add_symbol("NZDUSD","NZD/USD",0.0001)
         for tf in ["H1","H4","D1"]:
             existing_path = Path(tmpdir)/f"EURUSD_{tf}.csv"
             existing_df = _write_ready_dataset(existing_path)
-            db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(existing_df["timestamp"].iloc[-1]),"blob_path":str(existing_path)})
+            db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(existing_df["timestamp"].iloc[-1]),"blob_path":str(existing_path), **_registry_provenance(existing_path)})
         df = pd.DataFrame({"timestamp":pd.date_range("2020-01-01",periods=2000,freq="1h"),"open":0.6,"high":0.605,"low":0.595,"close":0.602,"volume":1000,"pair":"NZDUSD"})
         with patch("scheduler.autonomous_scheduler.PROJECT_ROOT",Path(tmpdir)):
             with patch("scheduler.autonomous_scheduler.fetch_market_data",return_value=(df,"test")):
                 gen = detect_new_symbols(db)
-        assert len(gen)==3
-        assert all(g["symbol"]=="NZDUSD" for g in gen)
+        assert gen == []
+        assert db.get_symbol("NZDUSD")["status"] == "candidate"
 
 def test_init_skip():
     from infra.db.database import SQLiteDatabase
     from scheduler.autonomous_scheduler import run_init
     with TemporaryDirectory() as tmpdir:
         db = SQLiteDatabase(str(Path(tmpdir) / "t.db"))
-        db.add_symbol("EURUSD","EUR/USD",0.0001)
+        _set_active_fixture(db, "EURUSD")
         for tf in ["H1","H4","D1"]:
             existing_path = Path(tmpdir)/f"EURUSD_{tf}.csv"
             existing_df = _write_ready_dataset(existing_path)
-            db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(existing_df["timestamp"].iloc[-1]),"blob_path":str(existing_path)})
+            db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(existing_df["timestamp"].iloc[-1]),"blob_path":str(existing_path), **_registry_provenance(existing_path)})
         with patch("scheduler.autonomous_scheduler.PROJECT_ROOT",Path(tmpdir)):
             results = run_init(db)
         assert all(r["action"]=="skip" for r in results)
@@ -216,13 +244,13 @@ def _run_isolated_e2e_cycle(root: Path):
     from scheduler.autonomous_scheduler import run_cycle
     root.mkdir(parents=True, exist_ok=True)
     db = SQLiteDatabase(str(root / "t.db"))
-    db.add_symbol("EURUSD","EUR/USD",0.0001)
+    _set_active_fixture(db, "EURUSD")
     import pandas as pd
     df = pd.DataFrame({"timestamp":pd.date_range("2020-01-01",periods=2000,freq="1h"),"open":1.08,"high":1.085,"low":1.075,"close":1.082,"volume":1000,"pair":"EURUSD"})
     data_dir = root/"data"/"forex"; data_dir.mkdir(parents=True,exist_ok=True)
     csv = data_dir/"EURUSD_H1.csv"; df.to_csv(csv,index=False)
     for tf in ["H1","H4","D1"]:
-        db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(df["timestamp"].iloc[-1]),"blob_path":str(csv)})
+        db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(df["timestamp"].iloc[-1]),"blob_path":str(csv), **_registry_provenance(csv)})
     # Mock the canonical router boundary with newer candles.
     new_dates = pd.date_range("2020-01-01", periods=2003, freq="1h")
     new_data = pd.DataFrame({"timestamp":new_dates,"open":1.08,"high":1.085,"low":1.075,"close":1.083,"volume":1000,"pair":"EURUSD"})

@@ -21,13 +21,14 @@ import numpy as np
 import pandas as pd
 
 from .feature_engineering  import build_features
-from .dataset_builder      import DatasetBuilder, get_pair_config
+from .dataset_builder      import DatasetBuilder, get_pair_config, require_ml_config
 from .predictor            import ForexPredictor
 from .backtester           import ForexBacktester
 from .xgb_trainer          import (
     ForexEnsembleTrainer,
     train_with_wfv,
 )
+from infra.db.database import require_active_symbol
 from .hyperparameter_tuner import ForexHyperparameterTuner
 from .csv_adapter          import adapt_csv
 
@@ -292,6 +293,7 @@ class ForexIntegratedPipeline:
         dataset_provenance: dict,
         promotion_type: str,
     ) -> dict:
+        require_ml_config(symbol)
         """Build one candidate under the complete, non-bypassable gate order."""
         from forex.prediction.roadmap_v_integration import run_quality_gate
 
@@ -547,6 +549,7 @@ class ForexIntegratedPipeline:
               use_wfv: bool = True, force: bool = False) -> dict:
         df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
         pair = _infer_pair(df, pair, filepath=filepath)
+        require_ml_config(pair)
         df   = build_features(df)
 
         # ── Roadmap V: Quality Gate (V.5) ───────────────────────────
@@ -698,6 +701,11 @@ class ForexIntegratedPipeline:
         path_h4, path_d1 = _autoresolve_mtf(filepath, path_h4, path_d1)
         df   = _load(filepath, pair=pair, path_h4=path_h4, path_d1=path_d1)
         pair = _infer_pair(df, pair, filepath=filepath)
+        require_ml_config(pair)
+        require_active_symbol(
+            pair,
+            database=getattr(self, "closed_loop_database", None),
+        )
         df   = build_features(df)
 
         # Cargar feature_names guardadas junto al modelo (evita mismatch)

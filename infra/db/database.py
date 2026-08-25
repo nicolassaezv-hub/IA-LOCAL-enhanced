@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_SQLITE_DB_PATH = "memory_db/astra_autonomous.db"
 # Release of the ASTRA runtime that generated/persisted the prediction.
 _PIPELINE_VERSION = f"v{ASTRA_VERSION}"
+SYMBOL_STATUSES = ("candidate", "qualified", "active", "disabled")
+ACTIVATION_ORIGINS = ("legacy", "managed")
 
 
 def configured_sqlite_path() -> Path:
@@ -33,6 +35,26 @@ def configured_sqlite_path() -> Path:
 
 class PersistenceConflictError(RuntimeError):
     """Raised when one stable identity is reused for conflicting evidence."""
+
+
+class SymbolLifecycleError(ValueError):
+    """Raised when a production consumer receives a non-active symbol."""
+
+
+def require_active_symbol(symbol: str, *, database=None) -> dict:
+    """Return the authoritative active row or fail closed before production use."""
+    code = str(symbol or "").strip().upper()
+    authority = database if database is not None else get_database()
+    getter = getattr(authority, "get_symbol", None)
+    row = getter(code) if callable(getter) and code else None
+    if row is None:
+        raise SymbolLifecycleError(
+            f"SYMBOL_NOT_ACTIVE: {code or '<empty>'} status=unregistered"
+        )
+    status = str(row.get("status") or "").strip().lower()
+    if status != "active":
+        raise SymbolLifecycleError(f"SYMBOL_NOT_ACTIVE: {code} status={status}")
+    return row
 
 
 def stable_prediction_id(
@@ -80,9 +102,29 @@ class DatabaseAdapter(ABC):
     """Abstract database interface — all ASTRA code uses this."""
 
     @abstractmethod
+    def get_active_symbols(self) -> list[dict]: ...
+    @abstractmethod
+    def get_data_symbols(self) -> list[dict]: ...
+    @abstractmethod
     def get_supported_symbols(self) -> list[dict]: ...
     @abstractmethod
     def add_symbol(self, code: str, name: str, pip: float) -> dict: ...
+    @abstractmethod
+    def get_symbol(self, code: str) -> dict | None: ...
+    @abstractmethod
+    def get_symbols_by_status(self, status: str) -> list[dict]: ...
+    @abstractmethod
+    def register_candidate(
+        self, code: str, name: str, asset_class: str, pip: float
+    ) -> dict: ...
+    @abstractmethod
+    def mark_qualified(self, code: str, evidence: dict) -> dict: ...
+    @abstractmethod
+    def _persist_authorized_activation(
+        self, authorization: object
+    ) -> dict: ...
+    @abstractmethod
+    def disable_symbol(self, code: str) -> dict: ...
     @abstractmethod
     def get_dataset_registry(self, symbol: str = None, tf: str = None) -> list[dict]: ...
     @abstractmethod
@@ -143,10 +185,19 @@ class SQLiteDatabase(DatabaseAdapter):
             CREATE TABLE IF NOT EXISTS supported_symbols (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 symbol_code TEXT UNIQUE NOT NULL,
-                display_name TEXT,
-                pip_value REAL DEFAULT 0.0001,
-                status TEXT DEFAULT 'active',
-                added_at TEXT
+                display_name TEXT NOT NULL,
+                asset_class TEXT NOT NULL,
+                pip_value REAL NOT NULL,
+                status TEXT NOT NULL DEFAULT 'candidate'
+                    CHECK(status IN ('candidate','qualified','active','disabled')),
+                added_at TEXT NOT NULL,
+                updated_at TEXT,
+                qualification_evidence_path TEXT,
+                qualification_sha256 TEXT,
+                qualified_at TEXT,
+                qualification_catalog_version TEXT,
+                activation_origin TEXT NOT NULL DEFAULT 'managed'
+                    CHECK(activation_origin IN ('legacy','managed'))
             );
             CREATE TABLE IF NOT EXISTS dataset_registry (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -159,6 +210,12 @@ class SQLiteDatabase(DatabaseAdapter):
                 status TEXT DEFAULT 'pending',
                 last_error TEXT,
                 last_updated TEXT,
+                provider_used TEXT,
+                external_ticker TEXT,
+                provider_class TEXT,
+                source_fetched_at TEXT,
+                source_sha256 TEXT,
+                legacy_provenance_pending INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(symbol, timeframe)
             );
             CREATE TABLE IF NOT EXISTS predictions (
@@ -257,6 +314,7 @@ class SQLiteDatabase(DatabaseAdapter):
                 value TEXT
             );
             """)
+            self._migrate_symbol_lifecycle_schema(c)
             self._migrate_closed_loop_schema(c)
 
     @staticmethod
@@ -265,6 +323,110 @@ class SQLiteDatabase(DatabaseAdapter):
         for name, declaration in columns.items():
             if name not in present:
                 c.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
+
+    def _migrate_symbol_lifecycle_schema(self, c: sqlite3.Connection) -> None:
+        """Add lifecycle/provenance fields without replacing historical rows."""
+        invalid_statuses = [
+            row[0]
+            for row in c.execute(
+                "SELECT DISTINCT status FROM supported_symbols "
+                "WHERE status IS NULL OR status NOT IN "
+                "('candidate','qualified','active','disabled')"
+            ).fetchall()
+        ]
+        if invalid_statuses:
+            raise PersistenceConflictError(
+                "Unsupported existing symbol statuses; migration aborted without "
+                f"rewriting rows: {invalid_statuses}"
+            )
+
+        existing_symbol_columns = {
+            row[1] for row in c.execute("PRAGMA table_info(supported_symbols)")
+        }
+        origin_is_prepatch = "activation_origin" not in existing_symbol_columns
+        self._add_columns(c, "supported_symbols", {
+            "asset_class": "TEXT",
+            "updated_at": "TEXT",
+            "qualification_evidence_path": "TEXT",
+            "qualification_sha256": "TEXT",
+            "qualified_at": "TEXT",
+            "qualification_catalog_version": "TEXT",
+            "activation_origin": "TEXT NOT NULL DEFAULT 'managed'",
+        })
+        if origin_is_prepatch:
+            c.execute(
+                "UPDATE supported_symbols SET activation_origin='legacy' "
+                "WHERE status='active'"
+            )
+        existing_registry_columns = {
+            row[1] for row in c.execute("PRAGMA table_info(dataset_registry)")
+        }
+        provenance_is_legacy = "provider_used" not in existing_registry_columns
+        self._add_columns(c, "dataset_registry", {
+            "provider_used": "TEXT",
+            "external_ticker": "TEXT",
+            "provider_class": "TEXT",
+            "source_fetched_at": "TEXT",
+            "source_sha256": "TEXT",
+            "legacy_provenance_pending": "INTEGER NOT NULL DEFAULT 0",
+        })
+        if provenance_is_legacy:
+            c.execute(
+                "UPDATE dataset_registry SET legacy_provenance_pending=1 "
+                "WHERE provider_used IS NULL AND external_ticker IS NULL "
+                "AND provider_class IS NULL AND source_fetched_at IS NULL "
+                "AND source_sha256 IS NULL AND EXISTS ("
+                "SELECT 1 FROM supported_symbols AS symbol "
+                "WHERE symbol.symbol_code=dataset_registry.symbol "
+                "AND symbol.status='active')"
+            )
+
+        from forex.data.symbol_catalog import SYMBOL_CATALOG
+
+        for code, spec in SYMBOL_CATALOG.items():
+            c.execute(
+                "UPDATE supported_symbols SET asset_class=COALESCE(asset_class, ?) "
+                "WHERE symbol_code=?",
+                (spec.asset_class, code),
+            )
+        c.execute(
+            "UPDATE supported_symbols SET asset_class='UNKNOWN' "
+            "WHERE asset_class IS NULL OR TRIM(asset_class)=''"
+        )
+        c.executescript("""
+            DROP TRIGGER IF EXISTS supported_symbols_status_insert;
+            DROP TRIGGER IF EXISTS supported_symbols_status_update;
+            DROP TRIGGER IF EXISTS supported_symbols_origin_insert;
+            DROP TRIGGER IF EXISTS supported_symbols_origin_update;
+            CREATE TRIGGER supported_symbols_status_insert
+            BEFORE INSERT ON supported_symbols
+            WHEN NEW.status IS NULL OR
+                 NEW.status NOT IN ('candidate','qualified','active','disabled')
+            BEGIN
+                SELECT RAISE(ABORT, 'invalid supported_symbols status');
+            END;
+            CREATE TRIGGER supported_symbols_status_update
+            BEFORE UPDATE OF status ON supported_symbols
+            WHEN NEW.status IS NULL OR
+                 NEW.status NOT IN ('candidate','qualified','active','disabled')
+            BEGIN
+                SELECT RAISE(ABORT, 'invalid supported_symbols status');
+            END;
+            CREATE TRIGGER supported_symbols_origin_insert
+            BEFORE INSERT ON supported_symbols
+            WHEN NEW.activation_origin IS NULL OR
+                 NEW.activation_origin NOT IN ('legacy','managed')
+            BEGIN
+                SELECT RAISE(ABORT, 'invalid supported_symbols activation_origin');
+            END;
+            CREATE TRIGGER supported_symbols_origin_update
+            BEFORE UPDATE OF activation_origin ON supported_symbols
+            WHEN NEW.activation_origin IS NULL OR
+                 NEW.activation_origin NOT IN ('legacy','managed')
+            BEGIN
+                SELECT RAISE(ABORT, 'invalid supported_symbols activation_origin');
+            END;
+        """)
 
     def _migrate_closed_loop_schema(self, c: sqlite3.Connection) -> None:
         """Apply additive, repeatable B1 migrations to existing SQLite files."""
@@ -331,19 +493,377 @@ class SQLiteDatabase(DatabaseAdapter):
             "AND status IN ('PENDING','RUNNING','VALIDATED')"
         )
 
-    def get_supported_symbols(self) -> list[dict]:
+    def get_active_symbols(self) -> list[dict]:
+        return self.get_symbols_by_status("active")
+
+    def get_data_symbols(self) -> list[dict]:
         with self._connection() as c:
-            rows = c.execute("SELECT * FROM supported_symbols WHERE status='active'").fetchall()
+            rows = c.execute(
+                "SELECT * FROM supported_symbols "
+                "WHERE status IN ('qualified','active') ORDER BY id"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_supported_symbols(self) -> list[dict]:
+        """Deprecated compatibility alias for production-active symbols."""
+        return self.get_active_symbols()
+
+    @staticmethod
+    def _validate_symbol_status(status: str) -> str:
+        normalized = str(status or "").strip().lower()
+        if normalized not in SYMBOL_STATUSES:
+            raise ValueError(f"Invalid symbol status: {status!r}")
+        return normalized
+
+    def get_symbol(self, code: str) -> dict | None:
+        normalized = str(code or "").strip().upper()
+        with self._connection() as c:
+            row = c.execute(
+                "SELECT * FROM supported_symbols WHERE symbol_code=?", (normalized,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def get_symbols_by_status(self, status: str) -> list[dict]:
+        normalized = self._validate_symbol_status(status)
+        with self._connection() as c:
+            rows = c.execute(
+                "SELECT * FROM supported_symbols WHERE status=?",
+                (normalized,),
+            ).fetchall()
         return [dict(r) for r in rows]
 
-    def add_symbol(self, code: str, name: str = None, pip: float = 0.0001) -> dict:
-        with self._connection() as c:
-            c.execute(
-                "INSERT OR IGNORE INTO supported_symbols (symbol_code, display_name, pip_value, status, added_at) VALUES (?,?,?,?,?)",
-                (code, name or code, pip, "active", datetime.now().isoformat())
+    @staticmethod
+    def _catalog_metadata(code, name, asset_class, pip):
+        from forex.data.symbol_catalog import get_symbol_spec
+
+        spec = get_symbol_spec(code)
+        requested_name = spec.display_name if name is None else str(name).strip()
+        requested_class = (
+            spec.asset_class if asset_class is None else str(asset_class).upper()
+        )
+        requested_pip = spec.pip_value if pip is None else float(pip)
+        if (
+            requested_name != spec.display_name
+            or requested_class != spec.asset_class
+            or not _float_evidence_equal(requested_pip, spec.pip_value)
+        ):
+            raise PersistenceConflictError(
+                f"Metadata for {spec.symbol_code} conflicts with canonical catalog"
             )
-            row = c.execute("SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)).fetchone()
+        return (
+            spec.symbol_code,
+            requested_name,
+            requested_class,
+            requested_pip,
+            spec,
+        )
+
+    def register_candidate(
+        self,
+        code: str,
+        name: str,
+        asset_class: str,
+        pip: float,
+    ) -> dict:
+        code, name, asset_class, pip, _ = self._catalog_metadata(
+            code, name, asset_class, pip
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connection() as c:
+            existing = c.execute(
+                "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
+            ).fetchone()
+            if existing:
+                row = dict(existing)
+                if (
+                    row.get("display_name") != name
+                    or str(row.get("asset_class") or "").upper() != asset_class
+                    or not _float_evidence_equal(row.get("pip_value"), pip)
+                ):
+                    raise PersistenceConflictError(
+                        f"Existing metadata for {code} conflicts with candidate request"
+                    )
+                return row
+            c.execute(
+                "INSERT INTO supported_symbols "
+                "(symbol_code, display_name, asset_class, pip_value, status, "
+                "added_at, updated_at, activation_origin) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (code, name, asset_class, pip, "candidate", now, now, "managed"),
+            )
+            row = c.execute(
+                "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
+            ).fetchone()
         return dict(row)
+
+    def add_symbol(
+        self, code: str, name: str = None, pip: float = None
+    ) -> dict:
+        """Deprecated compatibility wrapper; every new row starts candidate."""
+        code, name, asset_class, pip, _ = self._catalog_metadata(
+            code, name, None, pip
+        )
+        return self.register_candidate(code, name, asset_class, pip)
+
+    def mark_qualified(self, code: str, evidence: dict) -> dict:
+        code, _, _, _, _ = self._catalog_metadata(code, None, None, None)
+        if evidence.get("result") != "PASS" or evidence.get("symbol") != code:
+            raise PersistenceConflictError(
+                "Only PASS evidence for the same symbol can qualify"
+            )
+        required = (
+            "evidence_path",
+            "evidence_sha256",
+            "qualification_timestamp",
+            "catalog_version",
+        )
+        if any(not evidence.get(field) for field in required):
+            raise PersistenceConflictError("Qualification evidence is incomplete")
+        evidence_path = Path(evidence["evidence_path"]).resolve()
+        if not evidence_path.is_file():
+            raise PersistenceConflictError("Qualification evidence file is missing")
+        actual_evidence_sha256 = hashlib.sha256(
+            evidence_path.read_bytes()
+        ).hexdigest()
+        if actual_evidence_sha256 != evidence["evidence_sha256"]:
+            raise PersistenceConflictError("Qualification evidence hash differs")
+        try:
+            persisted_evidence = json.loads(
+                evidence_path.read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise PersistenceConflictError(
+                "Qualification evidence JSON is invalid"
+            ) from exc
+
+        from forex.data.symbol_catalog import (
+            CATALOG_VERSION,
+            SUPPORTED_TIMEFRAMES,
+            route_for_provider,
+        )
+
+        identity_fields = (
+            "result", "symbol", "catalog_version", "qualification_timestamp"
+        )
+        if any(
+            persisted_evidence.get(field) != evidence.get(field)
+            for field in identity_fields
+        ) or persisted_evidence.get("catalog_version") != CATALOG_VERSION:
+            raise PersistenceConflictError(
+                "Qualification evidence identity/catalog differs"
+            )
+        try:
+            qualified_at = datetime.fromisoformat(
+                persisted_evidence["qualification_timestamp"]
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PersistenceConflictError(
+                "Qualification timestamp is invalid"
+            ) from exc
+        if qualified_at.tzinfo is None:
+            raise PersistenceConflictError(
+                "Qualification timestamp must be timezone-aware"
+            )
+        timeframe_evidence = persisted_evidence.get("timeframes")
+        if not isinstance(timeframe_evidence, dict) or set(timeframe_evidence) != set(
+            SUPPORTED_TIMEFRAMES
+        ):
+            raise PersistenceConflictError(
+                "Qualification evidence requires exact H1/H4/D1 results"
+            )
+        import pandas as pd
+        from scripts.validate_symbol_universe import (
+            validate_cross_timeframes,
+            validate_dataset_frame,
+        )
+
+        validated_frames = {}
+        for timeframe in SUPPORTED_TIMEFRAMES:
+            item = timeframe_evidence[timeframe]
+            csv_path = Path(str(item.get("csv_path") or "")).resolve()
+            route = route_for_provider(code, item.get("provider"))
+            if (
+                item.get("timeframe") != timeframe
+                or item.get("result") != "PASS"
+                or item.get("row_count") != 2000
+                or item.get("closed_count") != 2000
+                or not item.get("provider")
+                or not item.get("external_ticker")
+                or not item.get("provider_class")
+                or not item.get("source_fetched_at")
+                or route is None
+                or route.external_ticker != item.get("external_ticker")
+                or route.provider_class != item.get("provider_class")
+                or not csv_path.is_file()
+                or hashlib.sha256(csv_path.read_bytes()).hexdigest()
+                != item.get("csv_sha256")
+            ):
+                raise PersistenceConflictError(
+                    f"Qualification evidence is incomplete for {timeframe}"
+                )
+            if csv_path.parent != evidence_path.parent:
+                raise PersistenceConflictError(
+                    f"Qualification CSV is outside the evidence directory for {timeframe}"
+                )
+            try:
+                frame = pd.read_csv(csv_path, encoding="utf-8")
+                stage, validated = validate_dataset_frame(
+                    frame,
+                    code,
+                    timeframe,
+                    now=qualified_at,
+                )
+            except Exception as exc:
+                raise PersistenceConflictError(
+                    f"Qualification validator failed for {timeframe}: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+            if stage["status"] == "FAIL" or stage["blocking"] or validated is None:
+                raise PersistenceConflictError(
+                    f"Qualification validator rejected {timeframe}: "
+                    f"{stage['errors'] or stage['warnings']}"
+                )
+            if len(validated) != 2000 or int(stage["details"]["closed_rows"]) != 2000:
+                raise PersistenceConflictError(
+                    f"Qualification validator did not prove 2000 closed rows for {timeframe}"
+                )
+            validated_frames[timeframe] = validated
+
+        cross = persisted_evidence.get("cross_timeframe") or {}
+        if (
+            cross.get("status") not in {"PASS", "WARNING"}
+            or cross.get("blocking") is not False
+        ):
+            raise PersistenceConflictError(
+                "Qualification cross-timeframe evidence did not pass"
+            )
+        recomputed_cross = validate_cross_timeframes(validated_frames)
+        if recomputed_cross["status"] == "FAIL" or recomputed_cross["blocking"]:
+            raise PersistenceConflictError(
+                "Canonical cross-timeframe validator rejected qualification bytes"
+            )
+        with self._connection() as c:
+            row = c.execute(
+                "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
+            ).fetchone()
+            if row is None:
+                raise PersistenceConflictError(f"Symbol {code} is not registered")
+            current = dict(row)
+            if current["status"] not in {"candidate", "qualified"}:
+                raise PersistenceConflictError(
+                    f"Cannot qualify {code} from status {current['status']}"
+                )
+            now = datetime.now(timezone.utc).isoformat()
+            c.execute(
+                "UPDATE supported_symbols SET status='qualified', "
+                "qualification_evidence_path=?, qualification_sha256=?, qualified_at=?, "
+                "qualification_catalog_version=?, updated_at=? WHERE symbol_code=?",
+                (
+                    evidence["evidence_path"],
+                    evidence["evidence_sha256"],
+                    evidence["qualification_timestamp"],
+                    evidence["catalog_version"],
+                    now,
+                    code,
+                ),
+            )
+            updated = c.execute(
+                "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
+            ).fetchone()
+        return dict(updated)
+
+    def _persist_authorized_activation(self, authorization: object) -> dict:
+        from forex.data.symbol_lifecycle import is_activation_authorization
+
+        if not is_activation_authorization(authorization):
+            raise PersistenceConflictError(
+                "Activation requires an opaque lifecycle authorization"
+            )
+        code, _, _, _, _ = self._catalog_metadata(
+            authorization.symbol, None, None, None
+        )
+        with self._connection() as c:
+            row = c.execute(
+                "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
+            ).fetchone()
+            if row is None:
+                raise PersistenceConflictError(f"Symbol {code} is not registered")
+            current = dict(row)
+            if current["status"] == "active":
+                if current.get("qualification_sha256") == authorization.evidence_sha256:
+                    return current
+                raise PersistenceConflictError("Active symbol evidence hash differs")
+            if current["status"] != "qualified":
+                raise PersistenceConflictError(
+                    f"Cannot activate {code} from status {current['status']}"
+                )
+            if (
+                not authorization.evidence_sha256
+                or current.get("qualification_sha256")
+                != authorization.evidence_sha256
+            ):
+                raise PersistenceConflictError("Qualification evidence hash differs")
+            registry_rows = c.execute(
+                "SELECT * FROM dataset_registry WHERE symbol=?", (code,)
+            ).fetchall()
+            registry_by_timeframe = {
+                row["timeframe"]: dict(row) for row in registry_rows
+            }
+            required_timeframes = {"H1", "H4", "D1"}
+            if set(registry_by_timeframe) != required_timeframes:
+                raise PersistenceConflictError(
+                    "Activation requires canonical H1/H4/D1 registry rows"
+                )
+            for timeframe, registry in registry_by_timeframe.items():
+                if (
+                    registry.get("status") != "ready"
+                    or registry.get("candle_count") != 2000
+                    or registry.get("rolling_window_size") != 2000
+                    or any(
+                        not registry.get(field)
+                        for field in (
+                            "blob_path",
+                            "provider_used",
+                            "external_ticker",
+                            "provider_class",
+                            "source_fetched_at",
+                            "source_sha256",
+                        )
+                    )
+                    or registry.get("legacy_provenance_pending") not in (0, False)
+                ):
+                    raise PersistenceConflictError(
+                        f"Activation registry contract is incomplete for {timeframe}"
+                    )
+            c.execute(
+                "UPDATE supported_symbols SET status='active', "
+                "activation_origin='managed', updated_at=? "
+                "WHERE symbol_code=?",
+                (datetime.now(timezone.utc).isoformat(), code),
+            )
+            updated = c.execute(
+                "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
+            ).fetchone()
+        return dict(updated)
+
+    def disable_symbol(self, code: str) -> dict:
+        code, _, _, _, _ = self._catalog_metadata(code, None, None, None)
+        with self._connection() as c:
+            row = c.execute(
+                "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
+            ).fetchone()
+            if row is None:
+                raise PersistenceConflictError(f"Symbol {code} is not registered")
+            if row["status"] != "disabled":
+                c.execute(
+                    "UPDATE supported_symbols SET status='disabled', updated_at=? "
+                    "WHERE symbol_code=?",
+                    (datetime.now(timezone.utc).isoformat(), code),
+                )
+            updated = c.execute(
+                "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
+            ).fetchone()
+        return dict(updated)
 
     def get_dataset_registry(self, symbol: str = None, tf: str = None) -> list[dict]:
         q = "SELECT * FROM dataset_registry WHERE 1=1"
@@ -360,8 +880,10 @@ class SQLiteDatabase(DatabaseAdapter):
         with self._connection() as c:
             c.execute("""
                 INSERT INTO dataset_registry (symbol, timeframe, candle_count, rolling_window_size,
-                    last_candle_timestamp, blob_path, status, last_error, last_updated)
-                VALUES (?,?,?,?,?,?,?,?,?)
+                    last_candle_timestamp, blob_path, status, last_error, last_updated,
+                    provider_used, external_ticker, provider_class, source_fetched_at,
+                    source_sha256, legacy_provenance_pending)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(symbol, timeframe) DO UPDATE SET
                     candle_count=excluded.candle_count,
                     rolling_window_size=excluded.rolling_window_size,
@@ -369,12 +891,22 @@ class SQLiteDatabase(DatabaseAdapter):
                     blob_path=excluded.blob_path,
                     status=excluded.status,
                     last_error=excluded.last_error,
-                    last_updated=excluded.last_updated
+                    last_updated=excluded.last_updated,
+                    provider_used=excluded.provider_used,
+                    external_ticker=excluded.external_ticker,
+                    provider_class=excluded.provider_class,
+                    source_fetched_at=excluded.source_fetched_at,
+                    source_sha256=excluded.source_sha256,
+                    legacy_provenance_pending=excluded.legacy_provenance_pending
             """, (
                 entry["symbol"], entry["timeframe"], entry.get("candle_count", 0),
                 entry.get("rolling_window_size", 2000), entry.get("last_candle_timestamp"),
                 entry.get("blob_path"), entry.get("status", "ready"),
-                entry.get("last_error"), datetime.now().isoformat()
+                entry.get("last_error"), datetime.now(timezone.utc).isoformat(),
+                entry.get("provider_used"), entry.get("external_ticker"),
+                entry.get("provider_class"), entry.get("source_fetched_at"),
+                entry.get("source_sha256"),
+                0,
             ))
             row = c.execute("SELECT * FROM dataset_registry WHERE symbol=? AND timeframe=?",
                             (entry["symbol"], entry["timeframe"])).fetchone()
@@ -1018,7 +1550,15 @@ class PostgreSQLDatabase(DatabaseAdapter):
             "The DatabaseAdapter interface stays the same — only this class changes."
         )
     def get_supported_symbols(self): raise NotImplementedError()
+    def get_active_symbols(self): raise NotImplementedError()
+    def get_data_symbols(self): raise NotImplementedError()
     def add_symbol(self, code, name, pip): raise NotImplementedError()
+    def get_symbol(self, code): raise NotImplementedError()
+    def get_symbols_by_status(self, status): raise NotImplementedError()
+    def register_candidate(self, code, name, asset_class, pip): raise NotImplementedError()
+    def mark_qualified(self, code, evidence): raise NotImplementedError()
+    def _persist_authorized_activation(self, authorization): raise NotImplementedError()
+    def disable_symbol(self, code): raise NotImplementedError()
     def get_dataset_registry(self, symbol=None, tf=None): raise NotImplementedError()
     def upsert_dataset_registry(self, entry): raise NotImplementedError()
     def save_prediction(self, pred): raise NotImplementedError()

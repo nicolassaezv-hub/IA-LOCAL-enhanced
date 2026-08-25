@@ -18,6 +18,20 @@ from scheduler.run_state import is_scheduler_run_stale
 FIXED_NOW = datetime(2026, 8, 16, 6, 0, tzinfo=timezone.utc)
 
 
+def _set_active_fixture(database: SQLiteDatabase, symbol: str) -> None:
+    from forex.data.symbol_catalog import get_symbol_spec
+
+    spec = get_symbol_spec(symbol)
+    database.register_candidate(
+        spec.symbol_code, spec.display_name, spec.asset_class, spec.pip_value
+    )
+    with database._connection() as connection:
+        connection.execute(
+            "UPDATE supported_symbols SET status='active' WHERE symbol_code=?",
+            (spec.symbol_code,),
+        )
+
+
 def _eligible_result(symbol, timeframe, context):
     provenance = context["dataset_provenance"]
     return {
@@ -54,6 +68,7 @@ def _eligible_result(symbol, timeframe, context):
 
 
 def _legacy_alias(monkeypatch, manager: RetrainManager, storage: ModelStorage):
+    _set_active_fixture(manager.database, "EURUSD")
     with monkeypatch.context() as patch:
         patch.setattr(
             RetrainManager,
@@ -272,7 +287,7 @@ def test_recent_scheduler_run_is_not_recovered_accidentally(monkeypatch, tmp_pat
 
 def test_readiness_reports_stale_running_scheduler_as_blocking(tmp_path):
     database = SQLiteDatabase(str(tmp_path / "readiness.sqlite"))
-    database.add_symbol("EURUSD", "EUR/USD", 0.0001)
+    _set_active_fixture(database, "EURUSD")
     database.create_scheduler_run({
         "timeframe": "H1",
         "started_at": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
@@ -299,7 +314,7 @@ def test_readiness_blocks_integrity_valid_but_legacy_ineligible(
     monkeypatch, tmp_path
 ):
     database = SQLiteDatabase(str(tmp_path / "readiness.sqlite"))
-    database.add_symbol("EURUSD", "EUR/USD", 0.0001)
+    _set_active_fixture(database, "EURUSD")
     storage = ModelStorage(tmp_path / "models" / "forex")
     manager = RetrainManager(database=database, storage=storage)
     _legacy_alias(monkeypatch, manager, storage)
@@ -322,7 +337,7 @@ def test_readiness_blocks_integrity_valid_but_legacy_ineligible(
 
 def test_readiness_accepts_integrity_valid_promoted_eligible_model(tmp_path):
     database = SQLiteDatabase(str(tmp_path / "readiness.sqlite"))
-    database.add_symbol("EURUSD", "EUR/USD", 0.0001)
+    _set_active_fixture(database, "EURUSD")
     storage = ModelStorage(tmp_path / "models" / "forex")
     manager = RetrainManager(database=database, storage=storage)
     now = datetime.now(timezone.utc).isoformat()
