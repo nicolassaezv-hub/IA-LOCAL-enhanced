@@ -24,9 +24,11 @@
   
 [Ir a integrar las nuevas implemetaciones listadas](Implementaciones%20futuras.md) una vez completado los test End-to-End de produccion
 
+- Las actualizaciones ya NO SON por Roadmaps, se ingresan al listado de registro de integraciones
+
 ## Informacion General
 
-Este Workflow IA esta hecha a partir de aportes de Nicolas Saez Valenzuela, Replit, Copilot, Chatgpt entre otros servicios digitales con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI con fijacion en procesamiento de archivos y analisis intensivo de datasets del area del mercado FOREX (Divisas y Materias Primas).
+Este Workflow IA esta hecha a partir de aportes estructurales de Nicolas Saez Valenzuela, Replit, Copilot, Chatgpt entre otros servicios digitales con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI con fijacion en procesamiento de archivos y analisis intensivo de datasets del area del mercado FOREX (Divisas y Materias Primas).
 
 Todo, en base a un sistema local PC de las siguientes especificaciones
 
@@ -42,7 +44,9 @@ Se le asigna un máximo de 10GB de RAM a la IA
 
 GPU:
 
-- NVIDIA 1650ti 8GB VRAM 
+- NVIDIA 1650ti 8GB VRAM
+
+Asignacion maxima de 6GB VRAM
 
 # API
 
@@ -78,9 +82,43 @@ Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cu
 # Estructura
 
 Esta IA Local se compone de mas de 200 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
-El programa puente (main.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
+El programa puente (astra.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
+Las ramas actuales van siendo
 
-Se incluyen 5 codigos adicionales para verificar la integridad de los modulos presentes en cada codigo Python.
+### CORE
+
+-Cognitive Core
+
+-Evolution Engine
+
+-Customization Bar
+
+### FOREX
+
+--Principal Pipeline
+
+-Scheduler
+
+-Watcher
+
+-Activity Center
+
+### PREDICTION LAB
+
+-Prompt Analyzer
+
+-Check-in design bar
+
+-Status deployer
+
+-Feedback-to-form Engine
+
+### BUSINESS
+-Prompt Analyzer
+
+
+
+Se incluyen 5 códigos adicionales para verificar la integridad de los módulos presentes en cada codigo Python.
 
 - check_startup
 
@@ -98,9 +136,11 @@ Para correr el sistema Workspace ASTRA se debe OBLIGATORIAMENTE
 
 ## 3.Descargar dependencias:
 
-## 4a. Inicializar main.py
+# Inicialización
 
-## 4b. Inicializar server
+## a. Inicializar main.py
+
+## b. Inicializar server
 
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
@@ -124,5 +164,10 @@ Aqui el archivo con el listado de modulos Instalados e Integrados
  https://docs.google.com/spreadsheets/d/1I2JpcZ6_V_WUdXkkYkP7MZ1fgQcPW6y73xBbtZjOfHI/edit?usp=sharing
 
 ## Actualizacion de Modulos (Semanal)
-## Ejemplos de Ejecucion con Dataset
+
+## Ejemplos de Grafica Dataset de Prediction Lab
+
+## Ejemplo de Ejecucion con Dataset de Forex
+
+
 
