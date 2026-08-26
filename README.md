@@ -79,13 +79,14 @@ Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cu
   - Almacenamiento: 57 GB
   
 # POR ACTUALIZAR!!!!!
+
 # Estructura
 
 Esta IA Local se compone de mas de 200 codigos Python para asegurar eficiencia y rapidez en la ejecucion.
 El programa puente (astra.py) viene siendo la central de los comandos ingresados para ser rediregido a funciones/herramientas de utilidad.
 Las ramas actuales van siendo
 
-### CORE
+## CORE
 
 - Cognitive Core
 
@@ -93,7 +94,7 @@ Las ramas actuales van siendo
 
 - Customization Bar
 
-### FOREX
+## FOREX
 
 - Principal Pipeline
 
@@ -103,7 +104,7 @@ Las ramas actuales van siendo
 
 - Activity Center
 
-### PREDICTION LAB
+## PREDICTION LAB
 
 - Prompt Analyzer
 
@@ -113,7 +114,7 @@ Las ramas actuales van siendo
 
 - Feedback-to-form Engine
 
-### BUSINESS
+## BUSINESS
 - Prompt Analyzer
 
 
