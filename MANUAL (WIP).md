@@ -892,12 +892,13 @@ El script `infra/backup/backup.sh` (corre diario a 02:00):
 - Retencion: 7 dias (configurable via `ASTRA_BACKUP_RETENTION_DAYS`)
 
 ---
+# CHANGE
 
 ### 5.10 -- Servicios systemd
 
 | Servicio | Funcion | Frecuencia |
 |---|---|---|
-| `astra-api.service` | FastAPI workspace (puerto 8000) | Siempre activo, restart=always |
+| `astra-api.service` | FastAPI workspace (puerto 8000) | Siempre activo, restart=always | 
 | `astra-scheduler-h1.timer` | Ciclo H1 (update + predict) | Cada hora a :02 |
 | `astra-scheduler-h4.timer` | Ciclo H4 (update + predict) | Cada 4h a :05 |
 | `astra-scheduler-d1.timer` | Ciclo D1 (update + predict) | Diario a 00:10 |
