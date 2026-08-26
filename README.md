@@ -78,7 +78,6 @@ Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cu
   
   - Almacenamiento: 57 GB
   
-### POR ACTUALIZAR!!!!!
 
 # Estructura
 
@@ -115,6 +114,7 @@ Las ramas actuales van siendo
 - Feedback-to-form Engine
 
 ## BUSINESS
+
 - Prompt Analyzer
 
 
@@ -130,19 +130,35 @@ Se incluyen 5 códigos adicionales para verificar la integridad de los módulos 
 
 # Requisitos Obligatorios
 
-Para correr el sistema Workspace ASTRA se debe OBLIGATORIAMENTE
+Para correr el sistema Workspace ASTRA se debe OBLIGATORIAMENTE seguir estos pasos
 
 ## 1.Instalar localmente el proyecto:
 
-## 2.Activar entorno virtual:
+Descargas el proyecto y una vez dentro de la carpeta, haz click derecho y entras a la terminal.
+
+```bash
+cd C:/IA-LOCAL-enhanced
+```
+
+## 2.Descargar y activar entorno virtual:
+
+```bash
+python -m venv venv
+```
 
 ## 3.Descargar dependencias:
 
+```bash
+pip install -r requirements.txt
+```
+
 # Inicialización
 
-## a. Inicializar main.py
+Una vez cumplido los requisitos obligatorios se puede correr el workspace las veces que se quiera. Aqui las dos maneras
 
-## b. Inicializar server
+## a. Inicializar main.py (CLI)
+
+## b. Inicializar server (HTML)
 
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
