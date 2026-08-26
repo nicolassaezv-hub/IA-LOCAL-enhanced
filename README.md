@@ -78,7 +78,7 @@ Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cu
   
   - Almacenamiento: 57 GB
   
-# POR ACTUALIZAR!!!!!
+### POR ACTUALIZAR!!!!!
 
 # Estructura
 
