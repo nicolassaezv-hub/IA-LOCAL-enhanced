@@ -119,7 +119,7 @@ Las ramas actuales son las siguientes:
 
 # Diagnostico Integro del sistema
 
-Se incluyen 5 códigos adicionales para verificar la integridad de los módulos presentes en cada codigo Python.
+Se incluyen 3 códigos adicionales para verificar la integridad de los módulos presentes en cada codigo Python.
 
 - check_startup
 
@@ -131,19 +131,28 @@ Se incluyen 5 códigos adicionales para verificar la integridad de los módulos 
 
 Para correr el sistema Workspace ASTRA se debe OBLIGATORIAMENTE seguir estos pasos
 
+## 0. Instalar Python y Pip
+'''bash
 ## 1.Instalar localmente el proyecto:
 
 Descargas el proyecto y una vez dentro de la carpeta, haz click derecho y entras a la terminal.
 
 ```bash
-cd C:/IA-LOCAL-enhanced
+cd C:/.../IA-LOCAL-enhanced
 ```
 
-## 2.Descargar y activar entorno virtual:
+## 2.Instalar y activar entorno virtual:
+
+Instalacion es por
 
 ```bash
 python -m venv venv
 ```
+Una vez completado procede a activarlo
+
+'''bash
+venv/venv activate.bat
+'''
 
 ## 3.Descargar dependencias:
 
@@ -155,13 +164,21 @@ pip install -r requirements.txt
 
 Una vez cumplido los requisitos obligatorios se puede correr el workspace las veces que se quiera. Aqui las dos maneras
 
-## a. Inicializar main.py (CLI)
+## a. Inicializar astra.py (CLI)
+
+'''bash
+python astra.py
+'''
 
 ## b. Inicializar server (HTML)
 
+'''bash
+python workspace/server.py
+'''
+
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
-# Comandos y Programa Puente (???? + .env)
+# Comandos y Programa Puente (astra.py + .env)
 ### Comandos
 
 El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos
