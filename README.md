@@ -87,34 +87,34 @@ Las ramas actuales van siendo
 
 ### CORE
 
--Cognitive Core
+- Cognitive Core
 
--Evolution Engine
+- Evolution Engine
 
--Customization Bar
+- Customization Bar
 
 ### FOREX
 
---Principal Pipeline
+- Principal Pipeline
 
--Scheduler
+- Scheduler
 
--Watcher
+- Watcher
 
--Activity Center
+- Activity Center
 
 ### PREDICTION LAB
 
--Prompt Analyzer
+- Prompt Analyzer
 
--Check-in design bar
+- Check-in design bar
 
--Status deployer
+- Status deployer
 
--Feedback-to-form Engine
+- Feedback-to-form Engine
 
 ### BUSINESS
--Prompt Analyzer
+- Prompt Analyzer
 
 
 
