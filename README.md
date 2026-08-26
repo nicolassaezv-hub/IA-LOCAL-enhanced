@@ -168,7 +168,8 @@ El nucleo del esqueleto organiza las entradas del usuario y repone todo en una f
 
 ### COMANDOS FOREX ESTAN DESHABILITADOS HASTA IMPLEMENTAR SWITCH DE EJECUCION DE LA RAMA (Ref. Implementaciones Futuras)
 <details>
-
+<summary>Ver comandos
+  
   ### Sistema y diagnóstico
 
 | Comando | Qué hace |
@@ -368,7 +369,7 @@ permiten inspeccionar cada pieza por separado.
 | `hash pass`, `verify pass`, `passlib hash\|verify`, `crear jwt`, `verificar jwt`, `cifra archivo`, `bloquear archivo`, `paramiko demo` | Seguridad |
 
 ---
-<summary>Ver comandos</summary>
+</summary>
 
 
 ## CSVs Disponibles para Analisis y Prediccion Forex
