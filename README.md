@@ -170,7 +170,7 @@ El nucleo del esqueleto organiza las entradas del usuario y repone todo en una f
 <details>
 <summary>Ver comandos
   
-  ### Sistema y diagnóstico
+### Sistema y diagnóstico
 
 | Comando | Qué hace |
 |---|---|
