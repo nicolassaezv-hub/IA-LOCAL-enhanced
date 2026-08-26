@@ -118,6 +118,7 @@ Las ramas actuales van siendo
 - Prompt Analyzer
 
 
+# Diagnostico Integro del sistema
 
 Se incluyen 5 códigos adicionales para verificar la integridad de los módulos presentes en cada codigo Python.
 
