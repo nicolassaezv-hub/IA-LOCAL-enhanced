@@ -8,7 +8,7 @@
 
   - Integrar informe automatico en primera iteracion entre la rama forex y el servidor de flujo automatizado
 
-- Configura el servidor VM a usar, aplica tests end-end para verificar viabilidad y finalizar la consolidacion del proyecto (Version Final)
+- Configura el servidor VM  de Oracle Cloud a usar, aplica tests end-to-end para verificar viabilidad y finalizar la consolidacion del proyecto (Version Final)
 
 - Usa herramientas para avanzar
 
@@ -28,7 +28,7 @@
 
 ## Informacion General
 
-Este Workflow IA esta hecha a partir de aportes estructurales de Nicolas Saez Valenzuela, Replit, Copilot, Chatgpt entre otros servicios digitales con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI con fijacion en procesamiento de archivos y analisis intensivo de datasets del area del mercado FOREX (Divisas y Materias Primas).
+Este Workspace IA esta hecha a partir de aportes estructurales de Nicolas Saez Valenzuela, Replit, Copilot, Chatgpt entre otros servicios digitales con tal de brindar una experiencia mas completa y complementada por modulos extensos con tal de concentrar una learning AI con fijacion en procesamiento de archivos y analisis intensivo de datasets del area del mercado FOREX (+ 40 Divisas,Cripto y Materias Primas).
 
 Todo, en base a un sistema local PC de las siguientes especificaciones
 
@@ -72,7 +72,7 @@ Para automatizar la rama FOREX de forma activa y crear la base del display grafi
 
 En la comparativa practica se demostro que la "prediccion completa" de un solo simbolo tomaba entre 7-15 minutos, hubo una rebaja a 9 minutos usando una implementacion caché.
 
-Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cuenta que en hay mas de 80 Simbolos (Divisa,Commodities y Cripto)
+Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cuenta que en hay mas de 50 Simbolos (Divisa,Commodities y Cripto)
 
 ### *HASTA EL MOMENTO SOLO HAY TESTS. NINGUNA ACTIVIDAD 24/7 HASTA COMPROBAR LA FIABILIDAD PRODUCTIVA*
 
@@ -94,7 +94,12 @@ Las ramas actuales son las siguientes:
 
 ## FOREX
 
-- Principal Pipeline
+- Principal Prediction Pipeline
+--CSV builder
+--MTF Fuser (H1/H4/D1)
+--TUNER
+--TRAINER
+--DOUBLE ACTION VERIFIER
 
 - Scheduler
 
@@ -126,6 +131,10 @@ Se incluyen 3 códigos adicionales para verificar la integridad de los módulos 
 - check_skeleton
 
 - check_pipeline
+
+El Proyecto ejecutado tanto en CLI como server tambien tiene implementado un comando de autoanalisis
+
+- astra doctor
 
 # Requisitos Obligatorios
 
