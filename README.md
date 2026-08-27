@@ -141,7 +141,11 @@ El Proyecto ejecutado tanto en CLI como server tambien tiene implementado un com
 Para correr el sistema Workspace ASTRA se debe OBLIGATORIAMENTE seguir estos pasos
 
 ## 0. Instalar Python y Pip
+
 '''bash
+pip install
+'''
+
 ## 1.Instalar localmente el proyecto:
 
 Descargas el proyecto y una vez dentro de la carpeta, haz click derecho y entras a la terminal.
@@ -188,11 +192,13 @@ python workspace/server.py
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
 # Comandos y Programa Puente (astra.py + .env)
+
 ### Comandos
 
 El nucleo del esqueleto organiza las entradas del usuario y repone todo en una funcion general, en esta funcion principal estan seccionados los comandos
 
 ### COMANDOS FOREX ESTAN DESHABILITADOS HASTA IMPLEMENTAR SWITCH DE EJECUCION DE LA RAMA (Ref. Implementaciones Futuras)
+
 <details>
 <summary>Ver comandos</summary>
   
