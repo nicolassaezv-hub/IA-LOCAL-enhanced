@@ -11,12 +11,15 @@ CAMBIOS CLAVE vs versión anterior:
   training set y las primeras del val para evitar leakage temporal
   (las filas adyacentes al split comparten información del target).
 - MIN_PRECISION_THRESHOLD = 0.65 (sin cambios).
-- WFV aprobado si ≥ 65% avg_precision O si la mediana de folds supera 70%.
+- WFV conserva el gate avg/mediana y exige además evidencia direccional
+  suficiente y precision agrupada ≥ 65%.
 """
 
 import json
+import math
 import os
 import warnings
+from numbers import Integral
 import numpy as np
 from sklearn.metrics import (
     accuracy_score,
@@ -54,25 +57,122 @@ except ImportError:
 PARAMS_DIR = forex_model_root() / "params"
 MIN_PRECISION_THRESHOLD = 0.65
 WFV_MEDIAN_PRECISION_THRESHOLD = 0.70
+MIN_WFV_FOLDS = 2
+MIN_WFV_SIGNALS_PER_FOLD = 30
+
+
+def _validated_wfv_evidence(result: dict) -> dict | None:
+    """Recompute and validate the complete persisted WFV evidence."""
+    folds = result.get("folds")
+    if not isinstance(folds, list) or not folds:
+        return None
+
+    precisions = []
+    total_tp = 0
+    total_fp = 0
+    for fold in folds:
+        if not isinstance(fold, dict):
+            return None
+        counts = {}
+        for key in ("tp", "fp", "signals", "validation_size"):
+            value = fold.get(key)
+            if isinstance(value, (bool, np.bool_)) or not isinstance(value, Integral):
+                return None
+            counts[key] = int(value)
+            if counts[key] < 0:
+                return None
+
+        tp = counts["tp"]
+        fp = counts["fp"]
+        signals = counts["signals"]
+        validation_size = counts["validation_size"]
+        if signals != tp + fp or signals > validation_size:
+            return None
+
+        try:
+            precision = float(fold["precision"])
+            accuracy = float(fold["accuracy"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if (
+            not math.isfinite(precision)
+            or not 0.0 <= precision <= 1.0
+            or not math.isfinite(accuracy)
+            or not 0.0 <= accuracy <= 1.0
+        ):
+            return None
+        expected_precision = tp / signals if signals > 0 else 0.0
+        if not math.isclose(precision, expected_precision, abs_tol=1e-12):
+            return None
+
+        precisions.append(precision)
+        total_tp += tp
+        total_fp += fp
+
+    total_signals = total_tp + total_fp
+    pooled_precision = total_tp / total_signals if total_signals > 0 else 0.0
+    avg_precision = float(np.mean(precisions))
+    median_precision = float(np.median(precisions))
+    evidence_sufficient = bool(
+        len(folds) >= MIN_WFV_FOLDS
+        and all(
+            int(fold["signals"]) >= MIN_WFV_SIGNALS_PER_FOLD
+            for fold in folds
+        )
+    )
+    existing_metric_gate = bool(
+        avg_precision >= MIN_PRECISION_THRESHOLD
+        or median_precision >= WFV_MEDIAN_PRECISION_THRESHOLD
+    )
+    computed_pass = bool(
+        existing_metric_gate
+        and evidence_sufficient
+        and pooled_precision >= MIN_PRECISION_THRESHOLD
+    )
+
+    try:
+        reported_avg = float(result["avg_precision"])
+        reported_median = float(result["median_precision"])
+        reported_pooled = float(result["pooled_precision"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    reported_counts = {}
+    for key in ("total_tp", "total_fp", "total_signals"):
+        value = result.get(key)
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, Integral):
+            return None
+        reported_counts[key] = int(value)
+    if (
+        not math.isclose(reported_avg, round(avg_precision, 4), abs_tol=1e-12)
+        or not math.isclose(
+            reported_median, round(median_precision, 4), abs_tol=1e-12
+        )
+        or not math.isclose(reported_pooled, pooled_precision, abs_tol=1e-12)
+        or reported_counts["total_tp"] != total_tp
+        or reported_counts["total_fp"] != total_fp
+        or reported_counts["total_signals"] != total_signals
+        or result.get("evidence_sufficient") is not evidence_sufficient
+    ):
+        return None
+
+    return {
+        "existing_metric_gate": existing_metric_gate,
+        "evidence_sufficient": evidence_sufficient,
+        "pooled_precision": pooled_precision,
+        "wfv_passed": computed_pass,
+    }
 
 
 def wfv_quality_passed(result: dict) -> bool:
     """Evaluate the canonical out-of-sample WFV production contract."""
     if (
-        result.get("error")
+        not isinstance(result, dict)
+        or result.get("error")
         or result.get("wfv_passed") is not True
-        or not result.get("folds")
     ):
         return False
-    try:
-        average = float(result["avg_precision"])
-        median = float(result["median_precision"])
-    except (KeyError, TypeError, ValueError):
-        return False
-    return bool(
-        average >= MIN_PRECISION_THRESHOLD
-        or median >= WFV_MEDIAN_PRECISION_THRESHOLD
-    )
+    evidence = _validated_wfv_evidence(result)
+    return bool(evidence and evidence["wfv_passed"])
 
 
 def _load_tuned_params(pair: str) -> dict:
@@ -294,11 +394,23 @@ class WalkForwardValidator:
             preds = trainer.model.predict(X_val)
             prec  = precision_score(y_val, preds, zero_division=0)
             acc   = accuracy_score(y_val, preds)
-            n_sig = int(preds.sum())
+            y_val_array = np.asarray(y_val)
+            pred_array = np.asarray(preds)
+            tp = int(np.sum((pred_array == 1) & (y_val_array == 1)))
+            fp = int(np.sum((pred_array == 1) & (y_val_array == 0)))
+            n_sig = tp + fp
 
             print(f"[WFV] Fold {k+1}/{len(folds)}  train={len(X_tr)}  val={len(X_val)}  "
                   f"prec={prec:.2%}  acc={acc:.2%}  signals={n_sig}")
-            results.append({"fold": k+1, "precision": prec, "accuracy": acc, "n_signals": n_sig})
+            results.append({
+                "fold": k + 1,
+                "tp": tp,
+                "fp": fp,
+                "signals": n_sig,
+                "validation_size": len(y_val),
+                "precision": prec,
+                "accuracy": acc,
+            })
 
         if not results:
             return {"error": "WFV sin resultados válidos.", "folds": []}
@@ -306,14 +418,35 @@ class WalkForwardValidator:
         avg_prec    = float(np.mean([r["precision"]  for r in results]))
         avg_acc     = float(np.mean([r["accuracy"]   for r in results]))
         median_prec = float(np.median([r["precision"] for r in results]))
+        total_tp = sum(r["tp"] for r in results)
+        total_fp = sum(r["fp"] for r in results)
+        total_signals = total_tp + total_fp
+        pooled_precision = (
+            total_tp / total_signals if total_signals > 0 else 0.0
+        )
+        evidence_sufficient = bool(
+            len(results) >= MIN_WFV_FOLDS
+            and all(
+                result["signals"] >= MIN_WFV_SIGNALS_PER_FOLD
+                for result in results
+            )
+        )
 
         print(f"{'─'*55}")
-        print(f"[WFV] avg_prec={avg_prec:.2%}  median_prec={median_prec:.2%}  avg_acc={avg_acc:.2%}")
+        print(
+            f"[WFV] avg_prec={avg_prec:.2%}  median_prec={median_prec:.2%}  "
+            f"pooled_prec={pooled_precision:.2%}  avg_acc={avg_acc:.2%}"
+        )
 
-        # Aprobado si avg >= 65% O mediana >= 70%
-        wfv_passed = (
+        # Preserve the existing metric gate and add only stricter evidence gates.
+        existing_metric_gate = (
             avg_prec >= MIN_PRECISION_THRESHOLD
             or median_prec >= WFV_MEDIAN_PRECISION_THRESHOLD
+        )
+        wfv_passed = bool(
+            existing_metric_gate
+            and evidence_sufficient
+            and pooled_precision >= MIN_PRECISION_THRESHOLD
         )
 
         return {
@@ -321,6 +454,11 @@ class WalkForwardValidator:
             "avg_precision":  round(avg_prec,    4),
             "median_precision": round(median_prec, 4),
             "avg_accuracy":   round(avg_acc,     4),
+            "total_tp": total_tp,
+            "total_fp": total_fp,
+            "total_signals": total_signals,
+            "pooled_precision": pooled_precision,
+            "evidence_sufficient": evidence_sufficient,
             "wfv_passed":     wfv_passed,
         }
 
@@ -525,7 +663,7 @@ def train_with_wfv(X, y, pair: str = None, save: bool = True, force: bool = Fals
 
     if save and not can_save:
         print(f"[WFV] ⛔ Modelo NO se guardará ni quedará disponible para señales reales "
-              f"— reprobó Walk-Forward Validation (< {MIN_PRECISION_THRESHOLD:.0%}).")
+              "— reprobó el contrato Walk-Forward Validation.")
         print(f"[WFV]   Usa 'tune forex <csv>' para optimizar hiperparámetros y reintenta.")
 
     # Entrenamiento final con dataset completo

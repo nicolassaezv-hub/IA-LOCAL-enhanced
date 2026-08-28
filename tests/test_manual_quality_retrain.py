@@ -320,9 +320,19 @@ def _eligible_result(symbol, timeframe, context, *, changes=None):
         "quality_gate": {"passed": True, "approved": True, "score": 90.0},
         "precision": 0.70,
         "wfv": {
-            "folds": [{"fold": 1, "precision": 0.70}],
+            "folds": [
+                {"fold": 1, "tp": 21, "fp": 9, "signals": 30,
+                 "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+                {"fold": 2, "tp": 21, "fp": 9, "signals": 30,
+                 "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+            ],
             "avg_precision": 0.70,
             "median_precision": 0.70,
+            "total_tp": 42,
+            "total_fp": 18,
+            "total_signals": 60,
+            "pooled_precision": 0.70,
+            "evidence_sufficient": True,
             "wfv_passed": True,
         },
         "eligibility": {
@@ -679,13 +689,42 @@ def _patch_pipeline_training(monkeypatch, *, failed_gate=None):
         calibration_sufficient=failed_gate != "CALIBRATION_GATE",
         validation_sufficient=failed_gate != "VALIDATION_GATE",
     )
-    wfv_passed = failed_gate != "WFV_GATE"
-    wfv = {
-        "folds": [{"fold": 1, "precision": 0.70}],
-        "avg_precision": 0.70,
-        "median_precision": 0.70,
-        "wfv_passed": wfv_passed,
-    }
+    if failed_gate == "WFV_GATE":
+        wfv = {
+            "folds": [
+                {"fold": 1, "tp": 81, "fp": 64, "signals": 145,
+                 "validation_size": 300, "precision": 81 / 145,
+                 "accuracy": 0.4933},
+                {"fold": 2, "tp": 1, "fp": 0, "signals": 1,
+                 "validation_size": 300, "precision": 1.0,
+                 "accuracy": 0.48},
+            ],
+            "avg_precision": round(((81 / 145) + 1.0) / 2, 4),
+            "median_precision": round(((81 / 145) + 1.0) / 2, 4),
+            "total_tp": 82,
+            "total_fp": 64,
+            "total_signals": 146,
+            "pooled_precision": 82 / 146,
+            "evidence_sufficient": False,
+            "wfv_passed": False,
+        }
+    else:
+        wfv = {
+            "folds": [
+                {"fold": 1, "tp": 21, "fp": 9, "signals": 30,
+                 "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+                {"fold": 2, "tp": 21, "fp": 9, "signals": 30,
+                 "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+            ],
+            "avg_precision": 0.70,
+            "median_precision": 0.70,
+            "total_tp": 42,
+            "total_fp": 18,
+            "total_signals": 60,
+            "pooled_precision": 0.70,
+            "evidence_sufficient": True,
+            "wfv_passed": True,
+        }
     monkeypatch.setattr(integrated_pipeline, "_load", lambda *_a, **_k: frame)
     monkeypatch.setattr(integrated_pipeline, "build_features", lambda value: value)
     monkeypatch.setattr(integrated_pipeline, "DatasetBuilder", Builder)
@@ -1282,9 +1321,19 @@ def test_tune_is_diagnostic_then_train_is_only_initial_publisher(
         validation_sufficient=True,
     )
     wfv = {
-        "folds": [{"fold": 1, "precision": 0.70}],
+        "folds": [
+            {"fold": 1, "tp": 21, "fp": 9, "signals": 30,
+             "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+            {"fold": 2, "tp": 21, "fp": 9, "signals": 30,
+             "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+        ],
         "avg_precision": 0.70,
         "median_precision": 0.70,
+        "total_tp": 42,
+        "total_fp": 18,
+        "total_signals": 60,
+        "pooled_precision": 0.70,
+        "evidence_sufficient": True,
         "wfv_passed": True,
     }
     monkeypatch.setattr(integrated_pipeline, "_load", lambda *_a, **_k: frame)
@@ -1403,6 +1452,9 @@ def test_full_forex_tune_then_rejected_train_never_publishes(
     elif failed_gate == "WFV_GATE":
         assert train_result["model_deployed"] is False
         assert train_result["wfv"]["wfv_passed"] is False
+        assert train_result["wfv"]["evidence_sufficient"] is False
+        from forex.prediction.xgb_trainer import wfv_quality_passed
+        assert wfv_quality_passed(train_result["wfv"]) is False
     else:
         assert failed_gate in json.dumps(train_result)
     assert storage.latest_exists("EURUSD") is False

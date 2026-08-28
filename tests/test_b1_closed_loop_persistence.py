@@ -151,9 +151,19 @@ def _production_eligibility_metadata(
             "model_valid": True,
         },
         "wfv": {
-            "folds": [{"fold": 1, "precision": 0.70}],
+            "folds": [
+                {"fold": 1, "tp": 21, "fp": 9, "signals": 30,
+                 "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+                {"fold": 2, "tp": 21, "fp": 9, "signals": 30,
+                 "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+            ],
             "avg_precision": 0.70,
             "median_precision": 0.70,
+            "total_tp": 42,
+            "total_fp": 18,
+            "total_signals": 60,
+            "pooled_precision": 0.70,
+            "evidence_sufficient": True,
             "wfv_passed": True,
         },
     }

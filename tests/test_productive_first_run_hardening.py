@@ -108,9 +108,19 @@ def _patch_bootstrap_training(monkeypatch, *, wfv_passed=True, validation=True):
             return X, y
 
     wfv = {
-        "folds": [{"fold": 1, "precision": 0.70}],
+        "folds": [
+            {"fold": 1, "tp": 21, "fp": 9, "signals": 30,
+             "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+            {"fold": 2, "tp": 21, "fp": 9, "signals": 30,
+             "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+        ],
         "avg_precision": 0.70,
         "median_precision": 0.70,
+        "total_tp": 42,
+        "total_fp": 18,
+        "total_signals": 60,
+        "pooled_precision": 0.70,
+        "evidence_sufficient": True,
         "wfv_passed": wfv_passed,
     }
     trainer = SimpleNamespace(
@@ -1242,9 +1252,19 @@ def test_multi_horizon_rejected_candidate_emits_zero_votes(
         validation_sufficient=validation,
     )
     wfv = {
-        "folds": [{"fold": 1, "precision": 0.70}],
+        "folds": [
+            {"fold": 1, "tp": 21, "fp": 9, "signals": 30,
+             "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+            {"fold": 2, "tp": 21, "fp": 9, "signals": 30,
+             "validation_size": 300, "precision": 0.70, "accuracy": 0.70},
+        ],
         "avg_precision": 0.70,
         "median_precision": 0.70,
+        "total_tp": 42,
+        "total_fp": 18,
+        "total_signals": 60,
+        "pooled_precision": 0.70,
+        "evidence_sufficient": True,
         "wfv_passed": wfv_passed,
     }
     monkeypatch.setattr(integrated_pipeline, "_load", lambda *_a, **_k: frame)
