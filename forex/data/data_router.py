@@ -5,12 +5,14 @@ Un solo punto de entrada para todos los datos del sistema.
 """
 import pandas as pd
 import copy
+import importlib
 from pathlib import Path
 from typing import Optional
 
 from forex.data.symbol_catalog import (
     UnsupportedSymbolError,
     get_symbol_spec,
+    provider_routes,
     symbols_by_asset_class,
 )
 
@@ -24,6 +26,24 @@ _COMMODITY_PAIRS = set(symbols_by_asset_class("COMMODITY")) | set(
     symbols_by_asset_class("METAL")
 )
 _INDEX_PAIRS = set(symbols_by_asset_class("INDEX"))
+
+_PROVIDER_FACTORIES = {
+    "MT5": ("forex.data.mt5_provider", "get_mt5_provider"),
+    "OANDA": ("forex.data.oanda_provider", "get_oanda_provider"),
+    "Yahoo": ("forex.data.yahoo_provider", "get_yahoo_provider"),
+    "Binance": ("forex.data.binance_provider", "get_binance_provider"),
+}
+_PROVIDER_FETCH_KWARGS = {"MT5": {"allow_fallback": False}}
+
+
+def _provider_factory(provider_name: str):
+    configured = _PROVIDER_FACTORIES.get(provider_name)
+    if configured is None:
+        raise DataProviderError(
+            f"Unsupported configured provider: {provider_name}"
+        )
+    module_name, factory_name = configured
+    return getattr(importlib.import_module(module_name), factory_name)()
 
 
 def _detect_asset_type(pair: str) -> str:
@@ -84,7 +104,7 @@ class DataRouter:
               raise_on_failure: bool = False) -> Optional[pd.DataFrame]:
         """
         Descarga datos del activo.
-        Enruta automáticamente a MT5 (forex), Yahoo (fallback) o Binance (crypto).
+        Itera la cadena de proveedores declarada por el catálogo del símbolo.
         """
         df = None
         self._attempt_errors = []
@@ -109,26 +129,16 @@ class DataRouter:
         return df
 
     def _fetch_forex(self, bars: int) -> tuple[Optional[pd.DataFrame], str]:
-        """Intenta MT5 primero, luego Yahoo."""
-        for route in (self.spec.primary, self.spec.fallback):
-            if route is None:
-                continue
+        """Iterate the catalog-authoritative routes for a non-crypto symbol."""
+        return self._fetch_configured_routes(bars)
+
+    def _fetch_configured_routes(
+        self, bars: int
+    ) -> tuple[Optional[pd.DataFrame], str]:
+        for route in provider_routes(self.spec):
             try:
-                if route.provider == "MT5":
-                    from forex.data.mt5_provider import get_mt5_provider
-
-                    provider = get_mt5_provider()
-                    kwargs = {"allow_fallback": False}
-                elif route.provider == "Yahoo":
-                    from forex.data.yahoo_provider import get_yahoo_provider
-
-                    provider = get_yahoo_provider()
-                    kwargs = {}
-                else:
-                    self._attempt_errors.append(
-                        f"Unsupported configured provider: {route.provider}"
-                    )
-                    continue
+                provider = _provider_factory(route.provider)
+                kwargs = dict(_PROVIDER_FETCH_KWARGS.get(route.provider, {}))
                 if not provider.is_available():
                     self._attempt_errors.append(f"{route.provider} unavailable")
                     continue
@@ -149,42 +159,14 @@ class DataRouter:
 
     def _fetch_crypto(self, bars: int) -> tuple[Optional[pd.DataFrame], str]:
         """Use only explicit catalog routes; USD and USDT are never aliased."""
-        for route in (self.spec.primary, self.spec.fallback):
-            if route is None:
-                continue
-            try:
-                if route.provider != "Binance":
-                    self._attempt_errors.append(
-                        f"Unsupported crypto provider: {route.provider}"
-                    )
-                    continue
-                from forex.data.binance_provider import get_binance_provider
-
-                provider = get_binance_provider()
-                if not provider.is_available():
-                    self._attempt_errors.append("Binance unavailable")
-                    continue
-                df = None
-                try:
-                    df = provider.fetch(self.pair, self.tf, bars)
-                finally:
-                    self._capture_acquisition_metadata(
-                        provider, route.provider, bars, locals().get("df")
-                    )
-                if df is not None and len(df) > 0:
-                    return df, "Binance"
-                self._attempt_errors.append("Binance returned no data")
-            except Exception as exc:
-                self._attempt_errors.append(f"Binance: {exc}")
-
-        return None, "none"
+        return self._fetch_configured_routes(bars)
 
     @property
     def route_used(self):
         if not self._source_used or self._source_used == "none":
             return None
-        for route in (self.spec.primary, self.spec.fallback):
-            if route is not None and route.provider == self._source_used:
+        for route in provider_routes(self.spec):
+            if route.provider == self._source_used:
                 return route
         return None
 

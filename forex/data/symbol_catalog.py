@@ -31,6 +31,7 @@ class SymbolSpec:
     pip_value: float
     primary: ProviderRoute
     fallback: ProviderRoute | None = None
+    secondary: ProviderRoute | None = None
     supported_timeframes: tuple[str, ...] = SUPPORTED_TIMEFRAMES
     legacy_default_active: bool = False
     blocked_routes: tuple[str, ...] = ()
@@ -50,6 +51,9 @@ def _mt5_yahoo_forex(
         asset_class="FOREX",
         pip_value=pip_value,
         primary=ProviderRoute("MT5", code, "BROKER"),
+        secondary=ProviderRoute(
+            "OANDA", f"{code[:3]}_{code[3:]}", "BROKER_REST"
+        ),
         fallback=ProviderRoute("Yahoo", yahoo_ticker, "FX_REFERENCE"),
         legacy_default_active=legacy_default_active,
     )
@@ -200,10 +204,20 @@ def legacy_default_specs() -> tuple[SymbolSpec, ...]:
 def route_for_provider(symbol: str, provider: str) -> ProviderRoute | None:
     spec = get_symbol_spec(symbol)
     expected = str(provider).lower()
-    for route in (spec.primary, spec.fallback):
-        if route is not None and route.provider.lower() == expected:
+    for route in provider_routes(spec):
+        if route.provider.lower() == expected:
             return route
     return None
+
+
+def provider_routes(value: SymbolSpec | str) -> tuple[ProviderRoute, ...]:
+    """Return the catalog-authoritative provider order for one symbol."""
+    spec = value if isinstance(value, SymbolSpec) else get_symbol_spec(value)
+    return tuple(
+        route
+        for route in (spec.primary, spec.secondary, spec.fallback)
+        if route is not None
+    )
 
 
 def catalog_codes() -> tuple[str, ...]:
@@ -244,6 +258,7 @@ __all__ = [
     "legacy_default_specs",
     "normalize_symbol_code",
     "operational_capabilities",
+    "provider_routes",
     "route_for_provider",
     "symbols_by_asset_class",
 ]

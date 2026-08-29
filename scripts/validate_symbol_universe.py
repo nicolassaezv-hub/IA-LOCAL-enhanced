@@ -156,8 +156,10 @@ class RouteSpec:
     declarations: tuple[str, ...]
     pair_config: bool
     provider_primary: str | None
+    provider_secondary: str | None
     provider_fallback: str | None
     primary_external_ticker: str | None
+    secondary_external_ticker: str | None
     fallback_external_ticker: str | None
     primary_ticker_catalogued: bool
     fallback_ticker_explicit: bool
@@ -179,8 +181,10 @@ def route_spec(symbol: str) -> RouteSpec:
             declarations=(),
             pair_config=symbol in PAIR_CONFIG,
             provider_primary=None,
+            provider_secondary=None,
             provider_fallback=None,
             primary_external_ticker=None,
+            secondary_external_ticker=None,
             fallback_external_ticker=None,
             primary_ticker_catalogued=False,
             fallback_ticker_explicit=False,
@@ -195,6 +199,7 @@ def route_spec(symbol: str) -> RouteSpec:
     if symbol in PAIR_CONFIG:
         declarations.append("pair_config")
     fallback = spec.fallback
+    secondary = spec.secondary
     return RouteSpec(
         symbol=symbol,
         asset_class=spec.asset_class,
@@ -202,8 +207,12 @@ def route_spec(symbol: str) -> RouteSpec:
         declarations=tuple(declarations),
         pair_config=symbol in PAIR_CONFIG,
         provider_primary=spec.primary.provider,
+        provider_secondary=secondary.provider if secondary else None,
         provider_fallback=fallback.provider if fallback else None,
         primary_external_ticker=spec.primary.external_ticker,
+        secondary_external_ticker=(
+            secondary.external_ticker if secondary else None
+        ),
         fallback_external_ticker=fallback.external_ticker if fallback else None,
         primary_ticker_catalogued=True,
         fallback_ticker_explicit=fallback is not None,
@@ -566,6 +575,7 @@ def validate_dataset_frame(
         try:
             parsed_acquisition = validate_acquisition_metadata(
                 acquisition_metadata,
+                provider=provider,
                 symbol=symbol,
                 timeframe=timeframe,
             )
@@ -916,7 +926,8 @@ class SymbolQualificationHarness:
         if spec.provider_primary == "MT5":
             _warn(
                 stage,
-                "MT5 is Windows-only; Oracle Linux necessarily depends on Yahoo fallback",
+                "MT5 is Windows-only; Oracle Linux depends on configured "
+                "non-MT5 provider routes",
                 blocking=False,
             )
         return stage, spec

@@ -24,7 +24,7 @@ from forex.data.symbol_catalog import (
     provider_routes,
     route_for_provider,
 )
-from scripts.validate_symbol_universe import validate_dataset_frame
+from scripts.validate_symbol_universe import route_spec, validate_dataset_frame
 
 
 pytestmark = pytest.mark.unit
@@ -217,7 +217,7 @@ def test_oanda_timeframes_are_native(timeframe, granularity):
     params = request.call_args.kwargs["params"]
     assert params["granularity"] == granularity
     assert params["price"] == "M"
-    assert params["smooth"] is False
+    assert params["smooth"] == "false"
     assert params["alignmentTimezone"] == "America/New_York"
     assert params["dailyAlignment"] == 17
     assert provider.last_acquisition_metadata["native_timeframe"] is True
@@ -332,6 +332,21 @@ def test_oanda_http_errors_are_explicit_and_sanitized(status, expected):
     assert ACCOUNT not in str(error.value)
 
 
+def test_oanda_network_error_cannot_expose_request_credentials():
+    import requests
+
+    provider = _provider()
+    unsafe_message = f"request failed for {ACCOUNT} using {TOKEN}"
+
+    with patch(
+        "requests.get", side_effect=requests.ConnectionError(unsafe_message)
+    ), pytest.raises(Exception, match="OANDA_PROVIDER_FAILURE") as error:
+        provider.fetch("EURUSD", "H1", bars=2)
+
+    assert TOKEN not in str(error.value)
+    assert ACCOUNT not in str(error.value)
+
+
 def test_catalog_declares_ordered_forex_routes_and_preserves_other_assets():
     assert [route.provider for route in provider_routes("EURUSD")] == [
         "MT5",
@@ -352,6 +367,9 @@ def test_catalog_declares_ordered_forex_routes_and_preserves_other_assets():
     assert route_for_provider("EURUSD", "OANDA").external_ticker == "EUR_USD"
     assert route_for_provider("USDJPY", "OANDA").external_ticker == "USD_JPY"
     assert route_for_provider("XAUUSD", "OANDA") is None
+    reported = route_spec("EURUSD")
+    assert reported.provider_secondary == "OANDA"
+    assert reported.secondary_external_ticker == "EUR_USD"
 
 
 def test_catalog_version_changes_deterministically_with_oanda_routes():
@@ -486,6 +504,39 @@ def test_oanda_dataset_passes_router_rolling_and_qualification_contract(tmp_path
     assert stage["blocking"] is False
     assert stage["details"]["acquisition_metadata"]["provider"] == "OANDA"
     assert yahoo.calls == []
+
+
+def test_validation_rejects_cross_provider_metadata_claim(tmp_path):
+    frame = _frame(2001)
+    path = tmp_path / "EURUSD_H1.csv"
+    RollingDataset("EURUSD", "H1", csv_path=path).apply(
+        frame, include_existing=False, now="2030-01-01"
+    )
+    artifact = pd.read_csv(path)
+    metadata = {
+        "schema_version": 1,
+        "provider": "Yahoo",
+        "symbol": "EURUSD",
+        "timeframe": "H1",
+        "requested_bars": 2001,
+        "raw_closed_rows": 2001,
+        "invalid_rows_dropped": 0,
+        "valid_rows_before_tail": 2001,
+        "returned_rows": 2001,
+        "dropped_rows": [],
+    }
+
+    stage, _validated = validate_dataset_frame(
+        artifact,
+        "EURUSD",
+        "H1",
+        now="2030-01-01",
+        acquisition_metadata=metadata,
+        provider="OANDA",
+    )
+
+    assert stage["blocking"] is True
+    assert any("does not match OANDA" in error for error in stage["errors"])
 
 
 def test_env_example_contains_only_empty_oanda_credentials():
