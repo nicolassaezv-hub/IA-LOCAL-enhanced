@@ -385,10 +385,9 @@ def classify_gaps(
         for item in (metadata or {}).get("dropped_rows", [])
         if isinstance(item, dict) and item.get("timestamp")
     }
-    expected_closures = {
-        _utc_naive(timestamp)
-        for timestamp in (metadata or {}).get("expected_market_closures", [])
-    }
+    # Ordinary acquisition metadata is not an authority for market sessions.
+    # EXPECTED_MARKET_CLOSURE must remain unavailable until ASTRA has an
+    # explicitly authorized calendar/source contract.
     gaps: list[dict[str, Any]] = []
     for previous, current in zip(values.iloc[:-1], values.iloc[1:]):
         delta = current - previous
@@ -411,10 +410,6 @@ def classify_gaps(
                 timestamp in sanitized_timestamps for timestamp in expected_market
             ):
                 classification = "SANITIZED_PROVIDER_ROW"
-            elif expected_market and all(
-                timestamp in expected_closures for timestamp in expected_market
-            ):
-                classification = "EXPECTED_MARKET_CLOSURE"
             elif not expected_market and asset_class != "CRYPTO":
                 classification = "WEEKEND"
             else:

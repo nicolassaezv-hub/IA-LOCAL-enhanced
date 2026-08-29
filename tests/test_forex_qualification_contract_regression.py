@@ -405,7 +405,7 @@ def test_weekend_does_not_hide_unexplained_weekday_timestamp():
     assert [gap["classification"] for gap in gaps] == ["PROVIDER_GAP"]
 
 
-def test_expected_market_closure_requires_explicit_validated_provenance():
+def test_untrusted_expected_market_closure_metadata_cannot_unblock_gap():
     frame, missing = _validated_gap_frame((96,))
     metadata = _acquisition_metadata()
     metadata["expected_market_closures"] = [missing[0].isoformat()]
@@ -419,9 +419,9 @@ def test_expected_market_closure_requires_explicit_validated_provenance():
     )
 
     assert validated is not None
-    assert stage["blocking"] is False
+    assert stage["blocking"] is True
     assert stage["details"]["gaps"]["classifications"] == {
-        "EXPECTED_MARKET_CLOSURE": 1
+        "PROVIDER_GAP": 1
     }
 
 
