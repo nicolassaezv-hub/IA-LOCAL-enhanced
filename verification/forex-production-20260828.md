@@ -451,3 +451,171 @@ No provider configuration was changed to force a pass.
 ## Updated Final Classification
 
 NOT READY — MULTIPLE BLOCKERS
+
+## Pytest Isolated Temp Retry
+
+- Classification: PASS
+- External temp root: `C:\Users\nicol\astra_pytest_temp`.
+- The root is outside the repository.
+- A single probe file was created successfully and then removed successfully.
+- No system ACL was changed.
+- pytest was run with only these infrastructure adjustments:
+  - `-p no:cacheprovider`
+  - `--basetemp=C:\Users\nicol\astra_pytest_temp\focused` or `...\full`
+- `.venv\Scripts\python.exe` remained Python `3.12.6`.
+- No DB, CSV, PKL, environment file, test, or product source file was changed.
+
+The isolated run proves that the preceding `WinError 5` result came from pytest's default global temp/cache locations rather than from Forex test assertions.
+
+## Focused Suite Final Result
+
+- Classification: PASS — CONTRACT TESTS
+- Passed: `215`.
+- Failed: `0`.
+- Errors: `0`.
+- Skipped: `0`.
+- Warnings: `7`.
+- Duration: `111.91s`.
+
+```text
+215 passed, 7 warnings in 111.91s (0:01:51)
+```
+
+Warnings are deprecations only:
+
+- Five `datetime.utcnow()` warnings from `deployment/pipeline_report.py`.
+- Two `datetime.utcnow()` warnings from `forex/portfolio/portfolio_ranker.py`.
+
+No code assertion, dependency-compatibility, or test-semantic failure was observed.
+
+## Full Suite Result
+
+- Classification: PASS — CONTRACT TESTS
+- Passed: `639`.
+- Failed: `0`.
+- Errors: `0`.
+- Skipped: `10`.
+- Warnings: `13`.
+- Subtests passed: `23`.
+- Duration: `170.28s`.
+
+```text
+639 passed, 10 skipped, 13 warnings, 23 subtests passed in 170.28s (0:02:50)
+```
+
+Expected skips:
+
+- Five repository-dataset integration tests are opt-in through `ASTRA_RUN_INTEGRATION_TESTS=1`.
+- Five scheduler activation shell-harness tests require POSIX process semantics.
+
+Warnings are deprecations only:
+
+- Two FastAPI `on_event` deprecations.
+- Nine `datetime.utcnow()` warnings from `deployment/pipeline_report.py`.
+- Two `datetime.utcnow()` warnings from `forex/portfolio/portfolio_ranker.py`.
+
+## Existing Legacy Dataset Inventory
+
+- Classification: WARN
+- Root: `forex/data`.
+- Existing requested datasets: `12/12`.
+- These are legacy/local paths, not the canonical production paths defined by `runtime_paths.py`.
+
+- `forex/data/EURUSD_H1.csv`: 5,542 bytes; 100 rows; first `2026-01-01 00:00:00`; last `2026-01-05 03:00:00`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `ad2b72cd5228e67f21a74f134d15ee866ccdc2967042244f87c60027b61ca847`.
+- `forex/data/EURUSD_H4.csv`: 12,577 bytes; 121 rows; first `2026-07-07 20:00:00`; last `2026-08-04 04:00:00`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `9c64a673c7b4c9d50b0023d2da697a67867bc5d020f8f0f4f0861dd758cfd956`.
+- `forex/data/EURUSD_D1.csv`: 6,397 bytes; 67 rows; first `2026-05-04`; last `2026-08-04`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `22e7dc1fbc22751781c65aa8afd0642f21af634421040939e7ebc16bf2613e81`.
+- `forex/data/USDJPY_H1.csv`: 10,560 bytes; 102 rows; first `2026-07-28 23:00:00`; last `2026-08-04 05:00:00`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `d2176503c3df0b86bc945700b3245df227332c531a99e2be33b7206ca4b0cdf1`.
+- `forex/data/USDJPY_H4.csv`: 12,510 bytes; 121 rows; first `2026-07-07 20:00:00`; last `2026-08-04 04:00:00`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `b039c3ea3d22d77f4980193eb61c13a362a209fa3314ac5404f771e57d57873d`.
+- `forex/data/USDJPY_D1.csv`: 6,326 bytes; 67 rows; first `2026-05-04`; last `2026-08-04`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `bd1bf7962f5b0ee99d6de2cd02b3c06ae2220be88b3583329211d28ac9ac59a5`.
+- `forex/data/GBPUSD_H1.csv`: 10,654 bytes; 102 rows; first `2026-07-28 23:00:00`; last `2026-08-04 05:00:00`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `1442445a9fecf4fb1d9370d729ccd9b00b0b6d7ba6c88de8e27c769cb4a5f99d`.
+- `forex/data/GBPUSD_H4.csv`: 12,632 bytes; 121 rows; first `2026-07-07 20:00:00`; last `2026-08-04 04:00:00`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `fe0da91413f4204660856668c1429acda4f7a2131f58b14958b8db2bdcc948eb`.
+- `forex/data/GBPUSD_D1.csv`: 6,393 bytes; 67 rows; first `2026-05-04`; last `2026-08-04`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `8d007dbc67864ab5b4f4df3f88dac5fe9ff89033d7414293233f6c6e2022a80a`.
+- `forex/data/AUDUSD_H1.csv`: 10,703 bytes; 102 rows; first `2026-07-28 23:00:00`; last `2026-08-04 05:00:00`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `a086b9087681a0a7214668073b1a6f9c4e96b3446d3d522aad6e73b6fe18b2a9`.
+- `forex/data/AUDUSD_H4.csv`: 12,692 bytes; 121 rows; first `2026-07-09 20:00:00`; last `2026-08-06 04:00:00`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `c4e6978381615a718d42c261941779ac2e5a65e348d12d8ccabf633b0e510480`.
+- `forex/data/AUDUSD_D1.csv`: 6,431 bytes; 67 rows; first `2026-05-04`; last `2026-08-04`; columns `timestamp, open, high, low, close, volume, pair`; SHA256 `5333388fedceaad4b2e5df9b1410297e8eea34ea57fd40ba1177741f1762cb7c`.
+
+These row counts are below the normal 2,000-row rolling production contract and are not treated as canonical readiness evidence.
+
+## Existing Canonical Dataset Inventory
+
+- Classification: FAIL
+- `runtime_paths.forex_dataset_root()` resolves to `data/forex` under the repository root.
+- Canonical root exists: no.
+- Existing requested canonical datasets: `0/12`.
+
+Absent canonical paths:
+
+- `data/forex/EURUSD_H1.csv`, `EURUSD_H4.csv`, `EURUSD_D1.csv`.
+- `data/forex/USDJPY_H1.csv`, `USDJPY_H4.csv`, `USDJPY_D1.csv`.
+- `data/forex/GBPUSD_H1.csv`, `GBPUSD_H4.csv`, `GBPUSD_D1.csv`.
+- `data/forex/AUDUSD_H1.csv`, `AUDUSD_H4.csv`, `AUDUSD_D1.csv`.
+
+No directory or dataset was created during the audit.
+
+## Existing Model Inventory
+
+- Classification: WARN
+- Requested production aliases found: `2/4`.
+- No artifact was deserialized; inventory used filesystem metadata and streaming SHA256 only.
+
+- `models/forex/latest_EURUSD.pkl`: exists; 1,571,452 bytes; SHA256 `cf22ead0e88f5a71c730e4462e3ac7e29503e9652067c73ffa2cb41f649a9c07`.
+- `models/forex/latest_USDJPY.pkl`: exists; 1,105,395 bytes; SHA256 `9692aff3eac992ce9b50c61c04fa7bdeee3f307cef34753e8812fc088c19af42`.
+- `models/forex/latest_GBPUSD.pkl`: absent.
+- `models/forex/latest_AUDUSD.pkl`: absent.
+
+Alias presence alone is not production eligibility evidence because the registry and provenance tables are empty.
+
+## Existing Database State
+
+- Classification: WARN
+- Database: `memory_db/astra_autonomous.db`.
+- Exists: yes.
+- Size: 114,688 bytes.
+- Opened through SQLite URI `mode=ro` and closed after queries.
+- Tables: `config`, `dataset_registry`, `model_provenance`, `model_quality`, `outcomes`, `predictions`, `retrain_runs`, `scheduler_runs`, `sqlite_sequence`, `supported_symbols`.
+- `supported_symbols`: 0.
+- Symbol status counts: candidate 0; qualified 0; active 0; disabled 0.
+- `dataset_registry`: 0.
+- `retrain_runs`: 0.
+- `model_provenance`: 0.
+- `scheduler_runs`: 0.
+- `predictions`: 0.
+
+The schema exists, but the audited runtime state is empty. No row was inserted, updated, or deleted.
+
+## ASTRA_API_KEY Metadata
+
+- `variable declared`: no.
+- `value configured`: no.
+- No environment value was read or displayed.
+
+## Runtime Bootstrap Gap Analysis
+
+- Classification: A — artifacts exist but the new registry is empty.
+- Demonstrated existing artifacts:
+  - 12 legacy/local CSV datasets under `forex/data`.
+  - 2 model aliases under `models/forex`.
+  - SQLite schema at `memory_db/astra_autonomous.db`.
+- Demonstrated missing canonical/runtime evidence:
+  - canonical dataset root `data/forex` is absent;
+  - zero active/candidate/qualified/disabled symbols;
+  - zero dataset registry rows;
+  - zero model provenance rows;
+  - zero retrain, scheduler, and prediction rows;
+  - `ASTRA_API_KEY` is neither declared nor configured;
+  - no active production provider route can be selected.
+- This is not called corruption: the evidence shows a legacy-artifact/new-runtime bootstrap gap.
+- No migration, registration, qualification, activation, copying, retraining, or scheduler execution was attempted.
+
+Current component classification:
+
+- Code: PASS — CONTRACT TESTS.
+- Test infrastructure: PASS with isolated external pytest temp root.
+- Runtime bootstrap/data registry: FAIL/PENDING.
+- Model eligibility/provenance: PENDING; aliases exist but have no canonical registry provenance.
+- Provider operation: PENDING behind absent active route.
+- API authentication configuration: FAIL locally.
+
+Current overall classification:
+
+NOT READY — MULTIPLE BLOCKERS
