@@ -452,6 +452,180 @@ No provider configuration was changed to force a pass.
 
 NOT READY — MULTIPLE BLOCKERS
 
+## Controlled EURUSD Bootstrap
+
+- Classification: FAIL — stopped fail-closed at qualification.
+- Initial branch/HEAD: `codex/forex-production-verification-20260828` at `2e7cd18d1b75732a1822dbe44cb675e5e7dd4523`.
+- Python: `.venv\Scripts\python.exe`, version `3.12.6`.
+- Initial Git state: clean apart from ignored local runtime artifacts.
+- Scope remained EURUSD only; USDJPY, GBPUSD, and AUDUSD were not registered, qualified, initialized, or trained.
+- EURUSD was registered through `scripts/manage_symbol_lifecycle.py register-candidate EURUSD`.
+- Registration returned `ok=true`, symbol id `1`, status `candidate`, and `activation_origin=managed`.
+- Qualification returned exit code `1` and `result=FAIL`; all later mutating gates were skipped.
+
+## EURUSD Qualification
+
+- Classification: FAIL.
+- Qualification timestamp: `2026-08-29T03:49:09.200428+00:00`.
+- Catalog version: `6f2a7b3f0266099c311dcbb3defa55981e12483ed7c2766104f5b44ccef1a855`.
+- Evidence path: `data/qualification/EURUSD/evidence.json`.
+- Evidence SHA256: `8b4f4d12d7f7098d281d914062eae07aa07d213754ec42883c370b5e4d69688c`.
+- MT5 was unavailable for every timeframe. Data acquisition then succeeded through the catalogued Yahoo fallback, producing 2,000-row isolated candidate CSVs, but validation failed before provider fields could be persisted in the per-timeframe evidence object.
+
+H1 evidence:
+
+- Result: FAIL.
+- Provider route used: Yahoo fallback after `MT5 unavailable`.
+- Row count written to isolated qualification CSV: 2,000.
+- First timestamp: `2026-05-04 19:00:00`.
+- Last timestamp: `2026-08-28 21:00:00`.
+- Candidate CSV SHA256: `6e82fb2a4a1be9b340b205ae653212385b12c3ed7b7f6c8000db4a3d6c39b814`.
+- Validation errors:
+  - `RSI_14` independent recalculation mismatch (`max_abs=0.308891`, `max_rel=0.00597543`).
+  - `MACD` mismatch (`max_abs=1.23649e-08`, `max_rel=6.64948e-05`).
+  - `ATR_14` mismatch (`max_abs=5.1949e-09`, `max_rel=5.18474e-06`).
+
+H4 evidence:
+
+- Result: FAIL.
+- Provider route used: Yahoo fallback after `MT5 unavailable`.
+- Row count written to isolated qualification CSV: 2,000.
+- First timestamp: `2025-04-29 04:00:00`.
+- Last timestamp: `2026-08-28 16:00:00`.
+- Candidate CSV SHA256: `869f533f78abf20513878930f9f0ab226403f4f70dbe0a12e482d5fde08a9338`.
+- Validation errors:
+  - `RSI_14` mismatch (`max_abs=0.704857`, `max_rel=0.0144445`).
+  - `MACD` mismatch (`max_abs=5.87117e-08`, `max_rel=0.000186085`).
+  - `MACD_signal` mismatch (`max_abs=2.70489e-09`, `max_rel=4.05187e-06`).
+  - `ATR_14` mismatch (`max_abs=1.13328e-08`, `max_rel=3.43244e-06`).
+
+D1 evidence:
+
+- Result: FAIL.
+- Provider route used: Yahoo fallback after `MT5 unavailable`.
+- Row count written to isolated qualification CSV: 2,000.
+- First timestamp: `2018-12-21`.
+- Last timestamp: `2026-08-28`.
+- Candidate CSV SHA256: `b055a4f2ef2ea2f827906e24bcacc51adbb022023b30fe2b66deb0db99acfcff`.
+- Validation errors:
+  - 52 malformed/non-positive OHLC rows.
+  - `RSI_14` mismatch (`max_abs=1.30266`, `max_rel=0.0317327`).
+  - `MACD` mismatch (`max_abs=3.04178e-07`, `max_rel=0.000704016`).
+  - `MACD_signal` mismatch (`max_abs=1.40137e-08`, `max_rel=7.16263e-06`).
+  - `MACD_hist` mismatch (`max_abs=4.48439e-09`, `max_rel=0.000141573`).
+  - `ATR_14` mismatch (`max_abs=8.86883e-08`, `max_rel=1.23451e-05`).
+
+Cross-timeframe evidence:
+
+- Status: FAIL, blocking.
+- Error: `Missing validated timeframe frames: ['D1', 'H1', 'H4']`.
+- No cross-timeframe details were accepted because every individual timeframe failed validation.
+
+Post-qualification lifecycle state:
+
+- `status=candidate`.
+- `qualification_evidence_path=null` in `supported_symbols`.
+- `qualification_sha256=null` in `supported_symbols`.
+- `qualified_at=null`.
+- The failed evidence remains isolated under `data/qualification/EURUSD`; it was not adopted into production registry state.
+
+## Canonical Dataset Creation
+
+- Classification: FAIL/PENDING — deliberately not executed after qualification failure.
+- `data/forex/EURUSD_H1.csv`: absent.
+- `data/forex/EURUSD_H4.csv`: absent.
+- `data/forex/EURUSD_D1.csv`: absent.
+- `dataset_registry` rows for EURUSD: `0`.
+- The rolling-update command was not invoked and no legacy CSV was copied.
+
+## Legacy Model Quarantine
+
+- Classification: PASS.
+- Original alias SHA256 before move: `cf22ead0e88f5a71c730e4462e3ac7e29503e9652067c73ffa2cb41f649a9c07`.
+- Original `models/forex/latest_EURUSD.pkl`: absent after quarantine.
+- Preserved path: `models/forex/legacy_unverified/latest_EURUSD_cf22ead0e88f5a71c730e4462e3ac7e29503e9652067c73ffa2cb41f649a9c07.pkl`.
+- Preserved SHA256: `cf22ead0e88f5a71c730e4462e3ac7e29503e9652067c73ffa2cb41f649a9c07`.
+- The preserved artifact remains ignored by Git and can be restored explicitly if required.
+- `latest_USDJPY.pkl` was not moved or modified; its SHA256 remains `9692aff3eac992ce9b50c61c04fa7bdeee3f307cef34753e8812fc088c19af42`.
+
+## Initial Training Evidence
+
+- Classification: PENDING/NOT EXECUTED.
+- The initial-training entrypoint was not invoked because EURUSD did not reach `qualified` and canonical datasets were not created.
+- `retrain_runs` rows for EURUSD: `0`.
+- `model_provenance` rows for EURUSD: `0`.
+- No candidate model was staged or published.
+
+## Quality Gate Evidence
+
+- Classification: PENDING.
+- No training dataset reached the quality-gate entrypoint.
+
+## WFV Evidence
+
+- Classification: PENDING.
+- No WFV folds, TP/FP counts, signals, aggregate precision, pooled precision, evidence-sufficiency decision, or WFV result were generated.
+
+## Calibration and Validation
+
+- Classification: PENDING.
+- Calibration, validation precision, `model_valid`, and `model_deployed` were not evaluated.
+
+## Initial Model Promotion
+
+- Classification: PENDING/NOT EXECUTED.
+- `models/forex/latest_EURUSD.pkl` remains absent.
+- The quarantined legacy alias remains intact.
+- No provenance record claims EURUSD is production eligible.
+
+## EURUSD Activation
+
+- Classification: FAIL/NOT ATTEMPTED.
+- Activation was not invoked because qualification failed.
+- Final lifecycle status: `candidate`, not `qualified` or `active`.
+- `activation_origin` remains `managed` from registration metadata; this does not mean the symbol was activated.
+
+## Single H1 Runtime Cycle
+
+- Classification: PENDING/NOT EXECUTED.
+- No session-only `ASTRA_API_KEY` was generated because the activation gate was never reached.
+- No H1 scheduler command was executed.
+- `scheduler_runs`: `0`.
+- `predictions`: `0`.
+
+## Post-Bootstrap Production Readiness
+
+- Classification: PENDING/NOT EXECUTED.
+- The post-bootstrap readiness probe was not run because the controlled bootstrap stopped at qualification.
+- The last demonstrated readiness state from the preceding phase remains `NOT READY`; this run produced no evidence that could remove its blockers.
+
+## Final EURUSD Runtime State
+
+- Symbol: `candidate`.
+- Qualification: failed; failed evidence isolated and not adopted.
+- Canonical datasets: 0/3.
+- Dataset registry rows: 0.
+- Executable latest EURUSD alias: absent.
+- Legacy EURUSD artifact: preserved with original SHA.
+- Retrain runs: 0.
+- Model provenance rows: 0.
+- Scheduler runs: 0.
+- Predictions: 0.
+- Fail-closed behavior: PASS.
+
+## Remaining Blockers
+
+- Qualification provider data failed the independent dataset contract for all three timeframes.
+- D1 contains 52 malformed/non-positive OHLC rows.
+- H1/H4/D1 indicator columns differ from independent recalculation beyond the contract tolerances.
+- Cross-timeframe validation cannot run successfully without three individually validated frames.
+- EURUSD cannot become qualified, receive canonical production datasets, train, promote, activate, or enter H1 scheduling until qualification evidence passes honestly.
+- No threshold, provider configuration, dataset, model, test, or product code was altered to force a pass.
+
+## Final Viability Decision
+
+NOT READY — PROVIDER/NETWORK
+
 ## Pytest Isolated Temp Retry
 
 - Classification: PASS
