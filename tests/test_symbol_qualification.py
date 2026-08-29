@@ -288,7 +288,7 @@ def test_cross_timeframe_aggregation_compares_real_ohlc_components():
     ("timestamps", "asset_class", "expected"),
     [
         (
-            pd.Series(["2026-07-31", "2026-08-03"]),
+            pd.Series(["2026-07-31 23:00", "2026-08-03 00:00"]),
             "FOREX",
             "WEEKEND",
         ),

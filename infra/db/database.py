@@ -215,6 +215,7 @@ class SQLiteDatabase(DatabaseAdapter):
                 provider_class TEXT,
                 source_fetched_at TEXT,
                 source_sha256 TEXT,
+                acquisition_metadata TEXT,
                 legacy_provenance_pending INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(symbol, timeframe)
             );
@@ -368,6 +369,7 @@ class SQLiteDatabase(DatabaseAdapter):
             "provider_class": "TEXT",
             "source_fetched_at": "TEXT",
             "source_sha256": "TEXT",
+            "acquisition_metadata": "TEXT",
             "legacy_provenance_pending": "INTEGER NOT NULL DEFAULT 0",
         })
         if provenance_is_legacy:
@@ -712,6 +714,7 @@ class SQLiteDatabase(DatabaseAdapter):
                     code,
                     timeframe,
                     now=qualified_at,
+                    acquisition_metadata=item.get("acquisition_metadata"),
                 )
             except Exception as exc:
                 raise PersistenceConflictError(
@@ -874,16 +877,30 @@ class SQLiteDatabase(DatabaseAdapter):
             q += " AND timeframe=?"; params.append(tf)
         with self._connection() as c:
             rows = c.execute(q, params).fetchall()
-        return [dict(r) for r in rows]
+        from forex.data.ohlc_contract import acquisition_metadata_dict
+
+        decoded = []
+        for row in rows:
+            item = dict(row)
+            item["acquisition_metadata"] = acquisition_metadata_dict(
+                item.get("acquisition_metadata")
+            )
+            decoded.append(item)
+        return decoded
 
     def upsert_dataset_registry(self, entry: dict) -> dict:
+        from forex.data.ohlc_contract import encode_acquisition_metadata
+
+        acquisition_metadata = encode_acquisition_metadata(
+            entry.get("acquisition_metadata")
+        )
         with self._connection() as c:
             c.execute("""
                 INSERT INTO dataset_registry (symbol, timeframe, candle_count, rolling_window_size,
                     last_candle_timestamp, blob_path, status, last_error, last_updated,
                     provider_used, external_ticker, provider_class, source_fetched_at,
-                    source_sha256, legacy_provenance_pending)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    source_sha256, acquisition_metadata, legacy_provenance_pending)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(symbol, timeframe) DO UPDATE SET
                     candle_count=excluded.candle_count,
                     rolling_window_size=excluded.rolling_window_size,
@@ -897,6 +914,7 @@ class SQLiteDatabase(DatabaseAdapter):
                     provider_class=excluded.provider_class,
                     source_fetched_at=excluded.source_fetched_at,
                     source_sha256=excluded.source_sha256,
+                    acquisition_metadata=excluded.acquisition_metadata,
                     legacy_provenance_pending=excluded.legacy_provenance_pending
             """, (
                 entry["symbol"], entry["timeframe"], entry.get("candle_count", 0),
@@ -906,11 +924,18 @@ class SQLiteDatabase(DatabaseAdapter):
                 entry.get("provider_used"), entry.get("external_ticker"),
                 entry.get("provider_class"), entry.get("source_fetched_at"),
                 entry.get("source_sha256"),
+                acquisition_metadata,
                 0,
             ))
             row = c.execute("SELECT * FROM dataset_registry WHERE symbol=? AND timeframe=?",
                             (entry["symbol"], entry["timeframe"])).fetchone()
-        return dict(row)
+        result = dict(row)
+        from forex.data.ohlc_contract import acquisition_metadata_dict
+
+        result["acquisition_metadata"] = acquisition_metadata_dict(
+            result.get("acquisition_metadata")
+        )
+        return result
 
     def save_prediction(self, pred: dict) -> dict:
         symbol = str(pred.get("symbol") or pred.get("pair") or "").upper().strip()

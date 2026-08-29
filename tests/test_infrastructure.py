@@ -31,15 +31,18 @@ def _set_active_fixture(db, symbol):
         )
 
 
-def _write_ready_dataset(path, pair="EURUSD"):
+def _write_ready_dataset(path, pair="EURUSD", timeframe="H1"):
     import pandas as pd
 
     from forex.data.indicator_delta import recalculate_tail_indicators
     from forex.data.rolling_dataset import ROLLING_WINDOW, validate_dataset
 
     values = pd.Series(range(ROLLING_WINDOW), dtype=float)
+    frequency = {"H1": "1h", "H4": "4h", "D1": "1D"}[timeframe]
     dataset = pd.DataFrame({
-        "timestamp": pd.date_range("2020-01-01", periods=ROLLING_WINDOW, freq="1h"),
+        "timestamp": pd.date_range(
+            "2020-01-01", periods=ROLLING_WINDOW, freq=frequency
+        ),
         "open": 1.08 + values / 10000,
         "high": 1.085 + values / 10000,
         "low": 1.075 + values / 10000,
@@ -156,7 +159,7 @@ def test_candidate_is_invisible_to_new_symbol_detection():
         _set_active_fixture(db, "EURUSD"); db.add_symbol("NZDUSD","NZD/USD",0.0001)
         for tf in ["H1","H4","D1"]:
             existing_path = Path(tmpdir)/f"EURUSD_{tf}.csv"
-            existing_df = _write_ready_dataset(existing_path)
+            existing_df = _write_ready_dataset(existing_path, timeframe=tf)
             db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(existing_df["timestamp"].iloc[-1]),"blob_path":str(existing_path), **_registry_provenance(existing_path)})
         df = pd.DataFrame({"timestamp":pd.date_range("2020-01-01",periods=2000,freq="1h"),"open":0.6,"high":0.605,"low":0.595,"close":0.602,"volume":1000,"pair":"NZDUSD"})
         with patch("scheduler.autonomous_scheduler.PROJECT_ROOT",Path(tmpdir)):
@@ -173,7 +176,7 @@ def test_init_skip():
         _set_active_fixture(db, "EURUSD")
         for tf in ["H1","H4","D1"]:
             existing_path = Path(tmpdir)/f"EURUSD_{tf}.csv"
-            existing_df = _write_ready_dataset(existing_path)
+            existing_df = _write_ready_dataset(existing_path, timeframe=tf)
             db.upsert_dataset_registry({"symbol":"EURUSD","timeframe":tf,"status":"ready","candle_count":2000,"rolling_window_size":2000,"last_candle_timestamp":str(existing_df["timestamp"].iloc[-1]),"blob_path":str(existing_path), **_registry_provenance(existing_path)})
         with patch("scheduler.autonomous_scheduler.PROJECT_ROOT",Path(tmpdir)):
             results = run_init(db)

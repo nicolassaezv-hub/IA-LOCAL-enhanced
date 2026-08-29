@@ -121,9 +121,12 @@ def recalculate_tail_indicators(df: pd.DataFrame, k: int = 60) -> pd.DataFrame:
         if "BB_lower" in df.columns:
             ctx["BB_lower"] = bl
     if "returns" in df.columns:
-        ctx["returns"] = close.pct_change().fillna(0)
+        returns = close.pct_change().fillna(0)
+        ctx["returns"] = returns
+    else:
+        returns = close.pct_change().fillna(0)
     if "volatility_24h" in df.columns:
-        ctx["volatility_24h"] = close.pct_change().rolling(24, min_periods=1).std().fillna(0)
+        ctx["volatility_24h"] = returns.rolling(24, min_periods=1).std().fillna(0)
 
     # Sólo actualizar las últimas k filas del df original
     actual_tail = min(k, context_rows)

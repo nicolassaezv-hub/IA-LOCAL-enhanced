@@ -4,6 +4,7 @@ Capa de abstracción: detecta el tipo de activo y enruta a la fuente correcta.
 Un solo punto de entrada para todos los datos del sistema.
 """
 import pandas as pd
+import copy
 from pathlib import Path
 from typing import Optional
 
@@ -50,6 +51,33 @@ class DataRouter:
         self.asset_type = _detect_asset_type(self.pair)
         self._source_used: Optional[str] = None
         self._attempt_errors: list[str] = []
+        self._last_acquisition_metadata: Optional[dict] = None
+
+    def _capture_acquisition_metadata(
+        self,
+        provider,
+        source: str,
+        bars: int,
+        frame,
+    ) -> None:
+        metadata = getattr(provider, "last_acquisition_metadata", None)
+        if metadata is None and frame is not None:
+            metadata = {
+                "schema_version": 1,
+                "provider": source,
+                "symbol": self.pair,
+                "timeframe": self.tf,
+                "requested_bars": int(bars),
+                "raw_closed_rows": int(len(frame)),
+                "invalid_rows_dropped": 0,
+                "valid_rows_before_tail": int(len(frame)),
+                "returned_rows": int(len(frame)),
+                "dropped_rows": [],
+            }
+        if metadata is not None:
+            self._last_acquisition_metadata = copy.deepcopy(metadata)
+            if isinstance(frame, pd.DataFrame):
+                frame.attrs["acquisition_metadata"] = copy.deepcopy(metadata)
 
     def fetch(self, bars: int = 500, save_csv: bool = False,
               csv_dir: str = None,
@@ -60,6 +88,7 @@ class DataRouter:
         """
         df = None
         self._attempt_errors = []
+        self._last_acquisition_metadata = None
 
         if self.asset_type == "crypto":
             df, source = self._fetch_crypto(bars)
@@ -103,7 +132,13 @@ class DataRouter:
                 if not provider.is_available():
                     self._attempt_errors.append(f"{route.provider} unavailable")
                     continue
-                df = provider.fetch(self.pair, self.tf, bars, **kwargs)
+                df = None
+                try:
+                    df = provider.fetch(self.pair, self.tf, bars, **kwargs)
+                finally:
+                    self._capture_acquisition_metadata(
+                        provider, route.provider, bars, locals().get("df")
+                    )
                 if df is not None and len(df) > 0:
                     return df, route.provider
                 self._attempt_errors.append(f"{route.provider} returned no data")
@@ -129,7 +164,13 @@ class DataRouter:
                 if not provider.is_available():
                     self._attempt_errors.append("Binance unavailable")
                     continue
-                df = provider.fetch(self.pair, self.tf, bars)
+                df = None
+                try:
+                    df = provider.fetch(self.pair, self.tf, bars)
+                finally:
+                    self._capture_acquisition_metadata(
+                        provider, route.provider, bars, locals().get("df")
+                    )
                 if df is not None and len(df) > 0:
                     return df, "Binance"
                 self._attempt_errors.append("Binance returned no data")
@@ -160,6 +201,10 @@ class DataRouter:
     @property
     def attempt_errors(self) -> tuple[str, ...]:
         return tuple(self._attempt_errors)
+
+    @property
+    def last_acquisition_metadata(self) -> Optional[dict]:
+        return copy.deepcopy(self._last_acquisition_metadata)
 
     def info(self) -> str:
         return (

@@ -4,8 +4,10 @@ Descarga datos Forex e índices via yfinance. Fallback cuando MT5 no disponible.
 """
 import pandas as pd
 from datetime import datetime, timedelta
+import copy
 from typing import Optional
 
+from forex.data.ohlc_contract import sanitize_ohlc_frame
 from forex.data.symbol_catalog import SYMBOL_CATALOG, route_for_provider
 
 
@@ -20,6 +22,20 @@ _TF_MAP = {
     "M1": "1m",   "M5": "5m",   "M15": "15m",  "M30": "30m",
     "H1": "1h",   "H4": "1h",   "D1": "1d",    "W1": "1wk",  # H4 se resamplea desde 1h
 }
+
+_CANDLE_DURATION = {
+    "M1": pd.Timedelta(minutes=1),
+    "M5": pd.Timedelta(minutes=5),
+    "M15": pd.Timedelta(minutes=15),
+    "M30": pd.Timedelta(minutes=30),
+    "H1": pd.Timedelta(hours=1),
+    "D1": pd.Timedelta(days=1),
+    "W1": pd.Timedelta(weeks=1),
+}
+
+
+class YahooDataContractError(RuntimeError):
+    """Raised when Yahoo cannot satisfy the requested valid-bar contract."""
 
 
 def _to_yahoo_ticker(pair: str) -> str:
@@ -59,7 +75,6 @@ def _normalize_df(df: pd.DataFrame, pair: str) -> pd.DataFrame:
         if c not in df.columns:
             df[c] = 0.0
         df[c] = pd.to_numeric(df[c], errors="coerce")
-    df = df.dropna(subset=["open", "high", "low", "close"])
     keep = ["timestamp", "open", "high", "low", "close", "volume", "pair"]
     return df[[c for c in keep if c in df.columns]].reset_index(drop=True)
 
@@ -111,6 +126,59 @@ class YahooProvider:
 
     def __init__(self):
         self._available = None
+        self._last_acquisition_metadata: Optional[dict] = None
+
+    @property
+    def last_acquisition_metadata(self) -> Optional[dict]:
+        """Return provenance for the last attempted acquisition."""
+        return copy.deepcopy(self._last_acquisition_metadata)
+
+    @staticmethod
+    def _metadata(
+        pair: str,
+        timeframe: str,
+        bars: int,
+        raw_closed_rows: int,
+        valid_rows_before_tail: int,
+        returned_rows: int,
+        dropped_rows: list[dict],
+    ) -> dict:
+        return {
+            "schema_version": 1,
+            "provider": "Yahoo",
+            "symbol": pair.upper(),
+            "timeframe": timeframe.upper(),
+            "requested_bars": int(bars),
+            "raw_closed_rows": int(raw_closed_rows),
+            "invalid_rows_dropped": int(len(dropped_rows)),
+            "valid_rows_before_tail": int(valid_rows_before_tail),
+            "returned_rows": int(returned_rows),
+            "dropped_rows": dropped_rows,
+        }
+
+    @staticmethod
+    def _sanitize_h4(df: pd.DataFrame) -> tuple[pd.DataFrame, int, list[dict]]:
+        """Reject an H4 block when any source H1 row is contract-invalid."""
+        h1_closed = _closed_before(df, pd.Timedelta(hours=1))
+        _valid_h1, dropped_h1 = sanitize_ohlc_frame(h1_closed)
+        raw_h4 = _resample_h4(h1_closed)
+        affected: dict[pd.Timestamp, str] = {}
+        for item in dropped_h1:
+            block = pd.Timestamp(item["timestamp"]).floor("4h")
+            affected.setdefault(block, item["reason"])
+
+        valid_h4, invalid_h4 = sanitize_ohlc_frame(raw_h4)
+        for item in invalid_h4:
+            affected.setdefault(pd.Timestamp(item["timestamp"]), item["reason"])
+        if affected:
+            timestamps = pd.to_datetime(valid_h4["timestamp"])
+            valid_h4 = valid_h4.loc[~timestamps.isin(affected)].reset_index(drop=True)
+        dropped = [
+            {"timestamp": timestamp.isoformat(), "reason": reason}
+            for timestamp, reason in sorted(affected.items())
+            if timestamp in set(pd.to_datetime(raw_h4["timestamp"]))
+        ]
+        return valid_h4, len(raw_h4), dropped
 
     def is_available(self) -> bool:
         if self._available is None:
@@ -128,6 +196,7 @@ class YahooProvider:
         tf: timeframe (M1, M5, M15, M30, H1, H4, D1, W1)
         bars: número de velas a descargar
         """
+        self._last_acquisition_metadata = None
         if not self.is_available():
             return None
 
@@ -161,10 +230,34 @@ class YahooProvider:
                 return None
             df = _normalize_df(df_raw, pair)
             if tf.upper() == "H4":
-                df = _resample_h4(df)
-            elif tf.upper() == "D1":
-                df = _closed_before(df, pd.Timedelta(days=1))
-            return df.tail(bars).reset_index(drop=True)
+                valid, raw_closed_rows, dropped = self._sanitize_h4(df)
+            else:
+                duration = _CANDLE_DURATION.get(tf.upper())
+                closed = _closed_before(df, duration) if duration is not None else df
+                raw_closed_rows = len(closed)
+                valid, dropped = sanitize_ohlc_frame(closed)
+
+            returned_rows = min(len(valid), bars)
+            self._last_acquisition_metadata = self._metadata(
+                pair,
+                tf,
+                bars,
+                raw_closed_rows,
+                len(valid),
+                returned_rows,
+                dropped,
+            )
+            if len(valid) < bars:
+                raise YahooDataContractError(
+                    "INSUFFICIENT_VALID_BARS_AFTER_SANITIZATION: "
+                    f"{pair.upper()}/{tf.upper()} requested={bars} valid={len(valid)} "
+                    f"raw_closed={raw_closed_rows} dropped={len(dropped)}"
+                )
+            result = valid.tail(bars).reset_index(drop=True)
+            result.attrs["acquisition_metadata"] = self.last_acquisition_metadata
+            return result
+        except YahooDataContractError:
+            raise
         except Exception as e:
             print(f"[YahooProvider] Error descargando {pair}/{tf}: {e}")
             return None
@@ -188,3 +281,12 @@ _provider = YahooProvider()
 
 def get_yahoo_provider() -> YahooProvider:
     return _provider
+
+
+__all__ = [
+    "FOREX_TICKER_MAP",
+    "YahooDataContractError",
+    "YahooProvider",
+    "get_yahoo_provider",
+    "to_yahoo_ticker",
+]

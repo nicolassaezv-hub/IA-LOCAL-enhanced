@@ -72,6 +72,8 @@ def fetch_market_data(symbol: str, timeframe: str, count: int = FETCH_BARS):
     """Fetch real market data through ASTRA's canonical provider router."""
     router = DataRouter(symbol, timeframe)
     df = router.fetch(bars=count, raise_on_failure=True)
+    if router.last_acquisition_metadata is not None:
+        df.attrs["acquisition_metadata"] = router.last_acquisition_metadata
     return df, router.source_used
 
 
@@ -241,11 +243,45 @@ def registry_entry_readiness(
                     reasons.append("Registry provenance does not match canonical route")
                 if entry["source_sha256"] != _file_sha256(path):
                     reasons.append("Registry source_sha256 differs from persisted CSV")
+                acquisition_metadata = entry.get("acquisition_metadata")
+                if acquisition_metadata is None:
+                    acquisition_metadata_state = "NOT_RECORDED"
+                else:
+                    try:
+                        from forex.data.ohlc_contract import (
+                            validate_acquisition_metadata,
+                        )
+
+                        acquisition_metadata = validate_acquisition_metadata(
+                            acquisition_metadata,
+                            provider=entry["provider_used"],
+                            symbol=entry["symbol"],
+                            timeframe=entry["timeframe"],
+                            dataset_sha256=entry["source_sha256"],
+                        )
+                        acquisition_metadata_state = "VERIFIED"
+                    except Exception as exc:
+                        acquisition_metadata_state = "INVALID"
+                        reasons.append(f"Acquisition metadata is invalid: {exc}")
+
+                if actual_count == ROLLING_WINDOW:
+                    from scripts.validate_symbol_universe import validate_dataset_frame
+
+                    contract_stage, _ = validate_dataset_frame(
+                        persisted,
+                        entry["symbol"],
+                        entry["timeframe"],
+                        acquisition_metadata=acquisition_metadata,
+                    )
+                    if contract_stage["status"] == "FAIL" or contract_stage["blocking"]:
+                        reasons.extend(
+                            contract_stage["errors"] or contract_stage["warnings"]
+                        )
     except Exception as exc:
         reasons.append(f"Dataset verification raised {type(exc).__name__}: {exc}")
 
     ready = registry_status == "ready" and not reasons
-    return {
+    result = {
         "ready": ready,
         "status": "ready" if ready else (
             "pending" if registry_status == "pending" and actual_count < ROLLING_WINDOW
@@ -259,6 +295,10 @@ def registry_entry_readiness(
             "LEGACY_PROVENANCE_PENDING" if warnings else "VERIFIED"
         ),
     }
+    acquisition_state = locals().get("acquisition_metadata_state")
+    if acquisition_state is not None and acquisition_state != "NOT_RECORDED":
+        result["acquisition_metadata_state"] = acquisition_state
+    return result
 
 
 def _registry_entry_is_ready(entry: dict | None) -> bool:
@@ -333,6 +373,7 @@ def run_rolling_update(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict
 
     try:
         df_new, source = fetch_market_data(symbol, timeframe, FETCH_BARS)
+        acquisition_metadata = df_new.attrs.get("acquisition_metadata")
         dataset = RollingDataset(
             symbol, timeframe, max_rows=ROLLING_WINDOW, csv_path=path
         )
@@ -345,6 +386,10 @@ def run_rolling_update(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict
             "source_fetched_at": datetime.now(timezone.utc).isoformat(),
             "source_sha256": _file_sha256(stored["path"]),
         }
+        if acquisition_metadata is not None:
+            acquisition_metadata = dict(acquisition_metadata)
+            acquisition_metadata["dataset_sha256"] = provenance["source_sha256"]
+            provenance["acquisition_metadata"] = acquisition_metadata
         status = _upsert_successful_dataset(
             db, symbol, timeframe, stored, provenance
         )

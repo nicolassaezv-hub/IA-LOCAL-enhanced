@@ -26,6 +26,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from forex.data.data_router import DataRouter, _detect_asset_type
 from forex.data.indicator_delta import INDICATOR_MIN_HISTORY
+from forex.data.ohlc_contract import (
+    acquisition_metadata_dict,
+    invalid_ohlc_reasons,
+    validate_acquisition_metadata,
+)
 from forex.data.rolling_dataset import ROLLING_WINDOW, exclude_incomplete_candles
 from forex.data.symbol_catalog import UnsupportedSymbolError, catalog_codes, get_symbol_spec
 from infra.db.database import DatabaseAdapter, configured_sqlite_path
@@ -369,9 +374,21 @@ def classify_gaps(
     timestamps: pd.Series,
     timeframe: str,
     asset_class: str,
+    *,
+    acquisition_metadata: dict[str, Any] | str | None = None,
 ) -> list[dict[str, Any]]:
     duration = TIMEFRAME_DURATION[timeframe]
     values = pd.Series(pd.to_datetime(timestamps, utc=True)).dt.tz_localize(None)
+    metadata = acquisition_metadata_dict(acquisition_metadata)
+    sanitized_timestamps = {
+        _utc_naive(item["timestamp"])
+        for item in (metadata or {}).get("dropped_rows", [])
+        if isinstance(item, dict) and item.get("timestamp")
+    }
+    expected_closures = {
+        _utc_naive(timestamp)
+        for timestamp in (metadata or {}).get("expected_market_closures", [])
+    }
     gaps: list[dict[str, Any]] = []
     for previous, current in zip(values.iloc[:-1], values.iloc[1:]):
         delta = current - previous
@@ -380,12 +397,26 @@ def classify_gaps(
         if delta <= pd.Timedelta(0) or delta < duration:
             classification = "INVALID_GAP"
         else:
-            days = pd.date_range(previous.normalize(), current.normalize(), freq="D")
-            crosses_weekend = any(day.dayofweek >= 5 for day in days)
-            if crosses_weekend and asset_class != "CRYPTO":
-                classification = "WEEKEND"
-            elif asset_class in {"COMMODITY", "METAL", "INDEX"}:
+            missing = list(pd.date_range(
+                previous + duration,
+                current - duration,
+                freq=duration,
+            ))
+            expected_market = [
+                timestamp
+                for timestamp in missing
+                if not (asset_class != "CRYPTO" and timestamp.dayofweek >= 5)
+            ]
+            if expected_market and all(
+                timestamp in sanitized_timestamps for timestamp in expected_market
+            ):
+                classification = "SANITIZED_PROVIDER_ROW"
+            elif expected_market and all(
+                timestamp in expected_closures for timestamp in expected_market
+            ):
                 classification = "EXPECTED_MARKET_CLOSURE"
+            elif not expected_market and asset_class != "CRYPTO":
+                classification = "WEEKEND"
             else:
                 classification = "PROVIDER_GAP"
         gaps.append({
@@ -481,6 +512,7 @@ def validate_dataset_frame(
     timeframe: str,
     *,
     now: Any = None,
+    acquisition_metadata: dict[str, Any] | str | None = None,
 ) -> tuple[dict[str, Any], pd.DataFrame | None]:
     """Validate every physical row and return normalized evidence."""
     stage = _new_stage(timeframe)
@@ -496,6 +528,18 @@ def validate_dataset_frame(
         _fail(stage, f"Invalid timestamps: {invalid_timestamps}")
         return stage, None
     normalized["timestamp"] = parsed.dt.tz_localize(None)
+
+    parsed_acquisition = None
+    if acquisition_metadata is not None:
+        try:
+            parsed_acquisition = validate_acquisition_metadata(
+                acquisition_metadata,
+                symbol=symbol,
+                timeframe=timeframe,
+            )
+            stage["details"]["acquisition_metadata"] = parsed_acquisition
+        except Exception as exc:
+            _fail(stage, f"Invalid acquisition metadata: {exc}")
 
     stage["details"]["physical_rows"] = int(len(normalized))
     if len(normalized) != ROLLING_WINDOW:
@@ -534,15 +578,7 @@ def validate_dataset_frame(
             _fail(stage, f"{column} contains NaN or infinity")
 
     if all(np.isfinite(normalized[column].to_numpy(float)).all() for column in PRICE_COLUMNS):
-        invalid_price = (
-            (normalized[list(PRICE_COLUMNS)] <= 0).any(axis=1)
-            | (normalized["low"] > normalized["high"])
-            | (normalized["open"] < normalized["low"])
-            | (normalized["open"] > normalized["high"])
-            | (normalized["close"] < normalized["low"])
-            | (normalized["close"] > normalized["high"])
-        )
-        invalid_count = int(invalid_price.sum())
+        invalid_count = int(invalid_ohlc_reasons(normalized).notna().sum())
         stage["details"]["invalid_ohlc_rows"] = invalid_count
         if invalid_count:
             _fail(stage, f"Malformed/non-positive OHLC rows: {invalid_count}")
@@ -595,7 +631,12 @@ def validate_dataset_frame(
     if len(closed) != len(normalized):
         _fail(stage, f"Open candles present: {len(normalized) - len(closed)}")
 
-    gaps = classify_gaps(normalized["timestamp"], timeframe, expected_asset_class(symbol))
+    gaps = classify_gaps(
+        normalized["timestamp"],
+        timeframe,
+        expected_asset_class(symbol),
+        acquisition_metadata=parsed_acquisition,
+    )
     classifications: dict[str, int] = {}
     for gap in gaps:
         key = gap["classification"]
@@ -610,10 +651,17 @@ def validate_dataset_frame(
     }
     invalid_gaps = classifications.get("INVALID_GAP", 0)
     provider_gaps = classifications.get("PROVIDER_GAP", 0)
+    sanitized_gaps = classifications.get("SANITIZED_PROVIDER_ROW", 0)
     if invalid_gaps:
         _fail(stage, f"Invalid gaps: {invalid_gaps}")
     if provider_gaps:
         _warn(stage, f"Provider gaps requiring review: {provider_gaps}", blocking=True)
+    if sanitized_gaps:
+        _warn(
+            stage,
+            f"Known gaps backed by provider sanitization provenance: {sanitized_gaps}",
+            blocking=False,
+        )
 
     close_values = normalized["close"].to_numpy(float)
     returns = np.abs(np.diff(np.log(close_values))) if len(close_values) > 1 else np.array([])
@@ -862,7 +910,10 @@ class SymbolQualificationHarness:
                 if not closed["timestamp"].is_monotonic_increasing:
                     raise ValueError("provider timestamps are not chronological")
                 probe_gaps = classify_gaps(
-                    closed["timestamp"], timeframe, spec.asset_class
+                    closed["timestamp"],
+                    timeframe,
+                    spec.asset_class,
+                    acquisition_metadata=router.last_acquisition_metadata,
                 )
                 invalid_probe_gaps = [
                     gap for gap in probe_gaps
@@ -895,6 +946,7 @@ class SymbolQualificationHarness:
                     "external_ticker": ticker,
                     "provider_class": route.provider_class if route else None,
                     "attempt_errors": list(router.attempt_errors),
+                    "acquisition_metadata": router.last_acquisition_metadata,
                     "closed_rows": len(closed),
                     "gaps": probe_gaps,
                     "first_timestamp": str(closed["timestamp"].iloc[0]),
@@ -985,7 +1037,11 @@ class SymbolQualificationHarness:
             return stage, None
 
         frame_stage, normalized = validate_dataset_frame(
-            frame, symbol, timeframe, now=self.now
+            frame,
+            symbol,
+            timeframe,
+            now=self.now,
+            acquisition_metadata=entry.get("acquisition_metadata"),
         )
         stage["errors"].extend(frame_stage["errors"])
         stage["warnings"].extend(frame_stage["warnings"])

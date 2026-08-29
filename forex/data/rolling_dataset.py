@@ -12,6 +12,7 @@ import pandas as pd
 from filelock import FileLock
 
 from forex.data.indicator_delta import INDICATOR_MIN_HISTORY
+from forex.data.ohlc_contract import OHLCContractError, validate_ohlc_frame
 
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,10 @@ def normalize_dataset(df: pd.DataFrame, pair: str) -> pd.DataFrame:
         raise DatasetValidationError(
             f"Invalid OHLCV values rejected: {int(invalid_ohlcv.sum())} row(s)"
         )
+    try:
+        validate_ohlc_frame(normalized)
+    except OHLCContractError as exc:
+        raise DatasetValidationError(str(exc)) from exc
 
     normalized["pair"] = pair.upper()
     return normalized
@@ -103,6 +108,10 @@ def validate_dataset(df: pd.DataFrame, max_rows: int) -> None:
     numeric = df[list(_REQUIRED_COLUMNS[1:])].to_numpy(dtype=float)
     if not np.isfinite(numeric).all():
         raise DatasetValidationError("OHLCV data contains non-finite values")
+    try:
+        validate_ohlc_frame(df)
+    except OHLCContractError as exc:
+        raise DatasetValidationError(str(exc)) from exc
     missing_indicators = _INDICATOR_COLUMNS - set(df.columns)
     if missing_indicators:
         raise DatasetValidationError(
@@ -220,12 +229,11 @@ class RollingDataset:
             candidate = candidate.drop_duplicates(subset=["timestamp"], keep="last")
             candidate = candidate.sort_values("timestamp").reset_index(drop=True)
             candidate = exclude_incomplete_candles(candidate, self.tf, now=now)
+            candidate = candidate.tail(self.max_rows).reset_index(drop=True)
 
             from forex.data.indicator_delta import recalculate_tail_indicators
 
             candidate = recalculate_tail_indicators(candidate, k=len(candidate))
-
-            candidate = candidate.tail(self.max_rows).reset_index(drop=True)
             validate_dataset(candidate, self.max_rows)
 
             old_timestamps = (

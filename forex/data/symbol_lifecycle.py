@@ -120,6 +120,9 @@ def qualify_candidate(
         timeframe_evidence: dict[str, Any] = {"timeframe": timeframe}
         try:
             fetched = router.fetch(bars=PROBE_BARS, raise_on_failure=True)
+            acquisition_metadata = getattr(
+                router, "last_acquisition_metadata", None
+            )
             normalized = _normalize_probe_frame(
                 fetched, spec.symbol_code, timeframe
             )
@@ -145,6 +148,7 @@ def qualify_candidate(
                 spec.symbol_code,
                 timeframe,
                 now=qualification_time,
+                acquisition_metadata=acquisition_metadata,
             )
             route = router.route_used
             if route is None:
@@ -174,6 +178,7 @@ def qualify_candidate(
                 "csv_path": str(resolved_path),
                 "csv_sha256": sha256_file(resolved_path),
                 "source_fetched_at": qualification_time.isoformat(),
+                "acquisition_metadata": acquisition_metadata,
                 "attempt_errors": list(router.attempt_errors),
                 "validation": stage,
             })
@@ -378,6 +383,7 @@ def _activate_qualified_symbol_impl(
             spec.symbol_code,
             timeframe,
             now=cutoff_now,
+            acquisition_metadata=entry.get("acquisition_metadata"),
         )
         if local_stage["status"] == "FAIL" or local_stage["blocking"] or local is None:
             raise PersistenceConflictError(
@@ -393,13 +399,16 @@ def _activate_qualified_symbol_impl(
                 timeframe,
                 now=cutoff_now,
             )
-            provider = recalculate_tail_indicators(provider, k=len(provider))
             provider = provider.tail(ROLLING_WINDOW).reset_index(drop=True)
+            provider = recalculate_tail_indicators(provider, k=len(provider))
             provider_stage, provider_validated = validate_dataset_frame(
                 provider,
                 spec.symbol_code,
                 timeframe,
                 now=cutoff_now,
+                acquisition_metadata=getattr(
+                    router, "last_acquisition_metadata", None
+                ),
             )
         except Exception as exc:
             raise PersistenceConflictError(

@@ -392,6 +392,39 @@ def test_partial_sanitization_provenance_remains_provider_gap_blocking():
     assert "SANITIZED_PROVIDER_ROW" not in stage["details"]["gaps"]["classifications"]
 
 
+def test_weekend_does_not_hide_unexplained_weekday_timestamp():
+    timestamps = pd.Series([
+        pd.Timestamp("2026-07-31 22:00:00"),
+        pd.Timestamp("2026-08-03 01:00:00"),
+    ])
+
+    from scripts.validate_symbol_universe import classify_gaps
+
+    gaps = classify_gaps(timestamps, "H1", "FOREX")
+
+    assert [gap["classification"] for gap in gaps] == ["PROVIDER_GAP"]
+
+
+def test_expected_market_closure_requires_explicit_validated_provenance():
+    frame, missing = _validated_gap_frame((96,))
+    metadata = _acquisition_metadata()
+    metadata["expected_market_closures"] = [missing[0].isoformat()]
+
+    stage, validated = validate_dataset_frame(
+        frame,
+        "EURUSD",
+        "D1",
+        now="2030-01-01",
+        acquisition_metadata=metadata,
+    )
+
+    assert validated is not None
+    assert stage["blocking"] is False
+    assert stage["details"]["gaps"]["classifications"] == {
+        "EXPECTED_MARKET_CLOSURE": 1
+    }
+
+
 def test_fake_yahoo_router_rolling_qualification_contract_is_consistent(tmp_path):
     source, _ = _yahoo_frame_with_invalid_rows()
     yahoo = YahooProvider()

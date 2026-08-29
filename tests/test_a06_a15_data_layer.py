@@ -127,11 +127,11 @@ def test_incoming_duplicate_timestamp_wins_deterministically(tmp_path):
     rd = RollingDataset("EURUSD", "H1", csv_path=path)
     rd.update_frame(initial)
     correction = initial.iloc[[-1]].copy()
-    correction["close"] = 9.99
+    correction["close"] = 1.25
     rd.update_frame(correction)
     stored = pd.read_csv(path)
     assert len(stored) == ROLLING_WINDOW
-    assert stored.iloc[-1]["close"] == pytest.approx(9.99)
+    assert stored.iloc[-1]["close"] == pytest.approx(1.25)
 
 
 def test_invalid_timestamp_rejects_update_and_preserves_file(tmp_path):
