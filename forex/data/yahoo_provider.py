@@ -5,9 +5,14 @@ Descarga datos Forex e índices via yfinance. Fallback cuando MT5 no disponible.
 import pandas as pd
 from datetime import datetime, timedelta
 import copy
-from typing import Optional
+from typing import Any, Optional
 
 from forex.data.ohlc_contract import sanitize_ohlc_frame
+from forex.data.session_authority import (
+    SessionAuthority,
+    SessionState,
+    classify_authorized_timestamp,
+)
 from forex.data.symbol_catalog import SYMBOL_CATALOG, route_for_provider
 
 
@@ -94,13 +99,44 @@ def _closed_before(df: pd.DataFrame, duration: pd.Timedelta,
 def _resample_h4(df: pd.DataFrame,
                  now: Optional[pd.Timestamp] = None) -> pd.DataFrame:
     """Agrega H1 en H4 y conserva únicamente bloques completos y cerrados."""
+    result, _provenance = resample_h4_with_provenance(df, now=now)
+    return result
+
+
+def _timestamp_text(value: Any) -> str:
+    timestamp = pd.Timestamp(value)
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.tz_convert("UTC").tz_localize(None)
+    return timestamp.isoformat()
+
+
+def resample_h4_with_provenance(
+    df: pd.DataFrame,
+    now: Optional[pd.Timestamp] = None,
+    *,
+    sanitization_dropped: list[dict] | None = None,
+    session_authority: SessionAuthority | None = None,
+    asset_class: str = "FOREX",
+    provider: str = "Yahoo",
+) -> tuple[pd.DataFrame, list[dict]]:
+    """Aggregate complete H1 blocks and describe every closed omitted block."""
     if df.empty or "timestamp" not in df.columns:
-        return df
+        return df, []
     pair = df["pair"].iloc[-1] if "pair" in df.columns else ""
     indexed = df.copy()
     indexed["timestamp"] = pd.to_datetime(indexed["timestamp"], utc=True).dt.tz_localize(None)
     indexed = indexed.sort_values("timestamp").set_index("timestamp")
-    out = (indexed
+    sanitized = {
+        pd.Timestamp(item["timestamp"])
+        for item in (sanitization_dropped or [])
+        if isinstance(item, dict) and item.get("timestamp")
+    }
+    sanitized = {
+        item.tz_convert("UTC").tz_localize(None) if item.tzinfo else item
+        for item in sanitized
+    }
+    accepted = indexed.loc[~indexed.index.isin(sanitized)]
+    out = (accepted
              .resample("4h")
              .agg({"open": "first", "high": "max", "low": "min",
                    "close": "last", "volume": "sum"})
@@ -108,14 +144,68 @@ def _resample_h4(df: pd.DataFrame,
              .reset_index())
     complete_starts = [
         start
-        for start, values in indexed["close"].resample("4h")
+        for start, values in accepted["close"].resample("4h")
         if values.notna().all()
         and values.index.equals(pd.date_range(start, periods=4, freq="h"))
     ]
     out = out[out["timestamp"].isin(complete_starts)].reset_index(drop=True)
     out = _closed_before(out, pd.Timedelta(hours=4), now=now)
     out["pair"] = pair
-    return out
+
+    cutoff = pd.Timestamp.now(tz="UTC").tz_localize(None) if now is None else pd.Timestamp(now)
+    if cutoff.tzinfo is not None:
+        cutoff = cutoff.tz_convert("UTC").tz_localize(None)
+    first = indexed.index.min().floor("4h")
+    last = indexed.index.max().floor("4h")
+    observed_all = set(accepted.index)
+    provenance: list[dict] = []
+    for start in pd.date_range(first, last, freq="4h"):
+        if start + pd.Timedelta(hours=4) > cutoff or start in complete_starts:
+            continue
+        expected = [start + pd.Timedelta(hours=offset) for offset in range(4)]
+        observed = [timestamp for timestamp in expected if timestamp in observed_all]
+        missing = [timestamp for timestamp in expected if timestamp not in observed_all]
+        sanitized_missing = [timestamp for timestamp in missing if timestamp in sanitized]
+        unresolved = [timestamp for timestamp in missing if timestamp not in sanitized]
+        session_closed = [
+            timestamp
+            for timestamp in unresolved
+            if classify_authorized_timestamp(
+                session_authority,
+                timestamp,
+                asset_class=asset_class,
+                provider=provider,
+            ) == SessionState.CLOSED
+        ]
+        unexplained = [
+            timestamp for timestamp in unresolved if timestamp not in session_closed
+        ]
+        if unexplained:
+            reason = "UPSTREAM_PROVIDER_GAP"
+        elif session_closed and not sanitized_missing:
+            reason = "SESSION_BOUNDARY"
+        elif sanitized_missing and not session_closed:
+            reason = "SANITIZED_SOURCE_ROW"
+        else:
+            reason = "INCOMPLETE_SOURCE_BLOCK"
+        provenance.append({
+            "target_timestamp": _timestamp_text(start),
+            "source_timeframe": "H1",
+            "expected_source_timestamps": [_timestamp_text(item) for item in expected],
+            "observed_source_timestamps": [_timestamp_text(item) for item in observed],
+            "missing_source_timestamps": [_timestamp_text(item) for item in missing],
+            "sanitization_backed_missing_timestamps": [
+                _timestamp_text(item) for item in sanitized_missing
+            ],
+            "session_closed_timestamps": [
+                _timestamp_text(item) for item in session_closed
+            ],
+            "unexplained_provider_missing_timestamps": [
+                _timestamp_text(item) for item in unexplained
+            ],
+            "omission_reason": reason,
+        })
+    return out, provenance
 
 
 class YahooProvider:
@@ -142,8 +232,9 @@ class YahooProvider:
         valid_rows_before_tail: int,
         returned_rows: int,
         dropped_rows: list[dict],
+        resample_provenance: list[dict] | None = None,
     ) -> dict:
-        return {
+        metadata = {
             "schema_version": 1,
             "provider": "Yahoo",
             "symbol": pair.upper(),
@@ -155,13 +246,22 @@ class YahooProvider:
             "returned_rows": int(returned_rows),
             "dropped_rows": dropped_rows,
         }
+        if resample_provenance is not None:
+            metadata["resample_provenance"] = resample_provenance
+        return metadata
 
     @staticmethod
-    def _sanitize_h4(df: pd.DataFrame) -> tuple[pd.DataFrame, int, list[dict]]:
+    def _sanitize_h4(
+        df: pd.DataFrame,
+    ) -> tuple[pd.DataFrame, int, list[dict], list[dict]]:
         """Reject an H4 block when any source H1 row is contract-invalid."""
         h1_closed = _closed_before(df, pd.Timedelta(hours=1))
         _valid_h1, dropped_h1 = sanitize_ohlc_frame(h1_closed)
         raw_h4 = _resample_h4(h1_closed)
+        _provenance_h4, resample_provenance = resample_h4_with_provenance(
+            h1_closed,
+            sanitization_dropped=dropped_h1,
+        )
         affected: dict[pd.Timestamp, str] = {}
         for item in dropped_h1:
             block = pd.Timestamp(item["timestamp"]).floor("4h")
@@ -178,7 +278,7 @@ class YahooProvider:
             for timestamp, reason in sorted(affected.items())
             if timestamp in set(pd.to_datetime(raw_h4["timestamp"]))
         ]
-        return valid_h4, len(raw_h4), dropped
+        return valid_h4, len(raw_h4), dropped, resample_provenance
 
     def is_available(self) -> bool:
         if self._available is None:
@@ -229,8 +329,11 @@ class YahooProvider:
             if df_raw is None or df_raw.empty:
                 return None
             df = _normalize_df(df_raw, pair)
+            resample_provenance = None
             if tf.upper() == "H4":
-                valid, raw_closed_rows, dropped = self._sanitize_h4(df)
+                valid, raw_closed_rows, dropped, resample_provenance = (
+                    self._sanitize_h4(df)
+                )
             else:
                 duration = _CANDLE_DURATION.get(tf.upper())
                 closed = _closed_before(df, duration) if duration is not None else df
@@ -246,6 +349,7 @@ class YahooProvider:
                 len(valid),
                 returned_rows,
                 dropped,
+                resample_provenance,
             )
             if len(valid) < bars:
                 raise YahooDataContractError(
@@ -288,5 +392,6 @@ __all__ = [
     "YahooDataContractError",
     "YahooProvider",
     "get_yahoo_provider",
+    "resample_h4_with_provenance",
     "to_yahoo_ticker",
 ]

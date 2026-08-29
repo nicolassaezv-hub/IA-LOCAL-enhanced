@@ -31,6 +31,11 @@ from forex.data.ohlc_contract import (
     invalid_ohlc_reasons,
     validate_acquisition_metadata,
 )
+from forex.data.session_authority import (
+    SessionAuthority,
+    SessionState,
+    classify_authorized_timestamp,
+)
 from forex.data.rolling_dataset import ROLLING_WINDOW, exclude_incomplete_candles
 from forex.data.symbol_catalog import UnsupportedSymbolError, catalog_codes, get_symbol_spec
 from infra.db.database import DatabaseAdapter, configured_sqlite_path
@@ -376,6 +381,8 @@ def classify_gaps(
     asset_class: str,
     *,
     acquisition_metadata: dict[str, Any] | str | None = None,
+    session_authority: SessionAuthority | None = None,
+    provider: str | None = None,
 ) -> list[dict[str, Any]]:
     duration = TIMEFRAME_DURATION[timeframe]
     values = pd.Series(pd.to_datetime(timestamps, utc=True)).dt.tz_localize(None)
@@ -385,6 +392,7 @@ def classify_gaps(
         for item in (metadata or {}).get("dropped_rows", [])
         if isinstance(item, dict) and item.get("timestamp")
     }
+    resample_items = (metadata or {}).get("resample_provenance", [])
     # Ordinary acquisition metadata is not an authority for market sessions.
     # EXPECTED_MARKET_CLOSURE must remain unavailable until ASTRA has an
     # explicitly authorized calendar/source contract.
@@ -410,16 +418,43 @@ def classify_gaps(
                 timestamp in sanitized_timestamps for timestamp in expected_market
             ):
                 classification = "SANITIZED_PROVIDER_ROW"
+            elif expected_market and all(
+                classify_authorized_timestamp(
+                    session_authority,
+                    timestamp,
+                    asset_class=asset_class,
+                    provider=provider,
+                ) == SessionState.CLOSED
+                for timestamp in expected_market
+            ):
+                # Only a validated authority may establish a market closure;
+                # ordinary acquisition metadata can never supply this evidence.
+                classification = "MARKET_SESSION_CLOSED"
             elif not expected_market and asset_class != "CRYPTO":
                 classification = "WEEKEND"
             else:
                 classification = "PROVIDER_GAP"
-        gaps.append({
+        gap = {
             "previous": str(previous),
             "current": str(current),
             "duration_seconds": float(delta.total_seconds()),
             "classification": classification,
-        })
+        }
+        if delta > duration and timeframe == "H4":
+            missing_targets = {
+                _utc_naive(timestamp).isoformat() for timestamp in missing
+            }
+            matching = [
+                item
+                for item in resample_items
+                if isinstance(item, dict)
+                and item.get("target_timestamp")
+                and _utc_naive(item["target_timestamp"]).isoformat()
+                in missing_targets
+            ]
+            if matching:
+                gap["resample_provenance"] = matching
+        gaps.append(gap)
     return gaps
 
 
@@ -508,6 +543,8 @@ def validate_dataset_frame(
     *,
     now: Any = None,
     acquisition_metadata: dict[str, Any] | str | None = None,
+    session_authority: SessionAuthority | None = None,
+    provider: str | None = None,
 ) -> tuple[dict[str, Any], pd.DataFrame | None]:
     """Validate every physical row and return normalized evidence."""
     stage = _new_stage(timeframe)
@@ -631,6 +668,8 @@ def validate_dataset_frame(
         timeframe,
         expected_asset_class(symbol),
         acquisition_metadata=parsed_acquisition,
+        session_authority=session_authority,
+        provider=provider,
     )
     classifications: dict[str, int] = {}
     for gap in gaps:
@@ -647,6 +686,7 @@ def validate_dataset_frame(
     invalid_gaps = classifications.get("INVALID_GAP", 0)
     provider_gaps = classifications.get("PROVIDER_GAP", 0)
     sanitized_gaps = classifications.get("SANITIZED_PROVIDER_ROW", 0)
+    session_closed_gaps = classifications.get("MARKET_SESSION_CLOSED", 0)
     if invalid_gaps:
         _fail(stage, f"Invalid gaps: {invalid_gaps}")
     if provider_gaps:
@@ -655,6 +695,13 @@ def validate_dataset_frame(
         _warn(
             stage,
             f"Known gaps backed by provider sanitization provenance: {sanitized_gaps}",
+            blocking=False,
+        )
+    if session_closed_gaps:
+        _warn(
+            stage,
+            f"Gaps backed by authoritative market-session evidence: "
+            f"{session_closed_gaps}",
             blocking=False,
         )
 

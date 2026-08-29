@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import numpy as np
@@ -88,14 +89,14 @@ def failed_qualification(tmp_path_factory):
     database.register_candidate("NZDUSD", "NZD/USD", "FOREX", 0.0001)
     frames = {
         "H1": _market_frame("NZDUSD", "H1", gap_position=1000),
-        "H4": _market_frame("NZDUSD", "H4", gap_position=1000),
+        "H4": _market_frame("NZDUSD", "H4", gap_position=1012),
         "D1": _market_frame("NZDUSD", "D1"),
     }
     h1_dropped = [{
         "timestamp": "2010-01-01T00:00:00",
         "reason": "INVALID_OHLC_ENVELOPE",
     }]
-    h4_missing = pd.Timestamp(frames["H4"].iloc[999]["timestamp"]) + pd.Timedelta(hours=4)
+    h4_missing = pd.Timestamp(frames["H4"].iloc[1011]["timestamp"]) + pd.Timedelta(hours=4)
     h4_expected = pd.date_range(h4_missing, periods=4, freq="h")
     h4_resample = [{
         "target_timestamp": h4_missing.isoformat(),
@@ -173,6 +174,14 @@ def test_failed_qualification_preserves_complete_acquisition_metadata(
     assert Path(item["csv_path"]).is_file()
     assert len(item["csv_sha256"]) == 64
     assert item["physical_rows"] == 2000
+    persisted = json.loads(
+        Path(failed_qualification["evidence"]["evidence_path"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert persisted["timeframes"]["H1"]["acquisition_metadata"] == (
+        failed_qualification["metadata"]["H1"]
+    )
 
 
 def test_failed_qualification_preserves_exact_gap_and_resample_items(

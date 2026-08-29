@@ -83,6 +83,61 @@ def _evidence_path(symbol: str, project_root: Path | str) -> Path:
     return symbol_qualification_root(project_root) / symbol / "evidence.json"
 
 
+def _timeframe_diagnostics(
+    *,
+    route: Any,
+    source_fetched_at: str | None,
+    acquisition_metadata: dict | None,
+    stored: dict | None,
+    physical_frame: pd.DataFrame | None,
+    validation: dict | None,
+) -> dict[str, Any]:
+    """Preserve diagnostics already produced before a fail-closed rejection."""
+    diagnostics: dict[str, Any] = {
+        "source_fetched_at": source_fetched_at,
+        "acquisition_metadata": acquisition_metadata,
+        "validation": validation,
+        "warnings": list((validation or {}).get("warnings", [])),
+        "errors": list((validation or {}).get("errors", [])),
+    }
+    if route is not None:
+        route_evidence = {
+            "provider": route.provider,
+            "external_ticker": route.external_ticker,
+            "provider_class": route.provider_class,
+        }
+        diagnostics["route"] = route_evidence
+        diagnostics.update(route_evidence)
+    if acquisition_metadata is not None:
+        for field in (
+            "requested_bars",
+            "raw_closed_rows",
+            "invalid_rows_dropped",
+            "valid_rows_before_tail",
+            "returned_rows",
+            "dropped_rows",
+            "resample_provenance",
+        ):
+            if field in acquisition_metadata:
+                diagnostics[field] = acquisition_metadata[field]
+        diagnostics["drop_reasons"] = sorted({
+            str(item.get("reason"))
+            for item in acquisition_metadata.get("dropped_rows", [])
+            if isinstance(item, dict) and item.get("reason")
+        })
+    if stored is not None and stored.get("path"):
+        resolved_path = Path(stored["path"]).resolve()
+        diagnostics["csv_path"] = str(resolved_path)
+        diagnostics["candidate_path"] = str(resolved_path)
+        if resolved_path.is_file():
+            candidate_sha256 = sha256_file(resolved_path)
+            diagnostics["csv_sha256"] = candidate_sha256
+            diagnostics["candidate_sha256"] = candidate_sha256
+    if physical_frame is not None:
+        diagnostics["physical_rows"] = int(len(physical_frame))
+    return diagnostics
+
+
 def qualify_candidate(
     database: DatabaseAdapter,
     symbol: str,
@@ -118,11 +173,19 @@ def qualify_candidate(
     for timeframe in SUPPORTED_TIMEFRAMES:
         router = router_factory(spec.symbol_code, timeframe)
         timeframe_evidence: dict[str, Any] = {"timeframe": timeframe}
+        acquisition_metadata = None
+        stored = None
+        frame = None
+        stage = None
+        route = None
+        source_fetched_at = None
         try:
             fetched = router.fetch(bars=PROBE_BARS, raise_on_failure=True)
+            source_fetched_at = qualification_time.isoformat()
             acquisition_metadata = getattr(
                 router, "last_acquisition_metadata", None
             )
+            route = router.route_used
             normalized = _normalize_probe_frame(
                 fetched, spec.symbol_code, timeframe
             )
@@ -149,8 +212,8 @@ def qualify_candidate(
                 timeframe,
                 now=qualification_time,
                 acquisition_metadata=acquisition_metadata,
+                provider=route.provider if route is not None else None,
             )
-            route = router.route_used
             if route is None:
                 raise PersistenceConflictError(
                     f"{timeframe}: provider route used is unknown"
@@ -164,25 +227,34 @@ def qualify_candidate(
                 raise PersistenceConflictError(
                     f"{timeframe}: candidate is not exactly {ROLLING_WINDOW} rows"
                 )
-            resolved_path = Path(stored["path"]).resolve()
             frames[timeframe] = validated
+            timeframe_evidence.update(_timeframe_diagnostics(
+                route=route,
+                source_fetched_at=source_fetched_at,
+                acquisition_metadata=acquisition_metadata,
+                stored=stored,
+                physical_frame=frame,
+                validation=stage,
+            ))
             timeframe_evidence.update({
                 "result": "PASS",
-                "provider": route.provider,
-                "external_ticker": route.external_ticker,
-                "provider_class": route.provider_class,
                 "row_count": int(len(validated)),
                 "closed_count": int(stage["details"]["closed_rows"]),
                 "first_timestamp": str(validated["timestamp"].iloc[0]),
                 "last_timestamp": str(validated["timestamp"].iloc[-1]),
-                "csv_path": str(resolved_path),
-                "csv_sha256": sha256_file(resolved_path),
-                "source_fetched_at": qualification_time.isoformat(),
-                "acquisition_metadata": acquisition_metadata,
                 "attempt_errors": list(router.attempt_errors),
-                "validation": stage,
             })
         except Exception as exc:
+            if route is None:
+                route = getattr(router, "route_used", None)
+            timeframe_evidence.update(_timeframe_diagnostics(
+                route=route,
+                source_fetched_at=source_fetched_at,
+                acquisition_metadata=acquisition_metadata,
+                stored=stored,
+                physical_frame=frame,
+                validation=stage,
+            ))
             timeframe_evidence.update({
                 "result": "FAIL",
                 "error": f"{type(exc).__name__}: {exc}",
