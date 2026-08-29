@@ -624,7 +624,207 @@ Post-qualification lifecycle state:
 
 ## Final Viability Decision
 
-NOT READY — PROVIDER/NETWORK
+NOT READY — MULTIPLE CONTRACT DEFECTS
+
+## EURUSD Qualification Root-Cause Analysis
+
+- Analysis date: `2026-08-29`.
+- Scope: read-only analysis of the existing isolated qualification artifacts plus in-memory Yahoo queries. Qualification was not repeated, and no DB, CSV, model, alias, threshold, or production source was changed.
+- Git baseline: branch `codex/forex-production-verification-20260828`, HEAD `4ba2cb38963a5c6da7c53c158f13d07e3d05d7a6`.
+- Python: `.venv\Scripts\python.exe`, version `3.12.6`.
+- EURUSD remained `status=candidate`; its qualification evidence, qualification SHA, and qualified timestamp remained null in the registry.
+- The existing failed artifacts remained under `data/qualification/EURUSD/` and were only read.
+- Yahoo connectivity: PASS. Both requested D1 downloads completed successfully. `MT5 unavailable` caused the expected provider fallback, not a network failure.
+- The qualification failure has two independent families of causes:
+  - the rolling writer calculates recursive indicators on 2,001 rows and then persists the last 2,000, while the qualification oracle restarts those calculations on only the persisted 2,000 and begins comparing before all EWM initial-state differences meet its strict tolerance;
+  - Yahoo's raw D1 OHLC includes malformed envelopes, and both the Yahoo adapter and rolling dataset contract accept those rows before qualification rejects them.
+
+## Indicator Context Reproduction
+
+`RollingDataset.apply()` currently executes these operations in this order:
+
+1. merge, de-duplicate, sort, and remove incomplete candles;
+2. `recalculate_tail_indicators(candidate, k=len(candidate))` over all 2,001 qualification bars;
+3. `candidate.tail(2000)`;
+4. persist and validate the rolling dataset.
+
+The requested reproduction recalculated each existing 2,000-row CSV with `recalculate_tail_indicators(frame.copy(), k=len(frame))`. For H1, H4, and D1, every requested recalculated indicator was bit-for-bit equal to `_independent_indicators(frame)` over every comparable row: maximum absolute error `0`, maximum relative error `0`, no mismatch index, and final-row error `0`. This proves that the formulas agree and isolates the mismatch to EWM initialization context/order of operations.
+
+The following measurements compare the persisted value against the recalculation on only the persisted 2,000 rows. `rows` begins at the current `_indicator_start()`; `first` and `last` are zero-based indices that fail `rtol=1e-6, atol=1e-9`; `-` means every value in the validation range passes. `last_abs` is the absolute error at row 1,999.
+
+```text
+H1 indicator   rows  max_abs         max_rel         first  last  last_abs
+RSI_14         1931  0.308890601189  0.00597542577   69     201   1.94689e-12
+MACD           1871  1.23648887e-08  6.64947940e-05  129    154   2.84495e-16
+MACD_signal    1826  5.69660176e-10  9.25437334e-07  -      -     2.32236e-16
+MACD_hist      1826  1.82291085e-10  4.15357820e-05  -      -     5.22585e-17
+ATR_14         1931  5.19490446e-09  5.18474224e-06  69     75    2.86229e-17
+EMA20          1901  1.23228909e-08  1.04686597e-08  -      -     0
+EMA50          1751  1.24096051e-08  1.06512600e-08  -      -     0
+EMA200         1001  1.24251309e-08  1.08787987e-08  -      -     5.63327e-13
+
+H4 indicator   rows  max_abs         max_rel         first  last  last_abs
+RSI_14         1931  0.704857494214  0.0144445021    69     193   3.12639e-13
+MACD           1871  5.87116798e-08  0.000186084869  129    176   4.52546e-16
+MACD_signal    1826  2.70489245e-09  4.05186925e-06  174    180   4.59322e-16
+MACD_hist      1826  8.65565524e-10  2.07877252e-05  -      -     9.31330e-17
+ATR_14         1931  1.13327742e-08  3.43244114e-06  69     76    4.03323e-17
+EMA20          1901  5.85122635e-08  5.18302193e-08  -      -     0
+EMA50          1751  5.89240055e-08  5.08447993e-08  -      -     2.22045e-16
+EMA200         1001  5.89977256e-08  5.05132816e-08  -      -     2.67786e-12
+
+D1 indicator   rows  max_abs         max_rel         first  last  last_abs
+RSI_14         1931  1.30265962064   0.0317327291    69     209   0
+MACD           1871  3.04178416e-07  0.000704015566  129    181   2.97505e-16
+MACD_signal    1826  1.40137344e-08  7.16262566e-06  174    187   2.55872e-16
+MACD_hist      1826  4.48439321e-09  0.000141573332  174    188   4.09557e-17
+ATR_14         1931  8.86882680e-08  1.23451440e-05  69     87    1.73472e-18
+EMA20          1901  3.03145265e-07  2.70366052e-07  -      -     0
+EMA50          1751  3.05278451e-07  2.75987231e-07  -      -     0
+EMA200         1001  3.05660384e-07  2.92184305e-07  -      -     1.38756e-11
+```
+
+The apparent nonzero `max_rel` for passing rows is compatible with `np.allclose` because the acceptance formula combines relative and absolute tolerance. The important invariant is that recalculation on the persisted slice and the independent oracle are exactly equal; persisted-with-one-prior-row context and slice-only recalculation are not.
+
+## Indicator Convergence Analysis
+
+At each requested start index, the persisted values were compared to `_independent_indicators(frame)` through the last row. The first tested passing index is below; every earlier requested index failed and that index plus every later requested index passed.
+
+| Indicator | H1 first tested pass | H4 first tested pass | D1 first tested pass | Current `_indicator_start()` |
+|---|---:|---:|---:|---:|
+| `RSI_14` | 300 | 200 | 300 | 69 |
+| `MACD` | 200 | 200 | 200 | 129 |
+| `MACD_signal` | 200 | 200 | 200 | 174 |
+| `MACD_hist` | 200 | 200 | 200 | 174 |
+| `ATR_14` | 100 | 100 | 100 | 69 |
+| `EMA20` | 70 | 70 | 100 | 99 |
+| `EMA50` | 150 | 200 | 300 | 249 |
+| `EMA200` | 750 | 750 | 1000 | 999 |
+
+The exact requested index vectors were `70, 100, 150, 200, 300, 500, 750, 1000, 1250, 1500`. A first tested pass does not imply that the immediately preceding integer fails. Direct comparison at the actual configured starts explains the qualification result: H1 fails RSI/MACD/ATR; H4 fails RSI/MACD/MACD_signal/ATR; D1 fails RSI/MACD/MACD_signal/MACD_hist/ATR. Other requested indicators pass at their configured starts.
+
+The current warm-up is not mathematically sufficient for the demanded tolerance. It is generally `minimum_history * 5 - 1`. For a recursive EWM, an initial-state difference decays as `(1-alpha)^n`. To reduce only that decay factor to at most `1e-6` requires approximately 187 updates for RSI(14), 97 for ATR span 14, 180 for the slow MACD EMA(26), 139 for EMA20, 346 for EMA50, and 1,382 for EMA200. At the current starts the corresponding residual factors are about `6.02e-3` for RSI and `4.6e-5` to `5.2e-5` for the span-based EWMs, not `1e-6`. Relative error near zero can require still more context. The current data happen to converge earlier for some columns, but the warm-up has no general mathematical guarantee at `rtol=1e-6, atol=1e-9`.
+
+## Yahoo D1 Invalid OHLC Analysis
+
+The 52 persisted D1 failures are malformed OHLC envelopes, not non-positive prices and not `low > high` rows.
+
+| Exact failed conditions | Rows |
+|---|---:|
+| `close > high` | 16 |
+| `close < low` | 13 |
+| `open > high` and `close > high` | 12 |
+| `open < low` and `close < low` | 11 |
+| Any `open/high/low/close <= 0` | 0 |
+| `low > high` | 0 |
+
+Weekday distribution: Monday 17, Thursday 12, Wednesday 10, Tuesday 8, Friday 5. Representative rows show the four observed combinations:
+
+| Timestamp | Weekday | Open | High | Low | Close | Failure |
+|---|---|---:|---:|---:|---:|---|
+| `2019-03-04` | Monday | 1.137527 | 1.137527 | 1.131055 | 1.137592 | `close > high` |
+| `2020-05-20` | Wednesday | 1.093016 | 1.099904 | 1.092920 | 1.092777 | `close < low` |
+| `2022-04-29` | Friday | 1.050420 | 1.059042 | 1.050542 | 1.050420 | `open < low`, `close < low` |
+| `2022-12-26` | Monday | 1.066780 | 1.063717 | 1.060895 | 1.066780 | `open > high`, `close > high` |
+
+The malformed rows span `2019-03-04` through `2026-08-17`; they are not a single outage or one calendar cluster. Direct download reproduced all 52 timestamps exactly.
+
+## Yahoo auto_adjust Comparison
+
+Read-only `yfinance 1.7.0` downloads used the same provider start calculation (`2018-06-01`, interval `1d`) and completed successfully.
+
+| Mode | Raw/closed rows | Invalid in full response | Invalid in final 2,001 | Invalid in final 2,000 | Overlap with persisted 52 |
+|---|---:|---:|---:|---:|---:|
+| `auto_adjust=True` | 2,145 | 56 | 52 | 52 | 52/52 |
+| `auto_adjust=False` | 2,145 | 56 | 52 | 52 | 52/52 |
+
+- The invalid timestamp sets are identical between adjustment modes. Turning adjustment off does not solve the defect.
+- Yahoo availability and connectivity are therefore PASS.
+- `repair=True` is supported by this installed yfinance version and was tested only in memory. It returned 2,150 closed rows, but 44 remained invalid in the full response and 40 remained invalid in the final 2,001. Standard repair is not sufficient for ASTRA's OHLC contract and must not be treated as an automatic fix.
+
+Safe-filter simulation on `auto_adjust=True`:
+
+- Closed rows before provider `tail`: 2,145.
+- Unequivocally invalid rows: 56.
+- Valid rows remaining: 2,089.
+- Valid headroom above the requested 2,001: 88.
+- At least 2,000 valid rows are available: yes.
+- The last 2,000 valid rows span `2018-10-09` through `2026-08-28`.
+- Causal gap classification after filtering: 388 `WEEKEND`, 52 `INVALID_GAP` intervals containing 53 removed malformed rows, 4 pre-existing `PROVIDER_GAP`, and 0 proven `EXPECTED_MARKET_CLOSURE` under the current code contract.
+- The four pre-existing non-weekend gaps are `2019-05-21 -> 2019-05-23`, `2024-12-31 -> 2025-01-02`, `2025-12-24 -> 2025-12-26`, and `2025-12-31 -> 2026-01-02`. Some are plausibly market closures, but ASTRA has no market-calendar proof and currently labels all four `PROVIDER_GAP`.
+- The current `classify_gaps()` has no knowledge of sanitization provenance. On the safely filtered final 2,000 it labels 411 gaps `WEEKEND` and 33 `PROVIDER_GAP`; 29 of those provider gaps were actually created by dropping malformed Yahoo rows and 4 were already present in raw Yahoo timestamps.
+- Therefore filtering alone supplies enough rows but does not yield qualification PASS: the 33 current `PROVIDER_GAP` classifications remain blocking. This is a new visible blocker after the malformed rows are removed, not a reason to retain invalid OHLC.
+
+## Provider Headroom Analysis
+
+`YahooProvider.fetch(EURUSD, D1, bars=2001)` computes:
+
+- `needed_bars = 2001`;
+- `days_needed = int(2001 * 1.5) + 10 = 3011` calendar days;
+- provider start `2018-06-01` for this run;
+- 2,145 normalized and closed D1 rows before `tail(bars)`;
+- 2,089 valid rows if the OHLC contract is applied before the tail.
+
+The calendar headroom was sufficient for this observed response. The implementation nevertheless returns `df.tail(2001)` before any finite/positive/envelope sanitation. Consequently it returned 2,001 rows containing 52 malformed rows, only 1,949 valid rows. The problem is ordering and absent validation, not insufficient raw history in this run. The code also does not assert that at least `bars` valid rows remain after a future sanitation step; a safe implementation must filter first, verify the post-filter count, and only then take the final requested tail or fail closed.
+
+## Contract Validation Matrix
+
+Legend: YES means enforced by the named functions; PARTIAL means only a subset is enforced; NO means accepted or not checked. Yahoo closed-candle behavior occurs in `fetch()` after `_normalize_df` for D1/H4, not in `_normalize_df` itself.
+
+| Rule | `YahooProvider._normalize_df` | `RollingDataset.normalize_dataset / validate_dataset` | `validate_dataset_frame` |
+|---|---|---|---|
+| finite OHLC | PARTIAL: drops NaN OHLC, accepts infinity | YES | YES |
+| OHLC > 0 | NO | NO | YES |
+| `low <= high` | NO | NO | YES |
+| open within low/high | NO | NO | YES |
+| close within low/high | NO | NO | YES |
+| duplicate timestamp | NO | YES | YES |
+| closed candle | NO in `_normalize_df`; D1/H4 only in `fetch()` | NO in named validators; `apply()` filters separately | YES |
+| indicators | NO | PARTIAL: presence and some finite values, not numerical correctness | YES: independent formula/tolerance comparison |
+| exact 2,000 rows | NO; returns at most requested `bars` | NO: only `len <= max_rows` | YES |
+
+This matrix identifies two inevitable late failures. Yahoo normalization and rolling validation accept malformed positive OHLC envelopes that qualification rejects. Separately, rolling writes context-dependent indicator values that the qualification oracle attempts to reproduce without that context and with an insufficient warm-up.
+
+## Root-Cause Classification
+
+- A. NETWORK FAILURE: not supported; both Yahoo comparison downloads succeeded.
+- B. YAHOO AVAILABILITY FAILURE: not supported; Yahoo returned 2,145 D1 rows in both modes.
+- C. PROVIDER RAW DATA QUALITY: confirmed; the raw Yahoo response itself contains 56 malformed envelope rows, including the exact 52 in the final 2,000.
+- D. YAHOO ADAPTER NORMALIZATION DEFECT: confirmed; `_normalize_df` drops NaN but accepts infinity, non-positive prices, and malformed OHLC envelopes, and `fetch()` tails before enforcing the downstream contract.
+- E. ROLLING DATASET CONTRACT DEFECT: confirmed; rolling validation accepts the same malformed OHLC and persists recursive indicators before reducing to the contractual 2,000-row artifact.
+- F. QUALIFICATION VALIDATOR DEFECT: confirmed; `_indicator_start()` is not mathematically sufficient for its strict EWM comparison and produces false indicator failures when persisted values legitimately contain the one-row prior context.
+- Selected classification: **G. MULTIPLE CONTRACT DEFECTS (C + D + E + F)**.
+
+The cross-timeframe failure is derivative: all three frames were excluded after their individual failures. It is not an independent provider/network cause.
+
+## Recommended Minimal Fix
+
+Indicator options:
+
+- OPTION 1 — recalculate after reducing to rolling 2,000: recommended as the smallest deterministic artifact contract. It makes the persisted CSV self-contained and exactly reproducible by the independent oracle. It introduces no future data and therefore no lookahead leakage. It changes early-window recursive values relative to context-preserving history, so focused feature/model compatibility tests and fresh training evidence are required; last-row errors observed here are already negligible.
+- OPTION 2 — retain prior context and use a mathematically correct validation warm-up: preserves the more history-aware recursive state but is harder to guarantee under relative tolerance near zero, discards more rows from independent validation, and leaves the artifact non-reproducible without documenting its hidden initial state. Merely relaxing tolerances is not acceptable.
+- OPTION 3 — make provider context explicit and validate using exactly that context: best preserves full-history semantics and reproducibility, but requires persisting/proving the context and updating rolling provenance. It is more robust than an arbitrary warm-up but materially larger than the minimum fix.
+
+D1 options:
+
+- OPTION A — reject the entire Yahoo frame as soon as any malformed OHLC is found: safest and simplest fail-closed adapter contract, but it leaves EURUSD D1 unavailable with the observed Yahoo data.
+- OPTION B — drop only unequivocally invalid raw rows before `tail(bars)`, request/verify enough headroom, and retain explicit sanitization-gap provenance: recommended ingestion direction because this run demonstrates 2,089 valid bars. It must still fail closed on fewer than 2,001 valid rows. It does not by itself make qualification pass because current gap validation turns the removed observations into blocking provider gaps; gap provenance/market-closure validation needs an explicit, separately tested contract rather than a relaxed threshold.
+- OPTION C — expand high/low or otherwise synthesize repaired OHLC: not recommended without authoritative provider evidence. Although many discrepancies are small, silently changing prices would fabricate market observations and yfinance `repair=True` still leaves 40 invalid final rows.
+
+Recommended combined minimum: **indicator OPTION 1 plus D1 OPTION B with post-filter count verification and explicit fail-closed gap provenance**. Until the resulting gap contract is implemented and tested honestly, EURUSD must remain a candidate and viability remains `NOT READY — MULTIPLE CONTRACT DEFECTS`.
+
+## Missing Regression Tests
+
+- Rolling indicator context versus persisted slice: initialize 2,001 OHLC rows, persist 2,000, and assert the chosen indicator contract is independently reproducible at `rtol=1e-6, atol=1e-9`.
+- Qualification 2,001-to-2,000 ordering: prove whether tailing occurs before or after indicator calculation and prevent a hidden prior-row EWM state from contradicting the validation oracle.
+- Per-indicator convergence: cover RSI, MACD, MACD signal/histogram, ATR, EMA20/50/200 with a nonconstant real-like series and assert the configured warm-up is mathematically sufficient rather than merely passing constant fixtures.
+- Yahoo D1 malformed OHLC: include positive but invalid rows where open/close lie outside low/high; existing tests only prove the final qualification rejection, not adapter behavior.
+- Yahoo normalization finite/positive/envelope contract: cover NaN, infinity, zero/negative OHLC, `low > high`, and open/close outside the envelope before provider tailing.
+- Provider sanitation with headroom: inject more rows than requested, remove malformed rows before the tail, verify exactly 2,001 valid closed rows remain, and fail closed when they do not.
+- Sanitization gap provenance: distinguish `INVALID_GAP`, `WEEKEND`, proven `EXPECTED_MARKET_CLOSURE`, and unexplained `PROVIDER_GAP` without silently reclassifying or ignoring missing observations.
+- Real-like Yahoo fallback qualification: MT5 unavailable, Yahoo returns 2,145 rows with the reproduced malformed pattern, and the flow either produces an honestly valid 2,000-row isolated artifact or fails at the adapter with a precise cause.
+- `auto_adjust=True/False` parity and `repair=True` insufficiency fixtures, without live-network dependence.
+- Contract-consistency test spanning `_normalize_df`, rolling validation, and qualification so no earlier layer accepts data that must inevitably be rejected downstream.
 
 ## Pytest Isolated Temp Retry
 
