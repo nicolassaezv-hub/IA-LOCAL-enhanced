@@ -456,6 +456,7 @@ def _activate_qualified_symbol_impl(
             timeframe,
             now=cutoff_now,
             acquisition_metadata=entry.get("acquisition_metadata"),
+            provider=entry.get("provider"),
         )
         if local_stage["status"] == "FAIL" or local_stage["blocking"] or local is None:
             raise PersistenceConflictError(
@@ -481,6 +482,7 @@ def _activate_qualified_symbol_impl(
                 acquisition_metadata=getattr(
                     router, "last_acquisition_metadata", None
                 ),
+                provider=getattr(router, "source_used", None),
             )
         except Exception as exc:
             raise PersistenceConflictError(

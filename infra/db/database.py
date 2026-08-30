@@ -715,6 +715,7 @@ class SQLiteDatabase(DatabaseAdapter):
                     timeframe,
                     now=qualified_at,
                     acquisition_metadata=item.get("acquisition_metadata"),
+                    provider=item.get("provider"),
                 )
             except Exception as exc:
                 raise PersistenceConflictError(

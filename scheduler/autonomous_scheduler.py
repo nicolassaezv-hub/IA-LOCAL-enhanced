@@ -272,6 +272,7 @@ def registry_entry_readiness(
                         entry["symbol"],
                         entry["timeframe"],
                         acquisition_metadata=acquisition_metadata,
+                        provider=entry.get("provider_used"),
                     )
                     if contract_stage["status"] == "FAIL" or contract_stage["blocking"]:
                         reasons.extend(

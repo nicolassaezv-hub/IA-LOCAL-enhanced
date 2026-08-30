@@ -26,6 +26,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from forex.data.data_router import DataRouter, _detect_asset_type
 from forex.data.indicator_delta import INDICATOR_MIN_HISTORY
+from forex.data.market_time_grid import (
+    MarketTimeGrid,
+    MarketTimeGridError,
+    resolve_market_time_grid,
+)
 from forex.data.ohlc_contract import (
     acquisition_metadata_dict,
     invalid_ohlc_reasons,
@@ -384,7 +389,7 @@ def validate_indicators(frame: pd.DataFrame) -> tuple[list[dict[str, Any]], list
     return report, failures
 
 
-def classify_gaps(
+def _classify_gaps_legacy(
     timestamps: pd.Series,
     timeframe: str,
     asset_class: str,
@@ -465,6 +470,179 @@ def classify_gaps(
                 gap["resample_provenance"] = matching
         gaps.append(gap)
     return gaps
+
+
+def _classify_market_time_gaps(
+    timestamps: pd.Series,
+    timeframe: str,
+    asset_class: str,
+    *,
+    grid: MarketTimeGrid,
+    acquisition_metadata: dict[str, Any] | str | None,
+    provider: str,
+    symbol: str,
+) -> list[dict[str, Any]]:
+    """Classify missing opens on an authorized broker-local candle grid."""
+    duration = TIMEFRAME_DURATION[timeframe]
+    utc_values = pd.Series(pd.to_datetime(timestamps, utc=True))
+    local_values = utc_values.dt.tz_convert(grid.timezone).dt.tz_localize(None)
+    metadata = acquisition_metadata_dict(acquisition_metadata)
+    sanitized_timestamps = {
+        _utc_naive(item["timestamp"])
+        for item in (metadata or {}).get("dropped_rows", [])
+        if isinstance(item, dict) and item.get("timestamp")
+    }
+    resample_items = (metadata or {}).get("resample_provenance", [])
+    authority = grid.session_authority
+    descriptor = authority.descriptor
+    gaps: list[dict[str, Any]] = []
+    for index in range(1, len(utc_values)):
+        previous_utc = utc_values.iloc[index - 1]
+        current_utc = utc_values.iloc[index]
+        previous_local = local_values.iloc[index - 1]
+        current_local = local_values.iloc[index]
+        utc_delta = current_utc - previous_utc
+        local_delta = current_local - previous_local
+        if local_delta == duration and utc_delta > pd.Timedelta(0):
+            continue
+        if (
+            utc_delta <= pd.Timedelta(0)
+            or local_delta <= pd.Timedelta(0)
+            or local_delta < duration
+        ):
+            gaps.append({
+                "previous": str(previous_utc.tz_localize(None)),
+                "current": str(current_utc.tz_localize(None)),
+                "duration_seconds": float(utc_delta.total_seconds()),
+                "classification": "INVALID_GAP",
+                "market_timezone": grid.timezone,
+                "local_previous": str(previous_local),
+                "local_current": str(current_local),
+            })
+            continue
+
+        missing_local = list(pd.date_range(
+            previous_local + duration,
+            current_local - duration,
+            freq=duration,
+        ))
+        explanation_counts: dict[str, int] = {}
+        unexplained_local: list[str] = []
+        missing_utc: list[pd.Timestamp] = []
+        evidence_by_hash: dict[str, dict[str, Any]] = {}
+        for local_timestamp in missing_local:
+            if grid.is_weekend(local_timestamp):
+                cause = "WEEKEND"
+            else:
+                try:
+                    utc_timestamp = grid.wall_time_to_utc(local_timestamp)
+                    missing_utc.append(utc_timestamp)
+                except MarketTimeGridError:
+                    cause = "UNEXPLAINED"
+                    unexplained_local.append(str(local_timestamp))
+                else:
+                    if utc_timestamp in sanitized_timestamps:
+                        cause = "SANITIZED"
+                    else:
+                        state = classify_authorized_timestamp(
+                            authority,
+                            utc_timestamp.tz_localize("UTC"),
+                            asset_class=asset_class,
+                            provider=provider,
+                            symbol=symbol,
+                            clock_profile_id=grid.profile.profile_id,
+                            server_identity=grid.profile.server_identity,
+                        )
+                        if state == SessionState.CLOSED:
+                            cause = "SESSION_CLOSED"
+                            evidence = getattr(
+                                authority, "evidence_for_timestamp", lambda _value: None
+                            )(utc_timestamp.tz_localize("UTC"))
+                            if isinstance(evidence, dict) and evidence.get(
+                                "evidence_hash"
+                            ):
+                                evidence_by_hash[evidence["evidence_hash"]] = evidence
+                        else:
+                            cause = "UNEXPLAINED"
+                            unexplained_local.append(str(local_timestamp))
+            explanation_counts[cause] = explanation_counts.get(cause, 0) + 1
+
+        if explanation_counts.get("UNEXPLAINED"):
+            classification = "PROVIDER_GAP"
+        elif explanation_counts.get("SESSION_CLOSED"):
+            classification = "MARKET_SESSION_CLOSED"
+        elif explanation_counts.get("SANITIZED"):
+            classification = "SANITIZED_PROVIDER_ROW"
+        else:
+            classification = "WEEKEND"
+        gap = {
+            "previous": str(previous_utc.tz_localize(None)),
+            "current": str(current_utc.tz_localize(None)),
+            "duration_seconds": float(utc_delta.total_seconds()),
+            "classification": classification,
+            "market_timezone": grid.timezone,
+            "local_previous": str(previous_local),
+            "local_current": str(current_local),
+            "timezone_profile_id": grid.profile.profile_id,
+            "session_authority_id": descriptor.authority_id,
+            "session_authority_evidence_hash": descriptor.evidence_hash,
+            "explanation_counts": explanation_counts,
+            "unexplained_local_timestamps": unexplained_local,
+            "session_evidence": list(evidence_by_hash.values()),
+        }
+        if timeframe == "H4" and missing_utc:
+            missing_targets = {
+                timestamp.isoformat() for timestamp in missing_utc
+            }
+            matching = [
+                item
+                for item in resample_items
+                if isinstance(item, dict)
+                and item.get("target_timestamp")
+                and _utc_naive(item["target_timestamp"]).isoformat()
+                in missing_targets
+            ]
+            if matching:
+                gap["resample_provenance"] = matching
+        gaps.append(gap)
+    return gaps
+
+
+def classify_gaps(
+    timestamps: pd.Series,
+    timeframe: str,
+    asset_class: str,
+    *,
+    acquisition_metadata: dict[str, Any] | str | None = None,
+    session_authority: SessionAuthority | None = None,
+    provider: str | None = None,
+    symbol: str | None = None,
+) -> list[dict[str, Any]]:
+    """Classify gaps using broker time only when exact provenance authorizes it."""
+    grid = resolve_market_time_grid(
+        acquisition_metadata,
+        provider=provider,
+        symbol=symbol,
+        asset_class=asset_class,
+    )
+    if grid is not None:
+        return _classify_market_time_gaps(
+            timestamps,
+            timeframe,
+            asset_class,
+            grid=grid,
+            acquisition_metadata=acquisition_metadata,
+            provider=provider,
+            symbol=symbol,
+        )
+    return _classify_gaps_legacy(
+        timestamps,
+        timeframe,
+        asset_class,
+        acquisition_metadata=acquisition_metadata,
+        session_authority=session_authority,
+        provider=provider,
+    )
 
 
 def _match_provider_frame(
@@ -680,6 +858,7 @@ def validate_dataset_frame(
         acquisition_metadata=parsed_acquisition,
         session_authority=session_authority,
         provider=provider,
+        symbol=symbol,
     )
     classifications: dict[str, int] = {}
     for gap in gaps:
@@ -967,6 +1146,8 @@ class SymbolQualificationHarness:
                     timeframe,
                     spec.asset_class,
                     acquisition_metadata=router.last_acquisition_metadata,
+                    provider=router.source_used,
+                    symbol=symbol,
                 )
                 invalid_probe_gaps = [
                     gap for gap in probe_gaps
@@ -1095,6 +1276,7 @@ class SymbolQualificationHarness:
             timeframe,
             now=self.now,
             acquisition_metadata=entry.get("acquisition_metadata"),
+            provider=entry.get("provider_used"),
         )
         stage["errors"].extend(frame_stage["errors"])
         stage["warnings"].extend(frame_stage["warnings"])

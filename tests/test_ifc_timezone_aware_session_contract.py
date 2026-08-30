@@ -100,14 +100,16 @@ def test_utc_sunday_23_cet_winter_is_broker_local_monday_not_weekend():
 
 
 @pytest.mark.parametrize(
-    "local_values",
+    ("local_values", "special_delta_hours"),
     [
-        ["2026-03-28 00:00", "2026-03-29 00:00", "2026-03-30 00:00"],
-        ["2026-10-24 00:00", "2026-10-25 00:00", "2026-10-26 00:00"],
+        (["2026-03-28 00:00", "2026-03-29 00:00", "2026-03-30 00:00"], 23),
+        (["2026-10-24 00:00", "2026-10-25 00:00", "2026-10-26 00:00"], 25),
     ],
     ids=("spring-23h-utc", "autumn-25h-utc"),
 )
-def test_consecutive_d1_local_midnights_across_dst_are_continuous(local_values):
+def test_consecutive_d1_local_midnights_across_dst_are_continuous(
+    local_values, special_delta_hours
+):
     utc_values = _local_to_utc(local_values)
 
     gaps = classify_gaps(
@@ -120,7 +122,9 @@ def test_consecutive_d1_local_midnights_across_dst_are_continuous(local_values):
     )
 
     assert gaps == []
-    assert set(utc_values.diff().dropna().dt.total_seconds()) <= {23 * 3600, 25 * 3600}
+    deltas = set(utc_values.diff().dropna().dt.total_seconds())
+    assert deltas <= {23 * 3600, 24 * 3600, 25 * 3600}
+    assert special_delta_hours * 3600 in deltas
 
 
 @pytest.mark.parametrize(
@@ -138,6 +142,10 @@ def test_consecutive_d1_local_midnights_across_dst_are_continuous(local_values):
 )
 def test_ifc_quote_session_states(local_value, expected):
     assert _authorized_state(local_value) == expected
+
+
+def test_current_quote_session_is_not_projected_beyond_its_evidence_range():
+    assert _authorized_state("2025-08-22 22:00") == SessionState.UNKNOWN
 
 
 def test_h1_sixteen_weekly_events_have_no_provider_gap():
@@ -174,7 +182,7 @@ def test_h4_ordinary_weekend_uses_broker_local_calendar():
     )
 
     assert gaps[0]["classification"] == "WEEKEND"
-    assert gaps[0]["explanation_counts"] == {"WEEKEND": 13}
+    assert gaps[0]["explanation_counts"] == {"WEEKEND": 12}
 
 
 @pytest.mark.parametrize(

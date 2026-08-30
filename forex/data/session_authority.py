@@ -29,6 +29,9 @@ class SessionAuthorityDescriptor:
     version: str
     evidence_hash: str
     provider: str | None = None
+    symbol: str | None = None
+    clock_profile_id: str | None = None
+    server_identity: str | None = None
 
     def __post_init__(self) -> None:
         for field in (
@@ -44,10 +47,17 @@ class SessionAuthorityDescriptor:
             value = getattr(self, field)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"Session authority {field} is invalid")
-        if self.provider is not None and (
-            not isinstance(self.provider, str) or not self.provider.strip()
+        for field in (
+            "provider",
+            "symbol",
+            "clock_profile_id",
+            "server_identity",
         ):
-            raise ValueError("Session authority provider is invalid")
+            value = getattr(self, field)
+            if value is not None and (
+                not isinstance(value, str) or not value.strip()
+            ):
+                raise ValueError(f"Session authority {field} is invalid")
         ZoneInfo(self.timezone)
         start = _aware_utc(self.effective_from)
         if self.effective_to is not None:
@@ -64,12 +74,29 @@ class SessionAuthorityDescriptor:
         *,
         asset_class: str,
         provider: str | None,
+        symbol: str | None = None,
+        clock_profile_id: str | None = None,
+        server_identity: str | None = None,
     ) -> bool:
         moment = _aware_utc(timestamp)
         if self.asset_class.upper() != asset_class.upper():
             return False
         if self.provider is not None and (
             provider is None or self.provider.casefold() != provider.casefold()
+        ):
+            return False
+        if self.symbol is not None and (
+            symbol is None or self.symbol.upper() != symbol.upper()
+        ):
+            return False
+        if self.clock_profile_id is not None and (
+            clock_profile_id is None
+            or self.clock_profile_id != clock_profile_id
+        ):
+            return False
+        if self.server_identity is not None and (
+            server_identity is None
+            or self.server_identity != server_identity
         ):
             return False
         if moment < _aware_utc(self.effective_from):
@@ -107,6 +134,9 @@ def classify_authorized_timestamp(
     *,
     asset_class: str,
     provider: str | None = None,
+    symbol: str | None = None,
+    clock_profile_id: str | None = None,
+    server_identity: str | None = None,
 ) -> SessionState:
     """Return UNKNOWN for absent, malformed, inapplicable, or failing evidence."""
     if authority is None:
@@ -116,7 +146,12 @@ def classify_authorized_timestamp(
         if not isinstance(descriptor, SessionAuthorityDescriptor):
             return SessionState.UNKNOWN
         if not descriptor.applies_to(
-            timestamp, asset_class=asset_class, provider=provider
+            timestamp,
+            asset_class=asset_class,
+            provider=provider,
+            symbol=symbol,
+            clock_profile_id=clock_profile_id,
+            server_identity=server_identity,
         ):
             return SessionState.UNKNOWN
         return SessionState(authority.classify_timestamp(timestamp))
