@@ -24,7 +24,7 @@ from forex.data.mt5_provider import (
 
 pytestmark = pytest.mark.unit
 
-NOW = pd.Timestamp("2026-08-31 12:30:00", tz="UTC")
+NOW = pd.Timestamp("2026-08-31 10:30:00", tz="UTC")
 
 
 def _rate(timestamp: str, index: int, *, invalid: bool = False) -> dict:
@@ -34,6 +34,9 @@ def _rate(timestamp: str, index: int, *, invalid: bool = False) -> dict:
     if invalid:
         closed = high + 1.0
     return {
+        # MT5 encodes these epoch-like integers in the broker server's
+        # wall-clock domain. UTC is used only to preserve the wall-clock
+        # digits while constructing the integer fixture.
         "time": int(pd.Timestamp(timestamp, tz="UTC").timestamp()),
         "open": opened,
         "high": high,
@@ -54,7 +57,7 @@ def _rates(
     ]
 
 
-def _module(rates=None) -> types.ModuleType:
+def _module(rates=None, *, server: str = "IFCMarkets-Demo") -> types.ModuleType:
     module = types.ModuleType("MetaTrader5")
     module.__version__ = "5.0.unit-test"
     module.TIMEFRAME_H1 = 101
@@ -69,7 +72,7 @@ def _module(rates=None) -> types.ModuleType:
     module.account_info = Mock(
         return_value=SimpleNamespace(
             login=123456789,
-            server="IFCMarkets-Demo",
+            server=server,
             company="IFC Markets",
             trade_mode=0,
             balance=999999.0,
@@ -187,11 +190,11 @@ def test_mt5_position_zero_current_open_candle_is_excluded():
 
     assert len(result) == 3
     assert result["timestamp"].tolist() == [
+        pd.Timestamp("2026-08-31 07:00:00"),
+        pd.Timestamp("2026-08-31 08:00:00"),
         pd.Timestamp("2026-08-31 09:00:00"),
-        pd.Timestamp("2026-08-31 10:00:00"),
-        pd.Timestamp("2026-08-31 11:00:00"),
     ]
-    assert pd.Timestamp("2026-08-31 12:00:00") not in set(result["timestamp"])
+    assert pd.Timestamp("2026-08-31 10:00:00") not in set(result["timestamp"])
     assert provider.last_acquisition_metadata["returned_rows"] == 3
 
 
@@ -287,13 +290,13 @@ def test_mt5_out_of_order_timestamps_are_rejected():
         _fetch(module)
 
 
-def test_mt5_epoch_seconds_normalize_to_utc_naive():
+def test_mt5_server_wall_seconds_normalize_to_utc_naive():
     module = _module(_closed_h1_with_current())
 
     _provider, result = _fetch(module)
 
     assert result["timestamp"].dt.tz is None
-    assert result["timestamp"].iloc[0] == pd.Timestamp("2026-08-31 09:00:00")
+    assert result["timestamp"].iloc[0] == pd.Timestamp("2026-08-31 07:00:00")
     assert result["timestamp"].is_monotonic_increasing
 
 
@@ -354,11 +357,29 @@ def test_mt5_metadata_is_complete_safe_and_volume_is_tick_volume():
         "symbol_external",
         "headroom_requested",
         "volume_provenance",
+        "timestamp_source_domain",
+        "source_timezone",
+        "timezone_profile_id",
+        "timezone_profile_version",
+        "timezone_evidence_hash",
+        "timezone_authority_type",
+        "timezone_source_identity",
+        "timezone_effective_from",
+        "timezone_effective_to",
+        "timestamp_normalization",
+        "observed_server",
     } <= set(metadata)
     assert metadata["provider"] == "MT5"
     assert metadata["server"] == "IFCMarkets-Demo"
     assert metadata["symbol_external"] == "EURUSD"
     assert metadata["volume_provenance"] == "MT5_TICK_VOLUME"
+    assert metadata["timestamp_source_domain"] == "MT5_SERVER_TIME"
+    assert metadata["source_timezone"] == "Europe/Berlin"
+    assert metadata["timezone_profile_id"] == "ifcmarkets-demo-europe-berlin"
+    assert metadata["timezone_profile_version"] == 1
+    assert len(metadata["timezone_evidence_hash"]) == 64
+    assert metadata["timestamp_normalization"] == "SERVER_WALL_TIME_TO_UTC"
+    assert metadata["observed_server"] == "IFCMarkets-Demo"
     assert result["volume"].iloc[0] == 100
     assert result.attrs["acquisition_metadata"] == metadata
     serialized = json.dumps(metadata, sort_keys=True).lower()
