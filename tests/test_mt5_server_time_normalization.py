@@ -164,8 +164,8 @@ def test_ifc_timezone_metadata_is_provenance_bound_and_secret_free():
     assert metadata["timezone_profile_id"] == "ifcmarkets-demo-europe-berlin"
     assert metadata["timezone_profile_version"] == 1
     assert metadata["timezone_evidence_hash"] == (
-        "8a20cb1de7a2ec20d94d8915e095ed33"
-        "edc97db4ec93a0d7fc6d480a4953e0e"
+        "00ad79892885f8034eb37f01eceede35"
+        "5b43486cbca18b9b69c45f87f8eed331"
     )
     assert metadata["timezone_authority_type"] == (
         "BROKER_DOCUMENTATION_AND_LIVE_TERMINAL"

@@ -367,6 +367,7 @@ class Provider:
 
 def test_mt5_deprecated_fallback_stays_provider_pure(capsys):
     provider = MT5Provider()
+    provider._account_info = types.SimpleNamespace(server="IFCMarkets-Demo")
     mt5 = types.SimpleNamespace(
         TIMEFRAME_H1=16385,
         last_error=Mock(return_value=(-1, "terminal down")),
@@ -387,6 +388,7 @@ def test_mt5_deprecated_fallback_stays_provider_pure(capsys):
 
 def test_mt5_exception_without_fallback_reports_only_mt5_error(capsys):
     provider = MT5Provider()
+    provider._account_info = types.SimpleNamespace(server="IFCMarkets-Demo")
     mt5 = types.SimpleNamespace(
         TIMEFRAME_H1=16385,
         last_error=Mock(return_value=(-1, "terminal down")),

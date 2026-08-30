@@ -13,6 +13,10 @@ from forex.data.ohlc_contract import (
     sanitize_ohlc_frame,
     validate_ohlc_frame,
 )
+from forex.data.mt5_clock_profiles import (
+    MT5ServerClockProfile,
+    resolve_mt5_server_clock_profile,
+)
 from forex.data.rolling_dataset import exclude_incomplete_candles
 from forex.data.symbol_catalog import route_for_provider
 
@@ -63,8 +67,12 @@ def _last_error_code(mt5: Any) -> str:
         return ""
 
 
-def _normalize_mt5_df(rates: Any, pair: str) -> pd.DataFrame:
-    """Normalize MT5 epoch-second rates to ASTRA's UTC-naive physical schema."""
+def _normalize_mt5_df(
+    rates: Any,
+    pair: str,
+    clock_profile: MT5ServerClockProfile,
+) -> pd.DataFrame:
+    """Convert authorized MT5 server wall time to ASTRA UTC-naive time."""
     frame = pd.DataFrame(rates)
     required = {"time", "open", "high", "low", "close", "tick_volume"}
     missing = required - set(frame.columns)
@@ -72,12 +80,49 @@ def _normalize_mt5_df(rates: Any, pair: str) -> pd.DataFrame:
         raise MT5DataContractError(
             f"MT5_RATE_FIELDS_MISSING: {sorted(missing)}"
         )
-    timestamps = pd.to_datetime(
-        frame["time"], unit="s", utc=True, errors="coerce"
-    )
+    timestamps = pd.to_datetime(frame["time"], unit="s", errors="coerce")
     if timestamps.isna().any():
         raise MT5DataContractError("MT5_CANDLE_TIMESTAMPS_INVALID")
-    frame["timestamp"] = timestamps.dt.tz_localize(None)
+    try:
+        ambiguous_probe = timestamps.dt.tz_localize(
+            clock_profile.timezone,
+            ambiguous="NaT",
+            nonexistent="shift_forward",
+        )
+        if ambiguous_probe.isna().any():
+            raise MT5DataContractError(
+                "MT5_CANDLE_TIMESTAMP_AMBIGUOUS"
+            )
+        nonexistent_probe = timestamps.dt.tz_localize(
+            clock_profile.timezone,
+            ambiguous=True,
+            nonexistent="NaT",
+        )
+        if nonexistent_probe.isna().any():
+            raise MT5DataContractError(
+                "MT5_CANDLE_TIMESTAMP_NONEXISTENT"
+            )
+        localized = timestamps.dt.tz_localize(
+            clock_profile.timezone,
+            ambiguous="raise",
+            nonexistent="raise",
+        )
+    except MT5DataContractError:
+        raise
+    except Exception as exc:
+        error_name = type(exc).__name__
+        if error_name == "AmbiguousTimeError":
+            raise MT5DataContractError(
+                "MT5_CANDLE_TIMESTAMP_AMBIGUOUS"
+            ) from None
+        if error_name == "NonExistentTimeError":
+            raise MT5DataContractError(
+                "MT5_CANDLE_TIMESTAMP_NONEXISTENT"
+            ) from None
+        raise MT5DataContractError(
+            "MT5_CANDLE_TIMEZONE_NORMALIZATION_FAILURE"
+        ) from None
+    frame["timestamp"] = localized.dt.tz_convert("UTC").dt.tz_localize(None)
     for column in ("open", "high", "low", "close", "tick_volume"):
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
     volume = frame["tick_volume"].to_numpy(float)
@@ -176,7 +221,9 @@ class MT5Provider:
         valid_rows_before_tail: int,
         returned_rows: int,
         dropped_rows: list[dict],
+        clock_profile: MT5ServerClockProfile,
     ) -> dict:
+        observed_server = _safe_attribute(self._account_info, "server")
         return {
             "schema_version": 1,
             "provider": "MT5",
@@ -190,7 +237,7 @@ class MT5Provider:
             "dropped_rows": dropped_rows,
             "native_timeframe": True,
             "terminal_connected": True,
-            "server": _safe_attribute(self._account_info, "server"),
+            "server": observed_server,
             "company": (
                 _safe_attribute(self._account_info, "company")
                 or _safe_attribute(self._terminal_info, "company")
@@ -201,6 +248,17 @@ class MT5Provider:
             "symbol_external": pair.upper(),
             "headroom_requested": MT5_HEADROOM,
             "volume_provenance": "MT5_TICK_VOLUME",
+            "timestamp_source_domain": "MT5_SERVER_TIME",
+            "source_timezone": clock_profile.timezone,
+            "timezone_profile_id": clock_profile.profile_id,
+            "timezone_profile_version": clock_profile.version,
+            "timezone_evidence_hash": clock_profile.evidence_hash,
+            "timezone_authority_type": clock_profile.authority_type,
+            "timezone_source_identity": clock_profile.source_identity,
+            "timezone_effective_from": clock_profile.effective_from,
+            "timezone_effective_to": clock_profile.effective_to,
+            "timestamp_normalization": "SERVER_WALL_TIME_TO_UTC",
+            "observed_server": observed_server,
         }
 
     def fetch(
@@ -237,6 +295,13 @@ class MT5Provider:
             )
         symbol = route.external_ticker
         mt5 = self._ensure_init()
+        observed_server = _safe_attribute(self._account_info, "server")
+        clock_profile = resolve_mt5_server_clock_profile(observed_server)
+        if clock_profile is None:
+            raise MT5DataContractError(
+                "MT5_SERVER_CLOCK_PROFILE_UNKNOWN: "
+                f"{observed_server or 'UNAVAILABLE'}"
+            )
         timeframe_code = getattr(mt5, constant_name, None)
         if timeframe_code is None:
             raise MT5DataContractError(
@@ -273,7 +338,7 @@ class MT5Provider:
                 "MT5_COPY_RATES_EMPTY" + _last_error_code(mt5)
             )
 
-        normalized = _normalize_mt5_df(rates, symbol)
+        normalized = _normalize_mt5_df(rates, symbol, clock_profile)
         closed = exclude_incomplete_candles(normalized, timeframe, now=now)
         raw_closed_rows = len(closed)
         valid, dropped = sanitize_ohlc_frame(closed)
@@ -292,6 +357,7 @@ class MT5Provider:
             valid_rows_before_tail=len(valid),
             returned_rows=returned_rows,
             dropped_rows=dropped,
+            clock_profile=clock_profile,
         )
         if len(valid) < requested:
             raise MT5DataContractError(
