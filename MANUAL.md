@@ -109,6 +109,17 @@ por separado. El repositorio no configura TLS, DNS ni ingress cloud.
 
 ### Instalación en Windows (entorno virtual)
 
+El provider MT5 es opcional y requiere Windows, un MetaTrader 5 terminal
+instalado y el paquete Python específico de Windows. Se instala por separado
+para mantener portable el runtime Linux/ARM64:
+
+```cmd
+pip install -r requirements-forex-windows.txt
+```
+
+El terminal debe estar ya conectado por el operador; ASTRA no incorpora
+credenciales ni realiza login automático desde el provider.
+
 ```cmd
 :: 1. Clonar / descargar el proyecto y entrar a la carpeta
 cd ruta\al\proyecto

@@ -136,6 +136,23 @@ def test_mt5_account_not_connected_fails_safely():
         _fetch(module)
 
 
+def test_mt5_partial_initialization_cannot_bypass_account_check_on_retry():
+    module = _module(_closed_h1_with_current())
+    module.account_info.return_value = None
+    provider = MT5Provider()
+
+    with patch.dict(sys.modules, {"MetaTrader5": module}):
+        for _attempt in range(2):
+            with pytest.raises(
+                MT5InitializationError, match="ACCOUNT_NOT_CONNECTED"
+            ):
+                provider.fetch("EURUSD", "H1", 3, now=NOW)
+
+    assert module.initialize.call_count == 2
+    assert module.account_info.call_count == 2
+    assert module.shutdown.call_count == 2
+
+
 def test_mt5_symbol_missing_fails_safely():
     module = _module(_closed_h1_with_current())
     module.symbol_info.return_value = None
@@ -343,6 +360,7 @@ def test_mt5_metadata_is_complete_safe_and_volume_is_tick_volume():
     assert metadata["symbol_external"] == "EURUSD"
     assert metadata["volume_provenance"] == "MT5_TICK_VOLUME"
     assert result["volume"].iloc[0] == 100
+    assert result.attrs["acquisition_metadata"] == metadata
     serialized = json.dumps(metadata, sort_keys=True).lower()
     for prohibited in (
         "123456789",
@@ -459,9 +477,14 @@ def test_router_never_mixes_mt5_and_oanda_rows():
 
 def test_windows_forex_requirement_is_optional_and_documented():
     requirement = Path("requirements-forex-windows.txt").read_text(encoding="utf-8")
+    production = Path("requirements.txt").read_text(encoding="utf-8")
+    core = Path("requirements-core.txt").read_text(encoding="utf-8")
     manual = Path("MANUAL.md").read_text(encoding="utf-8")
 
     assert "MetaTrader5" in requirement
     assert "Windows" in requirement
+    assert 'platform_system == "Windows"' in requirement
+    assert "MetaTrader5" not in production
+    assert "MetaTrader5" not in core
     assert "requirements-forex-windows.txt" in manual
     assert "MetaTrader 5 terminal" in manual

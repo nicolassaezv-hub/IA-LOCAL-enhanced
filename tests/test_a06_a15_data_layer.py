@@ -17,7 +17,7 @@ from filelock import FileLock
 
 from forex.data.data_router import DataProviderError, DataRouter
 from forex.data.binance_provider import BinanceProvider
-from forex.data.mt5_provider import MT5Provider
+from forex.data.mt5_provider import MT5Provider, MT5ProviderError
 from forex.data.indicator_delta import (
     INDICATOR_MIN_HISTORY,
     recalculate_tail_indicators,
@@ -365,39 +365,42 @@ class Provider:
         return self.result
 
 
-def test_mt5_exception_executes_and_reports_yahoo_fallback(capsys):
+def test_mt5_deprecated_fallback_stays_provider_pure(capsys):
     provider = MT5Provider()
-    fallback = Mock(return_value=frame(2))
     mt5 = types.SimpleNamespace(
+        TIMEFRAME_H1=16385,
+        last_error=Mock(return_value=(-1, "terminal down")),
+        symbol_info=Mock(return_value=types.SimpleNamespace(visible=True)),
         copy_rates_from_pos=Mock(side_effect=RuntimeError("terminal down"))
     )
 
-    with patch.object(provider, "_ensure_init", return_value=True), patch.object(
-        provider, "_fallback", fallback
-    ), patch.dict(sys.modules, {"MetaTrader5": mt5}):
-        result = provider.fetch("EURUSD", "H1", 2000, allow_fallback=True)
+    with patch.object(provider, "_ensure_init", return_value=mt5), patch(
+        "forex.data.yahoo_provider.get_yahoo_provider"
+    ) as yahoo, pytest.warns(DeprecationWarning, match="provider-pure"), pytest.raises(
+        MT5ProviderError, match="MT5_COPY_RATES_FAILURE"
+    ):
+        provider.fetch("EURUSD", "H1", 2000, allow_fallback=True)
 
-    assert result is fallback.return_value
-    fallback.assert_called_once_with("EURUSD", "H1", 2000)
-    assert "usando fallback Yahoo" in capsys.readouterr().out
+    yahoo.assert_not_called()
+    assert capsys.readouterr().out == ""
 
 
 def test_mt5_exception_without_fallback_reports_only_mt5_error(capsys):
     provider = MT5Provider()
-    fallback = Mock()
     mt5 = types.SimpleNamespace(
+        TIMEFRAME_H1=16385,
+        last_error=Mock(return_value=(-1, "terminal down")),
+        symbol_info=Mock(return_value=types.SimpleNamespace(visible=True)),
         copy_rates_from_pos=Mock(side_effect=RuntimeError("terminal down"))
     )
 
-    with patch.object(provider, "_ensure_init", return_value=True), patch.object(
-        provider, "_fallback", fallback
-    ), patch.dict(sys.modules, {"MetaTrader5": mt5}):
-        result = provider.fetch("EURUSD", "H1", 2000, allow_fallback=False)
+    with patch.object(provider, "_ensure_init", return_value=mt5), pytest.raises(
+        MT5ProviderError, match="MT5_COPY_RATES_FAILURE"
+    ):
+        provider.fetch("EURUSD", "H1", 2000, allow_fallback=False)
 
     output = capsys.readouterr().out
-    assert result is None
-    fallback.assert_not_called()
-    assert "Error MT5: terminal down" in output
+    assert output == ""
     assert "Yahoo" not in output
 
 
