@@ -182,6 +182,48 @@ def test_h1_sixteen_weekly_events_have_no_provider_gap():
     assert all(gap["explanation_counts"] == {"SESSION_CLOSED": 2, "WEEKEND": 48} for gap in gaps)
 
 
+def test_h1_live_acceptance_is_invariant_to_rolling_window_boundaries():
+    local_grid = pd.date_range(
+        "2026-05-01 00:00", "2026-08-31 02:00", freq="h"
+    )
+    observed_local = local_grid[
+        (local_grid.dayofweek < 4)
+        | ((local_grid.dayofweek == 4) & (local_grid.hour < 22))
+    ]
+
+    def rolling_gaps(through: str) -> list[dict]:
+        window = observed_local[observed_local <= pd.Timestamp(through)][-2001:]
+        observed_utc = (
+            window.tz_localize("Europe/Berlin")
+            .tz_convert("UTC")
+            .tz_localize(None)
+        )
+        assert len(observed_utc) == 2001
+        return classify_gaps(
+            pd.Series(observed_utc),
+            "H1",
+            "FOREX",
+            acquisition_metadata=_metadata("H1"),
+            provider="MT5",
+            symbol="EURUSD",
+        )
+
+    before_reopen = rolling_gaps("2026-08-28 21:00")
+    after_reopen = rolling_gaps("2026-08-31 02:00")
+
+    assert len(after_reopen) == len(before_reopen) + 1
+    for gaps in (before_reopen, after_reopen):
+        assert gaps
+        assert all(
+            gap["classification"] == "MARKET_SESSION_CLOSED"
+            for gap in gaps
+        )
+        assert all(
+            gap["explanation_counts"].get("UNEXPLAINED", 0) == 0
+            for gap in gaps
+        )
+
+
 def test_h4_ordinary_weekend_uses_broker_local_calendar():
     gaps = _classify(
         ["2026-08-21 20:00", "2026-08-24 00:00"], "H4"
