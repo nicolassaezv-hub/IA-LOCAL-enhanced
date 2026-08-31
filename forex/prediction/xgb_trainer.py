@@ -348,30 +348,56 @@ class WalkForwardValidator:
         step   = max(int(n * 0.10), 300)
         return window, step
 
-    def split(self, X, y):
-        n       = len(X)
+    def split_positions(self, n: int) -> list[dict[str, int]]:
+        """Return the half-open positional bounds used by ``split``."""
         window  = self.window or self._auto_params(n)[0]
         step    = self.step   or self._auto_params(n)[1]
         purge   = self.purge
-        folds   = []
+        positions = []
         pos     = 0
 
         while pos + window + purge + step <= n:
-            X_tr   = X.iloc[pos : pos + window - purge]
-            y_tr   = y.iloc[pos : pos + window - purge]
-            X_val  = X.iloc[pos + window + purge : pos + window + purge + step]
-            y_val  = y.iloc[pos + window + purge : pos + window + purge + step]
-            if len(X_tr) >= 200 and len(X_val) >= 50:
-                folds.append((X_tr, y_tr, X_val, y_val))
+            train_end = pos + window - purge
+            validation_start = pos + window + purge
+            validation_end = validation_start + step
+            if train_end - pos >= 200 and validation_end - validation_start >= 50:
+                positions.append({
+                    "train_start": pos,
+                    "train_end": train_end,
+                    "validation_start": validation_start,
+                    "validation_end": validation_end,
+                })
             pos += step
 
         # Si hay más de n_folds, usar solo los últimos (más representativos)
-        if len(folds) > self.n_folds:
-            folds = folds[-self.n_folds:]
+        if len(positions) > self.n_folds:
+            positions = positions[-self.n_folds:]
+
+        return positions
+
+    def split(self, X, y):
+        folds = []
+        for position in self.split_positions(len(X)):
+            X_tr = X.iloc[position["train_start"] : position["train_end"]]
+            y_tr = y.iloc[position["train_start"] : position["train_end"]]
+            X_val = X.iloc[
+                position["validation_start"] : position["validation_end"]
+            ]
+            y_val = y.iloc[
+                position["validation_start"] : position["validation_end"]
+            ]
+            folds.append((X_tr, y_tr, X_val, y_val))
 
         return folds
 
-    def evaluate(self, trainer_cls, X, y, pair: str = None):
+    def evaluate(
+        self,
+        trainer_cls,
+        X,
+        y,
+        pair: str = None,
+        tuned_params_override: dict | None = None,
+    ):
         folds   = self.split(X, y)
         results = []
 
@@ -385,7 +411,14 @@ class WalkForwardValidator:
                 print(f"[WFV] Fold {k+1}: insuficiente — skip")
                 continue
 
-            trainer = trainer_cls(pair=pair)
+            trainer = (
+                trainer_cls(pair=pair)
+                if tuned_params_override is None
+                else trainer_cls(
+                    pair=pair,
+                    tuned_params_override=tuned_params_override,
+                )
+            )
             trainer.train(X_tr, y_tr, X_val, y_val, save=False)  # NO guardar folds intermedios
 
             if trainer.model is None:
@@ -468,7 +501,11 @@ class WalkForwardValidator:
 # ─────────────────────────────────────────────────────────────
 class ForexEnsembleTrainer:
 
-    def __init__(self, pair: str = None):
+    def __init__(
+        self,
+        pair: str = None,
+        tuned_params_override: dict | None = None,
+    ):
         self.storage    = ModelStorage()
         self.best_score = 0.0
         self.best_model = None
@@ -477,7 +514,11 @@ class ForexEnsembleTrainer:
         self.validation_sufficient = False
         self.model_valid = False
         self.pair       = pair
-        self._tuned     = _load_tuned_params(pair) if pair else {}
+        self._tuned     = (
+            tuned_params_override
+            if tuned_params_override is not None
+            else (_load_tuned_params(pair) if pair else {})
+        )
 
     def _build_xgb(self, scale: float = 1.0):
         # Eliminar claves que se pasan explicitamente para evitar duplicados
@@ -636,14 +677,31 @@ class ForexEnsembleTrainer:
 # ─────────────────────────────────────────────────────────────
 # ENTRENAMIENTO CON WFV DESLIZANTE
 # ─────────────────────────────────────────────────────────────
-def train_with_wfv(X, y, pair: str = None, save: bool = True, force: bool = False):
+def train_with_wfv(
+    X,
+    y,
+    pair: str = None,
+    save: bool = True,
+    force: bool = False,
+    tuned_params_override: dict | None = None,
+):
     print(f"\n{'═'*58}")
     print(f" ENTRENAMIENTO CON WALK-FORWARD DESLIZANTE")
     print(f" Par: {pair or '?'} | Filas: {len(X)} | Features: {len(X.columns)}")
     print(f"{'═'*58}")
 
     wfv   = WalkForwardValidator(purge=20, n_folds=5)
-    wfv_r = wfv.evaluate(ForexEnsembleTrainer, X, y, pair=pair)
+    wfv_r = (
+        wfv.evaluate(ForexEnsembleTrainer, X, y, pair=pair)
+        if tuned_params_override is None
+        else wfv.evaluate(
+            ForexEnsembleTrainer,
+            X,
+            y,
+            pair=pair,
+            tuned_params_override=tuned_params_override,
+        )
+    )
 
     # BUGFIX: el WFV es el chequeo "honesto" (out-of-sample, sin leakage). Si
     # reprueba, el modelo NO debe guardarse ni quedar disponible para señales
@@ -668,7 +726,14 @@ def train_with_wfv(X, y, pair: str = None, save: bool = True, force: bool = Fals
 
     # Entrenamiento final con dataset completo
     print(f"\n[ENSEMBLE] Entrenamiento final (dataset completo)...")
-    trainer   = ForexEnsembleTrainer(pair=pair)
+    trainer = (
+        ForexEnsembleTrainer(pair=pair)
+        if tuned_params_override is None
+        else ForexEnsembleTrainer(
+            pair=pair,
+            tuned_params_override=tuned_params_override,
+        )
+    )
     # Pair-specific publication is coordinated only by RetrainManager in the
     # integrated pipeline.  This helper may still maintain the generic legacy
     # alias when no pair is supplied.

@@ -292,10 +292,37 @@ class ForexIntegratedPipeline:
         rr_ratio: float,
         dataset_provenance: dict,
         promotion_type: str,
+        tuned_params_override: dict | None = None,
+        hyperparameter_provenance: dict | None = None,
     ) -> dict:
         require_ml_config(symbol)
         """Build one candidate under the complete, non-bypassable gate order."""
         from forex.prediction.roadmap_v_integration import run_quality_gate
+
+        if tuned_params_override is not None:
+            from .hyperparameter_tuner import canonical_params_sha256
+
+            if not isinstance(hyperparameter_provenance, dict):
+                raise ValueError("HYPERPARAMETER_PROVENANCE_REQUIRED")
+            if hyperparameter_provenance.get("mode") != "nested_wfv_tuning":
+                raise ValueError("HYPERPARAMETER_PROVENANCE_MODE_INVALID")
+            if hyperparameter_provenance.get("pair") != symbol:
+                raise ValueError("HYPERPARAMETER_PROVENANCE_PAIR_MISMATCH")
+            if hyperparameter_provenance.get(
+                "snapshot_sha256"
+            ) != dataset_provenance.get("snapshot_sha256"):
+                raise ValueError("HYPERPARAMETER_PROVENANCE_SNAPSHOT_MISMATCH")
+            if hyperparameter_provenance.get(
+                "params_sha256"
+            ) != canonical_params_sha256(tuned_params_override):
+                raise ValueError("HYPERPARAMETER_PROVENANCE_PARAMS_MISMATCH")
+            inner_metrics = hyperparameter_provenance.get("inner_metrics")
+            if not isinstance(inner_metrics, dict) or inner_metrics.get(
+                "inner_wfv_passed"
+            ) is not True:
+                raise ValueError("HYPERPARAMETER_INNER_WFV_REQUIRED")
+        elif hyperparameter_provenance is not None:
+            raise ValueError("HYPERPARAMETER_OVERRIDE_REQUIRED")
 
         approved, quality_report = run_quality_gate(
             df,
@@ -312,8 +339,17 @@ class ForexIntegratedPipeline:
         X, y = builder.build(horizon=horizon, rr_ratio=rr_ratio)
         if len(X) < 300:
             raise ValueError("QUALITY_GATE: WFV requires at least 300 rows")
+        train_kwargs = {
+            "pair": symbol,
+            "save": False,
+            "force": False,
+        }
+        if tuned_params_override is not None:
+            train_kwargs["tuned_params_override"] = tuned_params_override
         trainer, wfv_result, accuracy, precision = train_with_wfv(
-            X, y, pair=symbol, save=False, force=False
+            X,
+            y,
+            **train_kwargs,
         )
         if trainer.model is None:
             raise ValueError("QUALITY_GATE: MODEL_NOT_TRAINED")
@@ -327,6 +363,11 @@ class ForexIntegratedPipeline:
             wfv_result=wfv_result,
             accuracy=accuracy,
             precision=precision,
+            extra=(
+                {"hyperparameter_provenance": hyperparameter_provenance}
+                if hyperparameter_provenance is not None
+                else None
+            ),
         )
         return {
             "model": trainer.model,
