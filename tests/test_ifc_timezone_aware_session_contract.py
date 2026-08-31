@@ -2,11 +2,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from hashlib import sha256
 
 import pandas as pd
 import pytest
 
-from forex.data.ifc_session_authority import IFC_FOREX_SESSION_AUTHORITY
+from forex.data.ifc_session_authority import (
+    IFC_CLOSURE_EVIDENCE,
+    IFC_FOREX_SESSION_AUTHORITY,
+    IFC_UNAUTHORIZED_HOLIDAY_DATES,
+    _QUOTE_SESSION_EVIDENCE,
+)
 from forex.data.market_time_grid import resolve_market_time_grid
 from forex.data.mt5_clock_profiles import IFC_MARKETS_DEMO_CLOCK_PROFILE
 from forex.data.session_authority import (
@@ -225,22 +231,127 @@ def test_d1_documented_holiday_events_are_authorized(previous, current):
 
 
 @pytest.mark.parametrize(
-    ("previous", "current", "unsupported_date"),
+    (
+        "evidence_id",
+        "start_local",
+        "end_local",
+        "inside_local",
+        "previous",
+        "current",
+    ),
     [
-        ("2020-12-24", "2020-12-28", "2020-12-25"),
-        ("2020-12-31", "2021-01-04", "2021-01-01"),
+        (
+            "ifc-2020-christmas",
+            "2020-12-24 19:00:00",
+            "2020-12-28 00:00:00",
+            "2020-12-25 12:00",
+            "2020-12-24",
+            "2020-12-28",
+        ),
+        (
+            "ifc-2020-2021-new-year",
+            "2020-12-31 07:00:00",
+            "2021-01-04 00:00:00",
+            "2021-01-01 12:00",
+            "2020-12-31",
+            "2021-01-04",
+        ),
     ],
+    ids=("christmas-2020", "new-year-2020-2021"),
 )
-def test_unsupported_2020_holidays_remain_unknown_and_blocking(
-    previous, current, unsupported_date
+def test_reviewed_ifc_2020_holidays_are_provenance_bound_and_authorized(
+    evidence_id, start_local, end_local, inside_local, previous, current
 ):
-    assert _authorized_state(f"{unsupported_date} 12:00") == SessionState.UNKNOWN
+    evidence = next(
+        item for item in IFC_CLOSURE_EVIDENCE if item.evidence_id == evidence_id
+    )
 
+    assert evidence.source_identity == (
+        "IFC_ARCHIVED_CHRISTMAS_NEW_YEAR_2020_2021"
+    )
+    assert evidence.publication_or_capture == (
+        "published=2020-12-15;web_archive_capture=2023-07-05T15:34:45Z"
+    )
+    assert evidence.start_local == start_local
+    assert evidence.end_local == end_local
+    assert _authorized_state(inside_local) == SessionState.CLOSED
+
+    utc_value = _local_to_utc([inside_local]).iloc[0].tz_localize("UTC")
+    provenance = IFC_FOREX_SESSION_AUTHORITY.evidence_for_timestamp(utc_value)
     gaps = _classify([previous, current], "D1")
 
-    assert gaps[0]["classification"] == "PROVIDER_GAP"
-    assert gaps[0]["explanation_counts"]["UNEXPLAINED"] == 1
-    assert unsupported_date in gaps[0]["unexplained_local_timestamps"][0]
+    assert provenance is not None
+    assert provenance["evidence_id"] == evidence_id
+    assert gaps[0]["classification"] == "MARKET_SESSION_CLOSED"
+    assert gaps[0]["explanation_counts"].get("UNEXPLAINED", 0) == 0
+    assert {item["evidence_id"] for item in gaps[0]["session_evidence"]} == {
+        evidence_id
+    }
+
+
+def test_reviewed_ifc_2020_holidays_are_no_longer_explicitly_unauthorized():
+    assert IFC_UNAUTHORIZED_HOLIDAY_DATES == frozenset()
+
+
+@pytest.mark.parametrize(
+    "local_value",
+    [
+        "2020-12-23 12:00",
+        "2020-12-29 12:00",
+        "2020-12-30 06:00",
+        "2021-01-04 00:00",
+        "2022-12-25 12:00",
+        "2022-01-01 12:00",
+    ],
+)
+def test_ifc_2020_holiday_evidence_is_not_recurring_or_extended(local_value):
+    assert _authorized_state(local_value) == SessionState.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    ("provider", "symbol", "server_identity"),
+    [
+        ("MT5", "EURUSD", "Other-MT5-Server"),
+        ("MT5", "GBPUSD", "IFCMarkets-Demo"),
+    ],
+    ids=("wrong-server", "wrong-symbol"),
+)
+def test_ifc_2020_holiday_evidence_keeps_exact_scope(
+    provider, symbol, server_identity
+):
+    utc_value = _local_to_utc(["2020-12-25 12:00"]).iloc[0].tz_localize("UTC")
+
+    state = classify_authorized_timestamp(
+        IFC_FOREX_SESSION_AUTHORITY,
+        utc_value,
+        asset_class="FOREX",
+        provider=provider,
+        symbol=symbol,
+        clock_profile_id=IFC_MARKETS_DEMO_CLOCK_PROFILE.profile_id,
+        server_identity=server_identity,
+    )
+
+    assert state == SessionState.UNKNOWN
+
+
+def test_ifc_2020_binding_changes_the_evidence_bundle_hash():
+    reviewed_2020_ids = {
+        "ifc-2020-christmas",
+        "ifc-2020-2021-new-year",
+    }
+    pre_binding_records = tuple(
+        item
+        for item in IFC_CLOSURE_EVIDENCE
+        if item.evidence_id not in reviewed_2020_ids
+    )
+    pre_binding_hash = sha256(
+        "\n".join((
+            _QUOTE_SESSION_EVIDENCE,
+            *(item.evidence_hash for item in pre_binding_records),
+        )).encode("utf-8")
+    ).hexdigest()
+
+    assert IFC_FOREX_SESSION_AUTHORITY.descriptor.evidence_hash != pre_binding_hash
 
 
 @pytest.mark.parametrize(
