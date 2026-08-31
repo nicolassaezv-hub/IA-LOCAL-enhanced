@@ -1,3 +1,13 @@
+# Implementaciones futuras del proyecto ASTRA
+
+
+## Simbologia:
+
+✅ Propuesta hecha con una base
+✅✅ Propuesta creada y aprobada por IA
+ ■ Propuesta en Proceso de desarrollo
+
+
 # ESTETICA:
 
 ## ■ Manejo de Procesos multiples simultaneos en la ejecucion (Para Workspace y CLI)
