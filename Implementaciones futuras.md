@@ -15,7 +15,7 @@
 ## ✅ Rama forex con vista grafica
   Rama Forex comprende vista detallada con grafica y puntero grafico para cada timeframe incluido el multiframe (MTF).
   Idealmente con el mismo formato y ajuste estetico que MetaTrader 5, eso incluye.
-  - Grafico normal7velas
+  - Grafico normal/velas
   - Tooltips al pasar el nouse sobre velas
   - Indicadores opcionales con casilla (Max 30)
   - Interruptor de fondo color Dark/Light
