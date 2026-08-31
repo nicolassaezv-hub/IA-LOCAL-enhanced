@@ -15,6 +15,7 @@
 ## ✅ Manejo de Procesos multiples simultaneos en la ejecucion (Para Workspace y CLI)
 
  Ver independencia de procesos en base del rendimiento del sistema y que ASTRA se adapte a ello:
+ 
  Quiero decir, que ASTRA pueda leer la info del sistema en el que corre y diga si puede correr por ejemplo la rama forex y lectura de pdf al mismo tiempo explicandolo ojala de forma numerica (ej: ASTRA puede correr 5 procesos simultaneos como max) y que tambien sea
   consciente de ello y en caso de llegar a ese limite de procesos tire un mensaje y evite que el usuario haga mas procesos
 
