@@ -168,6 +168,9 @@ logs/
 /data/forex_analytics/
 /attached_assets/
 
+# Qualification candidate datasets/evidence are generated runtime state
+/data/qualification/
+
 # Preserve directory placeholders/documentation if added later.
 !/CSVs/**/.gitkeep
 !/CSVs/**/README.md
