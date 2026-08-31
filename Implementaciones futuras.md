@@ -4,7 +4,9 @@
 ## Simbologia:
 
 ✅ Propuesta hecha con una base
+
 ✅✅ Propuesta creada y aprobada por IA
+
  ■ Propuesta en Proceso de desarrollo
 
 
