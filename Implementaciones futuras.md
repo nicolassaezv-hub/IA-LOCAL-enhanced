@@ -14,7 +14,7 @@
 
 ## ✅ Manejo de Procesos multiples simultaneos en la ejecucion (Para Workspace y CLI)
 
- ### Ver independencia de procesos en base del rendimiento del sistema y que ASTRA se adapte a ello:
+  Ver independencia de procesos en base del rendimiento del sistema y que ASTRA se adapte a ello:
  
  Quiero decir, que ASTRA pueda leer la info del sistema en el que corre y diga si puede correr por ejemplo la rama forex y lectura de pdf al mismo tiempo explicandolo ojala de forma numerica (ej: ASTRA puede correr 5 procesos simultaneos como max) y que tambien sea
   consciente de ello y en caso de llegar a ese limite de procesos tire un mensaje y evite que el usuario haga mas procesos
@@ -41,6 +41,7 @@
 ## ✅✅ Evolution Engine aplicado a seleccion (Forex,Business,Prediction Lab o en General)
 
 El Evolution Engine esta diseñado para el proyecto ASTRA en general...NO limitado a la rama forex
+
 Se selecciona que rama se quiere evolucionar (por ahora Forex,Chat, Barra de Personalizacion)
 
 ## ■ Resaltar código, comandos y rutas de archivo con estilos distintos.
@@ -54,7 +55,9 @@ Normalmente estara activado el modo Automatizado, de cambiarlo se migran los CSV
 ## ✅✅ Limites y asignacion de RAM + modalidad de rendimiento
 
 Asignacion Min y Max de RAM para ASTRA, una seccion en configuracion que establezca tres funcionalidades:
+
 -Sin limites (pueden usarse desde 0 a la cantidad de gbs de ram necesaria en mi caso 16gb ram)
+
 -Limite asignado (especificar en casillas Min y Max de ram)
 -Rendimiento basico
 
