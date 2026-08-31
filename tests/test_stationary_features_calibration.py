@@ -135,7 +135,7 @@ def test_stationary_v1_excludes_raw_close_lags():
 def test_stationary_v1_excludes_raw_rolling_levels():
     columns = set(_build_x(_frame(), "stationary_v1").columns)
     assert not any(column.startswith("rolling_mean_") for column in columns)
-    assert not any(column.startswith("rolling_std_") for column in columns)
+    assert columns.isdisjoint({"rolling_std_5", "rolling_std_10", "rolling_std_20"})
 
 
 def test_stationary_v1_excludes_mtf_absolute_levels():
@@ -212,10 +212,14 @@ def test_stationary_pipeline_has_no_nan_or_infinity():
 
 
 def test_feature_profile_identity_is_deterministic_and_ordered():
-    names = list(_build_x(_frame(), "stationary_v1").columns)
+    builder = DatasetBuilder(_frame())
+    builder.process_time().encode_session().encode_pair()
+    names = list(builder.build_X(feature_profile="stationary_v1").columns)
+    repeated_names = list(builder.build_X(feature_profile="stationary_v1").columns)
     expected = hashlib.sha256(
         json.dumps(names, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+    assert repeated_names == names
     assert dataset_module.feature_names_sha256(names) == expected
     assert dataset_module.feature_names_sha256(list(names)) == expected
     assert dataset_module.feature_names_sha256(list(reversed(names))) != expected

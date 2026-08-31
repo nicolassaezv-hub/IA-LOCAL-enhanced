@@ -10,8 +10,49 @@ NUEVO: Las features MTF reales (h4_*, d1_*) se incluyen automáticamente si est�
 NUEVO: filter_cols_by_variance() elimina features con varianza casi cero (ruido).
 """
 
+import hashlib
+import json
+
 import pandas as pd
 import numpy as np
+
+
+FEATURE_PROFILES = ("legacy", "stationary_v1")
+
+STATIONARY_V1_EXCLUDED_FEATURES = {
+    "open", "high", "low", "close", "spread",
+    "MACD", "MACD_signal", "MACD_hist", "ATR_14",
+    "EMA20", "EMA50", "EMA200", "BB_upper", "BB_lower",
+    "hl_range", "oc_range", "trend_strength", "momentum_5", "momentum_10",
+    "tick_vol_flow", "tick_vol_flow_ema", "obv", "obv_ema", "obv_diverge",
+    "bb_width",
+    "h4_close", "h4_ema20", "h4_ema50", "h4_ema200", "h4_atr", "h4_macd",
+    "d1_close", "d1_ema20", "d1_ema50", "d1_ema200", "d1_atr", "d1_macd",
+}
+STATIONARY_V1_EXCLUDED_PREFIXES = (
+    "close_lag_", "rolling_mean_", "rolling_std_",
+)
+STATIONARY_V1_NORMALIZED_FEATURES = (
+    "open_vs_close", "high_vs_close", "low_vs_close", "range_pct", "body_pct",
+    "close_vs_ema20", "close_vs_ema50", "close_vs_ema200",
+    "ema20_vs_50", "ema50_vs_200", "trend_strength_pct",
+    "close_vs_lag_1", "close_vs_lag_2", "close_vs_lag_3",
+    "close_vs_lag_5", "close_vs_lag_10",
+    "close_vs_rollmean_5", "close_vs_rollmean_10", "close_vs_rollmean_20",
+    "rolling_std_pct_5", "rolling_std_pct_10", "rolling_std_pct_20",
+    "momentum_pct_5", "momentum_pct_10", "bb_width_pct", "atr_pct",
+    "macd_pct", "macd_signal_pct", "macd_hist_pct", "spread_pct",
+    "h4_close_vs_ema20", "h4_close_vs_ema50", "h4_close_vs_ema200",
+    "h4_ema20_vs_50", "h4_ema50_vs_200", "h4_atr_pct", "h4_macd_pct",
+    "d1_close_vs_ema20", "d1_close_vs_ema50", "d1_close_vs_ema200",
+    "d1_ema20_vs_50", "d1_ema50_vs_200", "d1_atr_pct", "d1_macd_pct",
+)
+
+
+def feature_names_sha256(feature_names) -> str:
+    """Return a deterministic identity for an exact ordered feature contract."""
+    payload = json.dumps(list(feature_names), separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG POR PAR
@@ -147,7 +188,18 @@ class DatasetBuilder:
     # FEATURE COLUMNS
     # Incluye features MTF reales (h4_*, d1_*) si están presentes
     # ─────────────────────────────────────────────────────────
-    def build_X(self):
+    @staticmethod
+    def _validate_feature_profile(feature_profile: str) -> str:
+        profile = str(feature_profile).strip().lower()
+        if profile not in FEATURE_PROFILES:
+            raise ValueError(f"FEATURE_PROFILE_UNSUPPORTED: {feature_profile}")
+        return profile
+
+    @staticmethod
+    def _ratio(numerator, denominator):
+        return numerator / denominator.replace(0, np.nan)
+
+    def _legacy_feature_names(self) -> list[str]:
         always_include = [
             "open", "high", "low", "close",
             "returns", "hour", "day_of_week", "session", "pair",
@@ -192,8 +244,125 @@ class DatasetBuilder:
         # Excluir siempre: timestamp, target y pair (pair tiene varianza 0
         # en CSVs de un solo instrumento y causa feature mismatch train/predict)
         exclude = {"timestamp", "target", "pair"}
-        present = [c for c in present if c not in exclude]
-        return self.df[present]
+        return [c for c in present if c not in exclude]
+
+    def _add_stationary_v1_features(self) -> None:
+        """Add row-local or trailing-only relative representations."""
+        df = self.df
+        close = df["close"]
+        df["open_vs_close"] = self._ratio(df["open"], close) - 1.0
+        df["high_vs_close"] = self._ratio(df["high"], close) - 1.0
+        df["low_vs_close"] = self._ratio(df["low"], close) - 1.0
+        df["range_pct"] = self._ratio(df["high"] - df["low"], close)
+        df["body_pct"] = self._ratio(close - df["open"], df["open"])
+
+        for period in (20, 50, 200):
+            ema = f"EMA{period}"
+            if ema in df.columns:
+                df[f"close_vs_ema{period}"] = self._ratio(close - df[ema], close)
+        if {"EMA20", "EMA50"} <= set(df.columns):
+            df["ema20_vs_50"] = self._ratio(df["EMA20"] - df["EMA50"], close)
+        if {"EMA50", "EMA200"} <= set(df.columns):
+            df["ema50_vs_200"] = self._ratio(df["EMA50"] - df["EMA200"], close)
+        if {"EMA20", "EMA200"} <= set(df.columns):
+            df["trend_strength_pct"] = self._ratio(
+                df["EMA20"] - df["EMA200"], close
+            )
+
+        for lag in (1, 2, 3, 5, 10):
+            source = f"close_lag_{lag}"
+            lagged = df[source] if source in df.columns else close.shift(lag)
+            df[f"close_vs_lag_{lag}"] = self._ratio(close, lagged) - 1.0
+        for window in (5, 10, 20):
+            mean_name = f"rolling_mean_{window}"
+            std_name = f"rolling_std_{window}"
+            rolling_mean = (
+                df[mean_name]
+                if mean_name in df.columns
+                else close.rolling(window).mean()
+            )
+            rolling_std = (
+                df[std_name]
+                if std_name in df.columns
+                else close.rolling(window).std()
+            )
+            df[f"close_vs_rollmean_{window}"] = (
+                self._ratio(close, rolling_mean) - 1.0
+            )
+            df[f"rolling_std_pct_{window}"] = self._ratio(rolling_std, close)
+
+        lagged_5 = df["close_lag_5"] if "close_lag_5" in df.columns else close.shift(5)
+        lagged_10 = (
+            df["close_lag_10"] if "close_lag_10" in df.columns else close.shift(10)
+        )
+        df["momentum_pct_5"] = self._ratio(close, lagged_5) - 1.0
+        df["momentum_pct_10"] = self._ratio(close, lagged_10) - 1.0
+        if {"BB_upper", "BB_lower"} <= set(df.columns):
+            df["bb_width_pct"] = self._ratio(
+                df["BB_upper"] - df["BB_lower"], close
+            )
+        if "ATR_14" in df.columns:
+            df["atr_pct"] = self._ratio(df["ATR_14"], close)
+        for source, target in (
+            ("MACD", "macd_pct"),
+            ("MACD_signal", "macd_signal_pct"),
+            ("MACD_hist", "macd_hist_pct"),
+            ("spread", "spread_pct"),
+        ):
+            if source in df.columns:
+                df[target] = self._ratio(df[source], close)
+
+        for prefix in ("h4", "d1"):
+            prefix_close = f"{prefix}_close"
+            if prefix_close not in df.columns:
+                continue
+            mtf_close = df[prefix_close]
+            for period in (20, 50, 200):
+                ema = f"{prefix}_ema{period}"
+                if ema in df.columns:
+                    df[f"{prefix}_close_vs_ema{period}"] = self._ratio(
+                        mtf_close - df[ema], mtf_close
+                    )
+            ema20 = f"{prefix}_ema20"
+            ema50 = f"{prefix}_ema50"
+            ema200 = f"{prefix}_ema200"
+            if {ema20, ema50} <= set(df.columns):
+                df[f"{prefix}_ema20_vs_50"] = self._ratio(
+                    df[ema20] - df[ema50], mtf_close
+                )
+            if {ema50, ema200} <= set(df.columns):
+                df[f"{prefix}_ema50_vs_200"] = self._ratio(
+                    df[ema50] - df[ema200], mtf_close
+                )
+            atr = f"{prefix}_atr"
+            macd = f"{prefix}_macd"
+            if atr in df.columns:
+                df[f"{prefix}_atr_pct"] = self._ratio(df[atr], mtf_close)
+            if macd in df.columns:
+                df[f"{prefix}_macd_pct"] = self._ratio(df[macd], mtf_close)
+
+    # ─────────────────────────────────────────────────────────
+    # FEATURE COLUMNS
+    # Incluye features MTF reales (h4_*, d1_*) si están presentes
+    # ─────────────────────────────────────────────────────────
+    def build_X(self, feature_profile: str = "legacy"):
+        profile = self._validate_feature_profile(feature_profile)
+        legacy_names = self._legacy_feature_names()
+        if profile == "legacy":
+            return self.df[legacy_names]
+
+        self._add_stationary_v1_features()
+        names = [
+            name for name in legacy_names
+            if name not in STATIONARY_V1_NORMALIZED_FEATURES
+            if name not in STATIONARY_V1_EXCLUDED_FEATURES
+            and not name.startswith(STATIONARY_V1_EXCLUDED_PREFIXES)
+        ]
+        names.extend(
+            name for name in STATIONARY_V1_NORMALIZED_FEATURES
+            if name in self.df.columns and name not in names
+        )
+        return self.df[names]
 
     def build_y(self):
         return self.df["target"]
@@ -217,13 +386,19 @@ class DatasetBuilder:
     # ─────────────────────────────────────────────────────────
     # BUILD — para TRAINING
     # ─────────────────────────────────────────────────────────
-    def build(self, horizon: int = 10, rr_ratio: float = 1.0):
+    def build(
+        self,
+        horizon: int = 10,
+        rr_ratio: float = 1.0,
+        feature_profile: str = "legacy",
+    ):
+        profile = self._validate_feature_profile(feature_profile)
         self.process_time()
         self.encode_session()
         self.encode_pair()
         self.create_target(horizon=horizon, rr_ratio=rr_ratio)
 
-        X = self.build_X()
+        X = self.build_X(feature_profile=profile)
         y = self.build_y()
 
         X = X.replace([np.inf, -np.inf], np.nan).dropna()
@@ -239,7 +414,10 @@ class DatasetBuilder:
         y = y[valid_mask]
 
         # Eliminar features de baja varianza
-        X = self.filter_low_variance(X)
+        X = self.filter_low_variance(
+            X,
+            threshold=0.0 if profile == "stationary_v1" else 1e-6,
+        )
 
         timeout_pct = (1 - valid_mask.sum() / len(valid_mask)) * 100
         buy_pct     = (y == 1).sum() / len(y) * 100
@@ -251,8 +429,12 @@ class DatasetBuilder:
     # ─────────────────────────────────────────────────────────
     # PREDICT FEATURES — última vela real (FIX #1)
     # ─────────────────────────────────────────────────────────
-    def predict_features(self, n_rows: int = 1,
-                          train_columns: list = None) -> pd.DataFrame:
+    def predict_features(
+        self,
+        n_rows: int = 1,
+        train_columns: list = None,
+        feature_profile: str = "legacy",
+    ) -> pd.DataFrame:
         """
         Extrae features de la(s) última(s) vela(s) para predicción.
         Si se pasan train_columns, alinea exactamente con las columnas
@@ -262,7 +444,7 @@ class DatasetBuilder:
         self.encode_session()
         self.encode_pair()
 
-        X = self.build_X()
+        X = self.build_X(feature_profile=feature_profile)
         X = X.replace([np.inf, -np.inf], np.nan).dropna()
 
         if len(X) == 0:

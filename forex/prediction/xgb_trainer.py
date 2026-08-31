@@ -31,6 +31,7 @@ from sklearn.metrics import (
 )
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.isotonic import IsotonicRegression
+from sklearn.linear_model import LogisticRegression
 from runtime_paths import forex_model_root
 from .model_storage import ModelStorage
 
@@ -59,6 +60,8 @@ MIN_PRECISION_THRESHOLD = 0.65
 WFV_MEDIAN_PRECISION_THRESHOLD = 0.70
 MIN_WFV_FOLDS = 2
 MIN_WFV_SIGNALS_PER_FOLD = 30
+MIN_CALIBRATION_ROWS = 60
+MIN_CALIBRATION_SIGNAL_RATE = 0.10
 
 
 def _validated_wfv_evidence(result: dict) -> dict | None:
@@ -226,15 +229,25 @@ class SoftVotingEnsemble:
 # CALIBRATED ENSEMBLE
 # ─────────────────────────────────────────────────────────────
 class CalibratedEnsemble:
-    def __init__(self, base: SoftVotingEnsemble):
+    def __init__(self, base: SoftVotingEnsemble, method: str = "isotonic"):
+        if method not in {"isotonic", "sigmoid"}:
+            raise ValueError(f"CALIBRATION_METHOD_UNSUPPORTED: {method}")
         self.base                    = base
-        self.cal_1                   = IsotonicRegression(out_of_bounds="clip")
+        self.method                  = method
+        self.cal_1                   = (
+            IsotonicRegression(out_of_bounds="clip")
+            if method == "isotonic"
+            else LogisticRegression(random_state=42)
+        )
         self.threshold               = 0.5
         self.classes_                = np.array([0, 1])
         self.precision_at_threshold  = 0.0
         self.recall_at_threshold     = 0.0
         self.signals_at_threshold    = 0
         self.sufficient              = False
+        self.calibration_size = 0
+        self.minimum_calibration_signals = 0
+        self.calibration_evidence_sufficient = False
 
     def _set_reported_metrics(self, y_true, probabilities) -> None:
         """Report calibration metrics at the threshold that will be applied."""
@@ -247,10 +260,23 @@ class CalibratedEnsemble:
         )
         self.signals_at_threshold = int(predictions.sum())
 
+    def _set_evidence_diagnostics(self, calibration_size: int) -> None:
+        self.calibration_size = int(calibration_size)
+        self.minimum_calibration_signals = int(
+            math.ceil(self.calibration_size * MIN_CALIBRATION_SIGNAL_RATE)
+        )
+        self.calibration_evidence_sufficient = bool(
+            self.calibration_size >= MIN_CALIBRATION_ROWS
+            and self.signals_at_threshold >= self.minimum_calibration_signals
+        )
+
     def fit(self, X_cal, y_cal):
         y_arr = y_cal.values if hasattr(y_cal, "values") else np.array(y_cal)
         raw   = self.base.predict_proba(X_cal)
-        self.cal_1.fit(raw[:, 1], y_arr)
+        if self.method == "isotonic":
+            self.cal_1.fit(raw[:, 1], y_arr)
+        else:
+            self.cal_1.fit(raw[:, 1].reshape(-1, 1), y_arr)
 
         cal_probs = self.predict_proba(X_cal)[:, 1]
         prec_arr, rec_arr, thresh_arr = precision_recall_curve(y_arr, cal_probs)
@@ -279,6 +305,7 @@ class CalibratedEnsemble:
                 raw_thresh = MAX_THRESHOLD
             self.threshold = raw_thresh
             self._set_reported_metrics(y_arr, cal_probs)
+            self._set_evidence_diagnostics(len(y_arr))
             self.sufficient = bool(
                 self.precision_at_threshold >= MIN_PRECISION_THRESHOLD
                 and self.recall_at_threshold >= MIN_RECALL
@@ -300,6 +327,7 @@ class CalibratedEnsemble:
             best_idx = np.argmax(prec_arr[mask_rec_only])
             self.threshold = float(thresh_arr[mask_rec_only][best_idx])
             self._set_reported_metrics(y_arr, cal_probs)
+            self._set_evidence_diagnostics(len(y_arr))
             self.sufficient = False
             print(
                 f"[CALIBRATOR] ⚠ Mejor resultado al umbral {self.threshold:.3f}: "
@@ -312,7 +340,13 @@ class CalibratedEnsemble:
 
     def predict_proba(self, X) -> np.ndarray:
         raw = self.base.predict_proba(X)
-        p1  = np.clip(self.cal_1.predict(raw[:, 1]), 0, 1)
+        if self.method == "isotonic":
+            calibrated = self.cal_1.predict(raw[:, 1])
+        else:
+            calibrated = self.cal_1.predict_proba(
+                raw[:, 1].reshape(-1, 1)
+            )[:, 1]
+        p1 = np.clip(calibrated, 0, 1)
         return np.column_stack([1.0 - p1, p1])
 
     def predict(self, X) -> np.ndarray:
@@ -505,15 +539,22 @@ class ForexEnsembleTrainer:
         self,
         pair: str = None,
         tuned_params_override: dict | None = None,
+        calibration_method: str = "isotonic",
     ):
+        if calibration_method not in {"isotonic", "sigmoid"}:
+            raise ValueError(
+                f"CALIBRATION_METHOD_UNSUPPORTED: {calibration_method}"
+            )
         self.storage    = ModelStorage()
         self.best_score = 0.0
         self.best_model = None
         self.model      = None
         self.calibration_sufficient = False
+        self.calibration_evidence_sufficient = False
         self.validation_sufficient = False
         self.model_valid = False
         self.pair       = pair
+        self.calibration_method = calibration_method
         self._tuned     = (
             tuned_params_override
             if tuned_params_override is not None
@@ -615,10 +656,17 @@ class ForexEnsembleTrainer:
         models.append(("rf", rf_m))
 
         ensemble   = SoftVotingEnsemble(models)
-        calibrated = CalibratedEnsemble(ensemble)
+        calibrated = (
+            CalibratedEnsemble(ensemble)
+            if self.calibration_method == "isotonic"
+            else CalibratedEnsemble(ensemble, method=self.calibration_method)
+        )
         calibrated.fit(X_cal, y_cal)
         self.model = calibrated
         self.calibration_sufficient = bool(calibrated.sufficient)
+        self.calibration_evidence_sufficient = bool(
+            getattr(calibrated, "calibration_evidence_sufficient", False)
+        )
 
         preds = calibrated.predict(X_val)
         acc   = accuracy_score(y_val, preds)
