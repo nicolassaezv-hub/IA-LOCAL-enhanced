@@ -21,7 +21,10 @@
 
 ## ✅ Barra de Personalizacion
  La barra de personalizacion (el setting del glow button, color de la interfaz y estilo) debe estar integrada DENTRO de la barra de Configuracion del Workspace, añade un modo Noche (Dark/Light Mode)
+ 
+## ■ Resaltar código, comandos y rutas de archivo con estilos distintos.
 
+## ■ Pantalla de inicio con animacion
 
 # FUNCIONAL:
 
@@ -44,10 +47,6 @@ El Evolution Engine esta diseñado para el proyecto ASTRA en general...NO limita
 
 Se selecciona que rama se quiere evolucionar (por ahora Forex,Chat, Barra de Personalizacion)
 
-## ■ Resaltar código, comandos y rutas de archivo con estilos distintos.
-
-## ■ Pantalla de inicio con animacion
-
 ## ✅ Interruptor Modo Automatizacion de Forex y Modo Manual 
 
 Normalmente estara activado el modo Automatizado, de cambiarlo se migran los CSVs a la carpeta del proyecto (Movidos a la carpeta CSVs y los modelos hechos con cache tambien) y se trabaja de forma manual
@@ -61,4 +60,4 @@ Asignacion Min y Max de RAM para ASTRA, una seccion en configuracion que estable
 -Limite asignado (especificar en casillas Min y Max de ram)
 -Rendimiento basico
 
-
+## ✅ S
