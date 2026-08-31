@@ -121,6 +121,12 @@ The recoverable official detail is:
 - English title translation: `New Year and Christmas - Changes in the Trading
   Schedule`.
 
+The search therefore produced **four relevant 2020/2021 candidate artifacts**:
+two archived English index snapshots, the uncaptured English detail URL they
+identify, and the readable archived Persian detail. Only the archived detail
+is sufficient on its own; the English index snapshots bind it to the same
+multilingual IFC notice.
+
 Positive controls remain useful only for URL and notice-structure validation:
 
 - [archived IFC 2018/2019 notice](https://web.archive.org/web/20190127194639id_/https://www.ifcmarkets.com/en/company-news/christmas-new-year-trading-schedule-2018-2019),
@@ -289,7 +295,7 @@ message was sent and no draft is needed for this decision.
 
 ## Decision
 
-**A — AUTHORITATIVE EVIDENCE FOUND; AUTHORIZE BOTH DATES**
+**EVIDENCE COMPLETE — BOTH 2020 HOLIDAYS AUTHORITATIVELY SUPPORTED**
 
 The same IFC notice covers both `2020-12-25` and `2021-01-01`. Evidence is
 sufficient to prepare an exact, provenance-bound authority update for both
