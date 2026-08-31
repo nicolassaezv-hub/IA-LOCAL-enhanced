@@ -21,10 +21,7 @@ IFC_QUOTE_SESSION_EFFECTIVE_FROM = pd.Timestamp(
 IFC_QUOTE_SESSION_EFFECTIVE_TO = pd.Timestamp(
     "2026-10-25 00:00:00", tz=IFC_SESSION_TIMEZONE
 )
-IFC_UNAUTHORIZED_HOLIDAY_DATES = frozenset({
-    "2020-12-25",
-    "2021-01-01",
-})
+IFC_UNAUTHORIZED_HOLIDAY_DATES = frozenset()
 
 
 @dataclass(frozen=True)
@@ -97,6 +94,20 @@ IFC_CLOSURE_EVIDENCE = (
         "published=2019-12-18;web_archive_capture=2020-01-08",
         "2019-12-31 00:00:00",
         "2020-01-02 00:00:00",
+    ),
+    IFCClosureEvidence(
+        "ifc-2020-christmas",
+        "IFC_ARCHIVED_CHRISTMAS_NEW_YEAR_2020_2021",
+        "published=2020-12-15;web_archive_capture=2023-07-05T15:34:45Z",
+        "2020-12-24 19:00:00",
+        "2020-12-28 00:00:00",
+    ),
+    IFCClosureEvidence(
+        "ifc-2020-2021-new-year",
+        "IFC_ARCHIVED_CHRISTMAS_NEW_YEAR_2020_2021",
+        "published=2020-12-15;web_archive_capture=2023-07-05T15:34:45Z",
+        "2020-12-31 07:00:00",
+        "2021-01-04 00:00:00",
     ),
     IFCClosureEvidence(
         "ifc-2023-christmas",
