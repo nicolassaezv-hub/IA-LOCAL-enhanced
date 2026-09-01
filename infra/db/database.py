@@ -41,6 +41,10 @@ class SymbolLifecycleError(ValueError):
     """Raised when a production consumer receives a non-active symbol."""
 
 
+class SQLiteReadOnlyError(RuntimeError):
+    """Raised before a mutating SQLite API can use a read-only adapter."""
+
+
 def require_active_symbol(symbol: str, *, database=None) -> dict:
     """Return the authoritative active row or fail closed before production use."""
     code = str(symbol or "").strip().upper()
@@ -154,10 +158,32 @@ class DatabaseAdapter(ABC):
 class SQLiteDatabase(DatabaseAdapter):
     """SQLite implementation with short-lived, operation-owned connections."""
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str = None, read_only: bool = False):
         # An explicit argument remains caller-owned for compatibility.  Only the
         # environment/default contract defines relative paths from PROJECT_ROOT.
         self.db_path = db_path or str(configured_sqlite_path())
+        self.read_only = bool(read_only)
+        self._read_only_uri: str | None = None
+        if self.read_only:
+            absolute_path = Path(self.db_path).expanduser().resolve()
+            if not absolute_path.is_file():
+                raise FileNotFoundError(
+                    f"SQLITE_READ_ONLY_DATABASE_NOT_FOUND: {absolute_path}"
+                )
+            sidecars = (
+                Path(f"{absolute_path}-wal"),
+                Path(f"{absolute_path}-shm"),
+            )
+            if any(sidecar.exists() for sidecar in sidecars):
+                raise SQLiteReadOnlyError(
+                    "SQLITE_READ_ONLY_UNCHECKPOINTED_STATE: immutable access "
+                    f"requires no WAL/SHM sidecars for {absolute_path}"
+                )
+            # immutable=1 prevents a clean WAL database from creating auxiliary
+            # files during audits. Existing WAL/SHM state is rejected above so
+            # uncheckpointed evidence can never be silently ignored.
+            self._read_only_uri = f"{absolute_path.as_uri()}?mode=ro&immutable=1"
+            return
         db_dir = os.path.dirname(self.db_path)
         if db_dir:
             os.makedirs(db_dir, exist_ok=True)
@@ -166,6 +192,15 @@ class SQLiteDatabase(DatabaseAdapter):
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
         """Own one connection for one operation and always release its handle."""
+        if self.read_only:
+            conn = sqlite3.connect(self._read_only_uri, uri=True)
+            try:
+                conn.row_factory = sqlite3.Row
+                yield conn
+            finally:
+                conn.close()
+            return
+
         conn = sqlite3.connect(self.db_path)
         try:
             conn.row_factory = sqlite3.Row
@@ -179,8 +214,22 @@ class SQLiteDatabase(DatabaseAdapter):
         finally:
             conn.close()
 
+    def _require_writable(self) -> None:
+        if self.read_only:
+            raise SQLiteReadOnlyError(
+                "SQLITE_READ_ONLY_WRITE_FORBIDDEN: mutating API called on "
+                f"read-only database {Path(self.db_path).resolve()}"
+            )
+
+    @contextmanager
+    def _writable_connection(self) -> Iterator[sqlite3.Connection]:
+        """Open a writable operation or reject it before executing any SQL."""
+        self._require_writable()
+        with self._connection() as conn:
+            yield conn
+
     def _init_schema(self):
-        with self._connection() as c:
+        with self._writable_connection() as c:
             c.executescript("""
             CREATE TABLE IF NOT EXISTS supported_symbols (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -571,7 +620,7 @@ class SQLiteDatabase(DatabaseAdapter):
             code, name, asset_class, pip
         )
         now = datetime.now(timezone.utc).isoformat()
-        with self._connection() as c:
+        with self._writable_connection() as c:
             existing = c.execute(
                 "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
             ).fetchone()
@@ -746,7 +795,7 @@ class SQLiteDatabase(DatabaseAdapter):
             raise PersistenceConflictError(
                 "Canonical cross-timeframe validator rejected qualification bytes"
             )
-        with self._connection() as c:
+        with self._writable_connection() as c:
             row = c.execute(
                 "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
             ).fetchone()
@@ -786,7 +835,7 @@ class SQLiteDatabase(DatabaseAdapter):
         code, _, _, _, _ = self._catalog_metadata(
             authorization.symbol, None, None, None
         )
-        with self._connection() as c:
+        with self._writable_connection() as c:
             row = c.execute(
                 "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
             ).fetchone()
@@ -852,7 +901,7 @@ class SQLiteDatabase(DatabaseAdapter):
 
     def disable_symbol(self, code: str) -> dict:
         code, _, _, _, _ = self._catalog_metadata(code, None, None, None)
-        with self._connection() as c:
+        with self._writable_connection() as c:
             row = c.execute(
                 "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
             ).fetchone()
@@ -895,7 +944,7 @@ class SQLiteDatabase(DatabaseAdapter):
         acquisition_metadata = encode_acquisition_metadata(
             entry.get("acquisition_metadata")
         )
-        with self._connection() as c:
+        with self._writable_connection() as c:
             c.execute("""
                 INSERT INTO dataset_registry (symbol, timeframe, candle_count, rolling_window_size,
                     last_candle_timestamp, blob_path, status, last_error, last_updated,
@@ -975,7 +1024,7 @@ class SQLiteDatabase(DatabaseAdapter):
             "model_identity": pred.get("model_identity"),
             "dataset_provenance": dataset_provenance,
         }
-        with self._connection() as c:
+        with self._writable_connection() as c:
             c.execute("""
                 INSERT INTO predictions (
                     prediction_id, symbol, timeframe, direction, action, raw_action,
@@ -1063,7 +1112,7 @@ class SQLiteDatabase(DatabaseAdapter):
             or not outcome.get("evaluation_timestamp")
         ):
             raise ValueError("finalized outcome evidence is incomplete or invalid")
-        with self._connection() as c:
+        with self._writable_connection() as c:
             source = c.execute(
                 "SELECT * FROM predictions WHERE prediction_id=?", (prediction_id,)
             ).fetchone()
@@ -1239,7 +1288,7 @@ class SQLiteDatabase(DatabaseAdapter):
         }
 
     def create_retrain_run(self, run: dict) -> dict:
-        with self._connection() as c:
+        with self._writable_connection() as c:
             c.execute("""
                 INSERT INTO retrain_runs (
                     run_id, evidence_key, request_id, symbol, timeframe, trigger, status,
@@ -1266,7 +1315,7 @@ class SQLiteDatabase(DatabaseAdapter):
         trigger = "manual_quality_retrain"
         if run.get("trigger") != trigger or not run.get("request_id"):
             raise ValueError("manual quality retrain requires trigger and request_id")
-        with self._connection() as c:
+        with self._writable_connection() as c:
             c.execute("BEGIN IMMEDIATE")
             existing_request = c.execute(
                 """
@@ -1332,7 +1381,7 @@ class SQLiteDatabase(DatabaseAdapter):
         if not updates:
             raise ValueError("retrain update cannot be empty")
         fields = ", ".join(f"{key}=?" for key in updates)
-        with self._connection() as c:
+        with self._writable_connection() as c:
             c.execute(
                 f"UPDATE retrain_runs SET {fields} WHERE run_id=?",
                 [*updates.values(), run_id],
@@ -1356,7 +1405,7 @@ class SQLiteDatabase(DatabaseAdapter):
         """CAS a stale RUNNING retrain so a concurrent heartbeat wins safely."""
         if status not in {"PENDING", "FAILED"}:
             raise ValueError(f"invalid interrupted retrain transition: {status}")
-        with self._connection() as c:
+        with self._writable_connection() as c:
             c.execute("""
                 UPDATE retrain_runs
                 SET status=?, owner_token=NULL, heartbeat_at=NULL, error=?, updated_at=?
@@ -1375,7 +1424,7 @@ class SQLiteDatabase(DatabaseAdapter):
         self, run_id: str, owner_token: str, claimed_at: str
     ) -> dict | None:
         """Atomically claim a pending run; only one process can win."""
-        with self._connection() as c:
+        with self._writable_connection() as c:
             c.execute("""
                 UPDATE retrain_runs
                 SET status='RUNNING', owner_token=?, heartbeat_at=?, updated_at=?, error=NULL
@@ -1406,7 +1455,7 @@ class SQLiteDatabase(DatabaseAdapter):
         provenance_status = provenance.get("status", "PROMOTED")
         if provenance_status not in {"PROMOTED", "INITIAL_TRAINING"}:
             raise ValueError(f"invalid model provenance status: {provenance_status}")
-        with self._connection() as c:
+        with self._writable_connection() as c:
             run = c.execute(
                 "SELECT * FROM retrain_runs WHERE run_id=?", (run_id,)
             ).fetchone()
@@ -1482,7 +1531,7 @@ class SQLiteDatabase(DatabaseAdapter):
         return [dict(row) for row in rows]
 
     def save_model_quality(self, mq: dict) -> dict:
-        with self._connection() as c:
+        with self._writable_connection() as c:
             c.execute("""
                 INSERT INTO model_quality (symbol, timeframe, accuracy, auc, precision, recall,
                     status, retrain_count, last_evaluated)
@@ -1514,7 +1563,7 @@ class SQLiteDatabase(DatabaseAdapter):
         return [dict(r) for r in rows]
 
     def create_scheduler_run(self, run: dict) -> dict:
-        with self._connection() as c:
+        with self._writable_connection() as c:
             cur = c.execute("""
                 INSERT INTO scheduler_runs (timeframe, started_at, status, symbols_processed,
                     predictions_generated, errors_count, finished_at, log_blob_path)
@@ -1533,7 +1582,7 @@ class SQLiteDatabase(DatabaseAdapter):
             fields.append(f"{k}=?")
             values.append(v)
         values.append(run_id)
-        with self._connection() as c:
+        with self._writable_connection() as c:
             c.execute(f"UPDATE scheduler_runs SET {','.join(fields)} WHERE id=?", values)
             row = c.execute("SELECT * FROM scheduler_runs WHERE id=?", (run_id,)).fetchone()
         return dict(row)
