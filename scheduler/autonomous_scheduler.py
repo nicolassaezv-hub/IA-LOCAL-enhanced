@@ -359,7 +359,13 @@ def run_init(db: DatabaseAdapter):
     return results
 
 
-def run_rolling_update(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict:
+def run_rolling_update(
+    db: DatabaseAdapter,
+    symbol: str,
+    timeframe: str,
+    *,
+    provider: str | None = None,
+) -> dict:
     """Acquire, validate and atomically update one production rolling dataset."""
     registry = db.get_dataset_registry(symbol, timeframe)
     entry = registry[0] if registry else None
@@ -373,7 +379,14 @@ def run_rolling_update(db: DatabaseAdapter, symbol: str, timeframe: str) -> dict
     )
 
     try:
-        df_new, source = fetch_market_data(symbol, timeframe, FETCH_BARS)
+        if provider is None:
+            df_new, source = fetch_market_data(symbol, timeframe, FETCH_BARS)
+        else:
+            from forex.prediction.shadow_runtime import fetch_pinned_market_data
+
+            df_new, source = fetch_pinned_market_data(
+                symbol, timeframe, FETCH_BARS, provider
+            )
         acquisition_metadata = df_new.attrs.get("acquisition_metadata")
         dataset = RollingDataset(
             symbol, timeframe, max_rows=ROLLING_WINDOW, csv_path=path
@@ -716,6 +729,15 @@ def detect_new_symbols(db: DatabaseAdapter) -> list:
     return generated
 
 
+def _select_cycle_symbols(db: DatabaseAdapter, shadow_config) -> list[dict]:
+    """Apply an explicit deployed-runtime scope or preserve legacy selection."""
+    symbols = db.get_data_symbols()
+    if not shadow_config.runtime_scope_configured:
+        return symbols
+    selected = set(shadow_config.runtime_symbols)
+    return [row for row in symbols if row.get("symbol_code") in selected]
+
+
 def _evaluate_h1_model_gate(
     db: DatabaseAdapter,
     symbol: str,
@@ -853,17 +875,27 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
     run_id = run["id"]
     logger.info(f"=== CYCLE START: {timeframe} (run #{run_id}) ===")
 
-    symbols = db.get_data_symbols()
+    from forex.prediction.shadow_runtime import (
+        ShadowForexRuntime,
+        ShadowRuntimeConfig,
+        shadow_eligible,
+    )
+
+    shadow_config = ShadowRuntimeConfig.from_environment()
+    shadow_runtime = ShadowForexRuntime(
+        db, project_root=PROJECT_ROOT, config=shadow_config
+    )
+    symbols = _select_cycle_symbols(db, shadow_config)
     symbols_processed = 0
     predictions_generated = 0
     errors_count = 0
     results = []
 
     # 1. Detect new symbols
-    new = detect_new_symbols(db)
+    new = detect_new_symbols(db) if not shadow_config.runtime_scope_configured else []
     if new:
         logger.info(f"New symbol datasets generated: {len(new)}")
-        symbols = db.get_data_symbols()
+        symbols = _select_cycle_symbols(db, shadow_config)
 
     # 2. Rolling update + prediction for each symbol
     for sym in symbols:
@@ -871,14 +903,29 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
         lifecycle_status = str(sym.get("status") or "").lower()
         symbols_processed += 1
 
-        update_result = run_rolling_update(db, code, timeframe)
+        pinned_provider = (
+            shadow_config.provider
+            if shadow_config.enabled and code in shadow_config.shadow_symbols
+            else None
+        )
+        update_result = (
+            run_rolling_update(db, code, timeframe)
+            if pinned_provider is None
+            else run_rolling_update(
+                db, code, timeframe, provider=pinned_provider
+            )
+        )
         results.append({"symbol": code, "update": update_result})
 
         model_gate = None
         if timeframe == PREDICTION_TIMEFRAME and lifecycle_status == "active":
             model_gate = _evaluate_h1_model_gate(db, code, timeframe)
 
-        if lifecycle_status == "qualified":
+        is_shadow_eligible = (
+            lifecycle_status == "qualified"
+            and shadow_eligible(db, code, shadow_config)
+        )
+        if lifecycle_status == "qualified" and not is_shadow_eligible:
             results.append({
                 "symbol": code,
                 "data_only": {
@@ -892,6 +939,40 @@ def run_cycle(db: DatabaseAdapter, timeframe: str):
 
         if update_result.get("action") == "error":
             errors_count += 1
+
+        if (
+            is_shadow_eligible
+            and timeframe == PREDICTION_TIMEFRAME
+            and update_result.get("action") in ("updated", "generated")
+        ):
+            try:
+                shadow_result = shadow_runtime.maintain_h1(code)
+                results.append({"symbol": code, "shadow": shadow_result})
+                prediction = shadow_result.get("prediction") or {}
+                if prediction.get("action") == "predicted":
+                    predictions_generated += 1
+            except Exception as exc:
+                errors_count += 1
+                results.append({
+                    "symbol": code,
+                    "shadow": {
+                        "action": "error",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    },
+                })
+        elif (
+            is_shadow_eligible
+            and update_result.get("action") not in ("updated", "generated")
+            and update_result.get("action") != "error"
+        ):
+            errors_count += 1
+            results.append({
+                "symbol": code,
+                "shadow": {
+                    "action": "error",
+                    "error": "SHADOW_DATASET_UPDATE_NOT_READY",
+                },
+            })
 
         if model_gate is not None and not (
             model_gate.get("prediction_eligible")
@@ -1017,6 +1098,31 @@ def get_status(db: DatabaseAdapter) -> dict:
             "healthy": bool(health.get("healthy")) and complete and inconsistent == 0,
             "health_evidence": "registry_and_persisted_csv_verified",
         })
+        from forex.prediction.shadow_runtime import (
+            ShadowForexRuntime,
+            ShadowRuntimeConfig,
+        )
+
+        shadow_config = ShadowRuntimeConfig.from_environment()
+        if all(
+            hasattr(db, method)
+            for method in (
+                "get_symbol", "get_predictions", "get_shadow_outcomes",
+                "get_shadow_scheduler_state",
+            )
+        ):
+            health.update(
+                ShadowForexRuntime(
+                    db, project_root=PROJECT_ROOT, config=shadow_config
+                ).status()
+            )
+        else:
+            health.update({
+                "shadow_mode": shadow_config.enabled,
+                "runtime_symbols": list(shadow_config.runtime_symbols),
+                "runtime_provider": shadow_config.provider,
+                "symbols": {},
+            })
         return health
     except Exception as exc:
         return {

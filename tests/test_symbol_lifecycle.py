@@ -539,6 +539,9 @@ def test_full_f605_migration_is_lossless_and_idempotent(tmp_path):
     assert after_first["__legacy_indexes__"] == before["__legacy_indexes__"]
     assert after_second["__legacy_indexes__"] == before["__legacy_indexes__"]
     expected_lifecycle_objects = {
+        ("index", "idx_shadow_outcomes_symbol_model"),
+        ("table", "shadow_outcomes"),
+        ("table", "shadow_scheduler_state"),
         ("trigger", "supported_symbols_status_insert"),
         ("trigger", "supported_symbols_status_update"),
         ("trigger", "supported_symbols_origin_insert"),

@@ -290,6 +290,9 @@ class SQLiteDatabase(DatabaseAdapter):
                 decision_percentile REAL,
                 decision_policy TEXT,
                 confidence_semantics TEXT,
+                execution_mode TEXT,
+                model_stage TEXT,
+                model_generation INTEGER,
                 status TEXT DEFAULT 'PENDING',
                 resolved INTEGER DEFAULT 0
             );
@@ -322,6 +325,32 @@ class SQLiteDatabase(DatabaseAdapter):
                 decision_policy TEXT,
                 confidence_semantics TEXT,
                 evaluation_semantics TEXT
+            );
+            CREATE TABLE IF NOT EXISTS shadow_outcomes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prediction_id TEXT UNIQUE NOT NULL,
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                action TEXT NOT NULL CHECK(action IN ('BUY','SELL')),
+                entry_candle TEXT NOT NULL,
+                evaluation_candle TEXT NOT NULL,
+                entry_price REAL NOT NULL,
+                future_close REAL NOT NULL,
+                future_return REAL NOT NULL,
+                direction_correct INTEGER NOT NULL,
+                model_identity TEXT NOT NULL,
+                model_generation INTEGER NOT NULL,
+                execution_mode TEXT NOT NULL CHECK(execution_mode='shadow'),
+                status TEXT NOT NULL CHECK(status='FINALIZED'),
+                finalized_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS shadow_scheduler_state (
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                last_success TEXT,
+                last_error TEXT,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(symbol, timeframe)
             );
             CREATE TABLE IF NOT EXISTS retrain_runs (
                 run_id TEXT PRIMARY KEY,
@@ -522,6 +551,9 @@ class SQLiteDatabase(DatabaseAdapter):
             "decision_percentile": "REAL",
             "decision_policy": "TEXT",
             "confidence_semantics": "TEXT",
+            "execution_mode": "TEXT",
+            "model_stage": "TEXT",
+            "model_generation": "INTEGER",
             "status": "TEXT DEFAULT 'PENDING'",
         })
         self._add_columns(c, "outcomes", {
@@ -583,6 +615,36 @@ class SQLiteDatabase(DatabaseAdapter):
             "WHERE trigger='manual_quality_retrain' "
             "AND status IN ('PENDING','RUNNING','VALIDATED')"
         )
+        c.executescript("""
+            CREATE TABLE IF NOT EXISTS shadow_outcomes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prediction_id TEXT UNIQUE NOT NULL,
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                action TEXT NOT NULL CHECK(action IN ('BUY','SELL')),
+                entry_candle TEXT NOT NULL,
+                evaluation_candle TEXT NOT NULL,
+                entry_price REAL NOT NULL,
+                future_close REAL NOT NULL,
+                future_return REAL NOT NULL,
+                direction_correct INTEGER NOT NULL,
+                model_identity TEXT NOT NULL,
+                model_generation INTEGER NOT NULL,
+                execution_mode TEXT NOT NULL CHECK(execution_mode='shadow'),
+                status TEXT NOT NULL CHECK(status='FINALIZED'),
+                finalized_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS shadow_scheduler_state (
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                last_success TEXT,
+                last_error TEXT,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(symbol, timeframe)
+            );
+            CREATE INDEX IF NOT EXISTS idx_shadow_outcomes_symbol_model
+            ON shadow_outcomes(symbol, model_identity, id);
+        """)
 
     def get_active_symbols(self) -> list[dict]:
         return self.get_symbols_by_status("active")
@@ -1072,6 +1134,9 @@ class SQLiteDatabase(DatabaseAdapter):
             "decision_percentile": pred.get("decision_percentile"),
             "decision_policy": pred.get("decision_policy"),
             "confidence_semantics": pred.get("confidence_semantics"),
+            "execution_mode": pred.get("execution_mode"),
+            "model_stage": pred.get("model_stage"),
+            "model_generation": pred.get("model_generation"),
         }
         with self._writable_connection() as c:
             c.execute("""
@@ -1082,8 +1147,9 @@ class SQLiteDatabase(DatabaseAdapter):
                     model_identity, dataset_provenance, model_contract, target_profile,
                     target_definition_version, feature_profile, score_type,
                     direction_score, decision_percentile, decision_policy,
-                    confidence_semantics, status, resolved
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    confidence_semantics, execution_mode, model_stage,
+                    model_generation, status, resolved
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT DO NOTHING
             """, (
                 prediction_id, symbol, timeframe, action, action,
@@ -1101,6 +1167,8 @@ class SQLiteDatabase(DatabaseAdapter):
                 pred.get("score_type"), pred.get("direction_score"),
                 pred.get("decision_percentile"), pred.get("decision_policy"),
                 pred.get("confidence_semantics"),
+                pred.get("execution_mode"), pred.get("model_stage"),
+                pred.get("model_generation"),
                 status, 0,
             ))
             row = c.execute(
@@ -1115,7 +1183,9 @@ class SQLiteDatabase(DatabaseAdapter):
                 "direction_score", "decision_percentile",
             }
             json_fields = {"features_snapshot", "dataset_provenance"}
-            integer_fields = {"horizon_candles", "target_definition_version"}
+            integer_fields = {
+                "horizon_candles", "target_definition_version", "model_generation"
+            }
             conflicts = []
             for field, expected in immutable_evidence.items():
                 actual = stored.get(field)
@@ -1331,7 +1401,8 @@ class SQLiteDatabase(DatabaseAdapter):
     def get_pending_predictions(self, symbol: str = None, limit: int = 100) -> list[dict]:
         query = (
             "SELECT * FROM predictions WHERE status='PENDING' "
-            "AND action IN ('BUY','SELL')"
+            "AND action IN ('BUY','SELL') "
+            "AND (execution_mode IS NULL OR execution_mode='production')"
         )
         params: list = []
         if symbol:
@@ -1339,6 +1410,162 @@ class SQLiteDatabase(DatabaseAdapter):
             params.append(symbol.upper())
         query += " ORDER BY id ASC LIMIT ?"
         params.append(limit)
+        with self._connection() as c:
+            rows = c.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def save_shadow_outcome(self, outcome: dict) -> dict:
+        """Persist one terminal-direction observation without trade semantics."""
+        prediction_id = str(outcome.get("prediction_id") or "").strip()
+        action = str(outcome.get("action") or "").upper().strip()
+        if not prediction_id or action not in ("BUY", "SELL"):
+            raise ValueError("shadow outcome requires BUY/SELL source prediction")
+        try:
+            entry_price = float(outcome["entry_price"])
+            future_close = float(outcome["future_close"])
+            future_return = float(outcome["future_return"])
+            generation = int(outcome["model_generation"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("shadow outcome evidence is incomplete") from exc
+        if not isinstance(outcome.get("direction_correct"), bool):
+            raise ValueError("shadow outcome direction_correct must be boolean")
+        if (
+            entry_price <= 0.0
+            or future_close <= 0.0
+            or generation <= 0
+            or not all(math.isfinite(value) for value in (
+                entry_price, future_close, future_return
+            ))
+            or not outcome.get("entry_candle")
+            or not outcome.get("evaluation_candle")
+            or not outcome.get("model_identity")
+        ):
+            raise ValueError("shadow outcome evidence is invalid")
+        immutable = {
+            "prediction_id": prediction_id,
+            "symbol": str(outcome.get("symbol") or "").upper(),
+            "timeframe": "H1",
+            "action": action,
+            "entry_candle": str(outcome["entry_candle"]),
+            "evaluation_candle": str(outcome["evaluation_candle"]),
+            "entry_price": entry_price,
+            "future_close": future_close,
+            "future_return": future_return,
+            "direction_correct": int(outcome["direction_correct"]),
+            "model_identity": str(outcome["model_identity"]),
+            "model_generation": generation,
+            "execution_mode": "shadow",
+            "status": "FINALIZED",
+        }
+        with self._writable_connection() as c:
+            source = c.execute(
+                "SELECT * FROM predictions WHERE prediction_id=?", (prediction_id,)
+            ).fetchone()
+            if source is None:
+                raise ValueError(f"source prediction does not exist: {prediction_id}")
+            if (
+                source["execution_mode"] != "shadow"
+                or str(source["action"] or source["direction"] or "").upper() != action
+                or source["model_identity"] != immutable["model_identity"]
+                or int(source["model_generation"] or 0) != generation
+            ):
+                raise PersistenceConflictError(
+                    f"shadow outcome conflicts with prediction {prediction_id}"
+                )
+            c.execute("""
+                INSERT INTO shadow_outcomes (
+                    prediction_id, symbol, timeframe, action, entry_candle,
+                    evaluation_candle, entry_price, future_close, future_return,
+                    direction_correct, model_identity, model_generation,
+                    execution_mode, status, finalized_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(prediction_id) DO NOTHING
+            """, (
+                *immutable.values(),
+                str(outcome.get("finalized_at") or datetime.now(timezone.utc).isoformat()),
+            ))
+            row = c.execute(
+                "SELECT * FROM shadow_outcomes WHERE prediction_id=?", (prediction_id,)
+            ).fetchone()
+            stored = dict(row) if row else None
+            if stored is None:
+                raise RuntimeError("shadow outcome upsert did not persist evidence")
+            float_fields = {"entry_price", "future_close", "future_return"}
+            conflicts = []
+            for field, expected in immutable.items():
+                actual = stored.get(field)
+                matches = (
+                    _float_evidence_equal(actual, expected)
+                    if field in float_fields else actual == expected
+                )
+                if not matches:
+                    conflicts.append(field)
+            if conflicts:
+                raise PersistenceConflictError(
+                    f"conflicting shadow outcome evidence for {prediction_id}: "
+                    f"{', '.join(conflicts)}"
+                )
+            c.execute(
+                "UPDATE predictions SET resolved=1, status='FINALIZED' "
+                "WHERE prediction_id=?", (prediction_id,)
+            )
+        return stored
+
+    def get_shadow_outcomes(
+        self, symbol: str = None, model_identity: str = None
+    ) -> list[dict]:
+        query = "SELECT * FROM shadow_outcomes WHERE execution_mode='shadow'"
+        params: list = []
+        if symbol:
+            query += " AND symbol=?"
+            params.append(symbol.upper())
+        if model_identity:
+            query += " AND model_identity=?"
+            params.append(model_identity)
+        query += " ORDER BY id ASC"
+        with self._connection() as c:
+            rows = c.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def upsert_shadow_scheduler_state(self, state: dict) -> dict:
+        symbol = str(state.get("symbol") or "").upper()
+        timeframe = str(state.get("timeframe") or "").upper()
+        if not symbol or timeframe not in ("H1", "H4", "D1"):
+            raise ValueError("shadow scheduler state requires symbol and timeframe")
+        updated_at = str(
+            state.get("updated_at") or datetime.now(timezone.utc).isoformat()
+        )
+        with self._writable_connection() as c:
+            c.execute("""
+                INSERT INTO shadow_scheduler_state (
+                    symbol, timeframe, last_success, last_error, updated_at
+                ) VALUES (?,?,?,?,?)
+                ON CONFLICT(symbol, timeframe) DO UPDATE SET
+                    last_success=excluded.last_success,
+                    last_error=excluded.last_error,
+                    updated_at=excluded.updated_at
+            """, (
+                symbol, timeframe, state.get("last_success"),
+                state.get("last_error"), updated_at,
+            ))
+            row = c.execute(
+                "SELECT * FROM shadow_scheduler_state WHERE symbol=? AND timeframe=?",
+                (symbol, timeframe),
+            ).fetchone()
+        return dict(row)
+
+    def get_shadow_scheduler_state(
+        self, symbol: str = None, timeframe: str = None
+    ) -> list[dict]:
+        query = "SELECT * FROM shadow_scheduler_state WHERE 1=1"
+        params: list = []
+        if symbol:
+            query += " AND symbol=?"
+            params.append(symbol.upper())
+        if timeframe:
+            query += " AND timeframe=?"
+            params.append(timeframe.upper())
+        query += " ORDER BY symbol, timeframe"
         with self._connection() as c:
             rows = c.execute(query, params).fetchall()
         return [dict(row) for row in rows]

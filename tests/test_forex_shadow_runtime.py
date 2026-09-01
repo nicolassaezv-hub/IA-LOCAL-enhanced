@@ -23,6 +23,11 @@ RUNTIME_ENV = {
 }
 
 
+class _SerializableModel:
+    def predict_proba(self, frame):
+        return [[0.25, 0.75] for _ in range(len(frame))]
+
+
 def _database(tmp_path: Path) -> SQLiteDatabase:
     return SQLiteDatabase(str(tmp_path / "shadow.db"))
 
@@ -174,6 +179,30 @@ def test_shadow_storage_cannot_create_latest_alias(tmp_path):
     with pytest.raises(ValueError, match="SHADOW_STORAGE_PATH_INVALID"):
         storage.path_for("latest_EURUSD")
     assert not (tmp_path / "models" / "forex" / "latest_EURUSD.pkl").exists()
+
+
+def test_shadow_storage_roundtrip_binds_checksum_identity_and_generation(tmp_path):
+    storage = shadow.ShadowModelStorage(tmp_path / "models" / "forex" / "shadow")
+    names = ["feature"]
+    metadata = _model_metadata("EURUSD")
+    metadata["feature_names_sha256"] = shadow.feature_names_sha256(names)
+    metadata.update({
+        "decision_policy": shadow.SHADOW_DECISION_POLICY,
+        "score_type": shadow.SHADOW_SCORE_TYPE,
+        "confidence_semantics": shadow.SHADOW_CONFIDENCE_SEMANTICS,
+    })
+    saved = storage.save("EURUSD", {
+        "model": _SerializableModel(),
+        "feature_names": names,
+        "oof_score_reference": [index / 599 for index in range(600)],
+        "metadata": metadata,
+    })
+    observed = storage.load("EURUSD")
+    assert observed["metadata"]["artifact_sha256"] == saved["metadata"]["artifact_sha256"]
+    assert observed["metadata"]["model_identity"] == shadow.shadow_model_identity(
+        "EURUSD", 1, observed["metadata"]["artifact_sha256"]
+    )
+    assert observed["metadata"]["model_generation"] == 1
 
 
 def test_shadow_registry_requires_ready_h1_h4_d1(monkeypatch, tmp_path):
@@ -441,6 +470,45 @@ def test_configured_scheduler_scope_is_exactly_eurusd_usdjpy():
     assert [row["symbol_code"] for row in selected] == ["EURUSD", "USDJPY"]
 
 
+def test_h1_scheduler_shadow_path_pins_mt5_and_processes_only_runtime_symbols(
+    monkeypatch, tmp_path
+):
+    database = _database(tmp_path)
+    _set_lifecycle(database, "EURUSD", "qualified")
+    _set_lifecycle(database, "USDJPY", "qualified")
+    _set_lifecycle(database, "GBPUSD", "active")
+    monkeypatch.setenv("ASTRA_FOREX_SHADOW_MODE", "1")
+    monkeypatch.setenv("ASTRA_FOREX_SHADOW_SYMBOLS", "EURUSD,USDJPY")
+    monkeypatch.setenv("ASTRA_FOREX_RUNTIME_SYMBOLS", "EURUSD,USDJPY")
+    monkeypatch.setenv("ASTRA_FOREX_RUNTIME_PROVIDER", "MT5")
+    updates = []
+    maintained = []
+    monkeypatch.setattr(
+        autonomous_scheduler,
+        "run_rolling_update",
+        lambda _db, symbol, timeframe, *, provider=None: (
+            updates.append((symbol, timeframe, provider)) or {"action": "updated"}
+        ),
+    )
+    monkeypatch.setattr(
+        shadow.ShadowForexRuntime,
+        "maintain_h1",
+        lambda _runtime, symbol: (
+            maintained.append(symbol)
+            or {"prediction": {"action": "predicted"}}
+        ),
+    )
+    result = autonomous_scheduler.run_cycle(database, "H1")
+    assert updates == [
+        ("EURUSD", "H1", "MT5"),
+        ("USDJPY", "H1", "MT5"),
+    ]
+    assert maintained == ["EURUSD", "USDJPY"]
+    assert result["symbols_processed"] == 2
+    assert result["predictions_generated"] == 2
+    assert result["errors_count"] == 0
+
+
 def test_shadow_contract_uses_frozen_operational_baseline_only():
     assert shadow.SHADOW_MODEL_CONTRACT == "shadow_multiframe_directional_v1"
     assert shadow.SHADOW_TARGET_PROFILE == "fixed_horizon_direction_v1"
@@ -455,4 +523,3 @@ def test_shadow_contract_uses_frozen_operational_baseline_only():
         "random_state": 42,
         "n_jobs": -1,
     }
-
