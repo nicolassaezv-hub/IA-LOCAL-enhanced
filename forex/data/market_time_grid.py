@@ -6,7 +6,10 @@ from typing import Any
 
 import pandas as pd
 
-from forex.data.ifc_session_authority import IFC_FOREX_SESSION_AUTHORITY
+from forex.data.ifc_session_authority import (
+    IFC_FOREX_SESSION_AUTHORITY,
+    IFC_USDJPY_SESSION_AUTHORITY,
+)
 from forex.data.mt5_clock_profiles import (
     IFC_MARKETS_DEMO_CLOCK_PROFILE,
     MT5ServerClockProfile,
@@ -79,14 +82,20 @@ def resolve_market_time_grid(
         return None
     if metadata is None or provider != "MT5" or asset_class.upper() != "FOREX":
         return None
-    if symbol is None or symbol.upper() != "EURUSD":
+    normalized_symbol = symbol.upper() if symbol is not None else None
+    authorities = {
+        "EURUSD": IFC_FOREX_SESSION_AUTHORITY,
+        "USDJPY": IFC_USDJPY_SESSION_AUTHORITY,
+    }
+    authority = authorities.get(normalized_symbol)
+    if authority is None:
         return None
     profile = resolve_mt5_server_clock_profile(metadata.get("observed_server"))
     if profile is None or profile != IFC_MARKETS_DEMO_CLOCK_PROFILE:
         return None
     expected = {
         "provider": "MT5",
-        "symbol": "EURUSD",
+        "symbol": normalized_symbol,
         "timestamp_source_domain": "MT5_SERVER_TIME",
         "source_timezone": profile.timezone,
         "timezone_profile_id": profile.profile_id,
@@ -99,7 +108,7 @@ def resolve_market_time_grid(
         return None
     return MarketTimeGrid(
         profile=profile,
-        session_authority=IFC_FOREX_SESSION_AUTHORITY,
+        session_authority=authority,
     )
 
 

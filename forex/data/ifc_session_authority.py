@@ -1,4 +1,4 @@
-"""Strict session evidence for IFCMarkets-Demo EURUSD on native MT5 time."""
+"""Strict per-symbol session evidence for IFCMarkets-Demo native MT5 time."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -170,9 +170,33 @@ _BUNDLE_HASH = sha256(
     ))).encode("utf-8")
 ).hexdigest()
 
+_USDJPY_QUOTE_SESSION_EVIDENCE = "\n".join((
+    "server=IFCMarkets-Demo",
+    "account_type=Demo Account - Hedge",
+    "symbol=USDJPY",
+    "source=SymbolInfoSessionQuote",
+    "capture_utc=2026-09-01T17:41:55Z",
+    "monday_thursday=00:00-00:00",
+    "friday=00:00-22:00",
+    "saturday_sunday=NO_SESSION",
+    f"clock_profile_hash={IFC_MARKETS_DEMO_CLOCK_PROFILE.evidence_hash}",
+))
+# Reviewed holiday notices describe the IFC Forex schedule generally.  The
+# quote-session capture remains separately hashed and symbol-scoped.
+_USDJPY_BUNDLE_HASH = sha256(
+    ("\n".join((
+        _USDJPY_QUOTE_SESSION_EVIDENCE,
+        *(item.evidence_hash for item in IFC_CLOSURE_EVIDENCE),
+    ))).encode("utf-8")
+).hexdigest()
+
 
 class IFCForexSessionAuthority:
     """Quote-session and reviewed-holiday authority for one exact MT5 feed."""
+
+    quote_session_evidence = _QUOTE_SESSION_EVIDENCE
+    quote_session_evidence_id = "ifc-eurusd-quote-session-2026-08-30"
+    quote_session_source_identity = "MT5_SYMBOL_INFO_SESSION_QUOTE_EURUSD"
 
     descriptor = SessionAuthorityDescriptor(
         authority_id="ifcmarkets-demo-eurusd-session-v1",
@@ -238,12 +262,12 @@ class IFCForexSessionAuthority:
             and local.hour >= 22
         ):
             return {
-                "evidence_id": "ifc-eurusd-quote-session-2026-08-30",
-                "source_identity": "MT5_SYMBOL_INFO_SESSION_QUOTE_EURUSD",
+                "evidence_id": self.quote_session_evidence_id,
+                "source_identity": self.quote_session_source_identity,
                 "timezone": IFC_SESSION_TIMEZONE,
                 "version": "1",
                 "evidence_hash": sha256(
-                    _QUOTE_SESSION_EVIDENCE.encode("utf-8")
+                    self.quote_session_evidence.encode("utf-8")
                 ).hexdigest(),
             }
         return None
@@ -252,13 +276,41 @@ class IFCForexSessionAuthority:
 IFC_FOREX_SESSION_AUTHORITY = IFCForexSessionAuthority()
 
 
+class IFCUSDJPYSessionAuthority(IFCForexSessionAuthority):
+    """USDJPY quote sessions bound to its own IFCMarkets-Demo capture."""
+
+    descriptor = SessionAuthorityDescriptor(
+        authority_id="ifcmarkets-demo-usdjpy-session-v1",
+        authority_type="BROKER_QUOTE_SESSION_AND_REVIEWED_HOLIDAYS",
+        source_identity="IFC_USDJPY_SESSION_EVIDENCE_BUNDLE_2026_09_01",
+        asset_class="FOREX",
+        timezone=IFC_SESSION_TIMEZONE,
+        effective_from="2018-01-01T00:00:00+00:00",
+        effective_to="2026-12-31T23:59:59+00:00",
+        version="1",
+        evidence_hash=_USDJPY_BUNDLE_HASH,
+        provider="MT5",
+        symbol="USDJPY",
+        clock_profile_id=IFC_MARKETS_DEMO_CLOCK_PROFILE.profile_id,
+        server_identity=IFC_MARKETS_DEMO_CLOCK_PROFILE.server_identity,
+    )
+    quote_session_evidence = _USDJPY_QUOTE_SESSION_EVIDENCE
+    quote_session_evidence_id = "ifc-usdjpy-quote-session-2026-09-01"
+    quote_session_source_identity = "MT5_SYMBOL_INFO_SESSION_QUOTE_USDJPY"
+
+
+IFC_USDJPY_SESSION_AUTHORITY = IFCUSDJPYSessionAuthority()
+
+
 __all__ = [
     "IFC_CLOSURE_EVIDENCE",
     "IFC_FOREX_SESSION_AUTHORITY",
+    "IFC_USDJPY_SESSION_AUTHORITY",
     "IFC_QUOTE_SESSION_EFFECTIVE_FROM",
     "IFC_QUOTE_SESSION_EFFECTIVE_TO",
     "IFC_SESSION_TIMEZONE",
     "IFC_UNAUTHORIZED_HOLIDAY_DATES",
     "IFCClosureEvidence",
     "IFCForexSessionAuthority",
+    "IFCUSDJPYSessionAuthority",
 ]
