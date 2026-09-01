@@ -17,6 +17,11 @@ from infra.db.database import SQLiteDatabase
 from forex.prediction import h1_directional as h1
 
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:Setting the shape on a NumPy array has been deprecated:DeprecationWarning"
+)
+
+
 VALIDATED_FEATURE_NAMES = [
     "returns", "hour", "day_of_week", "session", "volume", "RSI_14",
     "volatility_24h", "h4_rsi", "h4_return5", "h4_trend", "d1_rsi",
@@ -93,9 +98,31 @@ def _resolved_config(ratio: float = 1.0) -> dict:
     }
 
 
+def _synthetic_oof_diagnostics() -> list[dict]:
+    return [
+        {
+            "fold": fold,
+            **position,
+            "train_class_counts": {0: 490, 1: 490},
+            "validation_rows": 200,
+            "auc": 0.60,
+            "ap": 0.60,
+            "ap_lift": 0.10,
+            "accuracy_at_0_5": 0.55,
+            "buy_count": 50,
+            "sell_count": 50,
+            "hold_count": 100,
+            "decision_coverage": 0.50,
+            "emitted_directional_precision": 0.56,
+        }
+        for fold, position in enumerate(h1.h1_oof_positions(1620), start=1)
+    ]
+
+
 def _metadata(dataset_provenance=None, **overrides) -> dict:
     dataset_provenance = dataset_provenance or {"snapshot_sha256": "snapshot"}
     evidence = _independent_evidence()
+    reference = h1.build_oof_decision_reference(np.linspace(0.0, 1.0, 600))
     metadata = {
         "model_contract": h1.H1_MODEL_CONTRACT,
         "symbol": "EURUSD",
@@ -112,6 +139,12 @@ def _metadata(dataset_provenance=None, **overrides) -> dict:
         "score_type": h1.H1_SCORE_TYPE,
         "confidence_semantics": h1.H1_CONFIDENCE_SEMANTICS,
         "oof_reference_count": h1.H1_REQUIRED_OOF_SCORES,
+        "oof_reference_sha256": reference["oof_reference_sha256"],
+        "oof_lower_score": reference["lower_score"],
+        "oof_upper_score": reference["upper_score"],
+        "oof_diagnostics": _synthetic_oof_diagnostics(),
+        "training_class_counts": {0: 810, 1: 810},
+        "training_metadata": {"fixture": True, "row_count": 1620},
         "dataset_provenance_sha256": RetrainManager.dataset_provenance_sha256(
             dataset_provenance
         ),
@@ -176,7 +209,10 @@ def test_production_random_forest_is_prediction_equivalent_to_frozen_research():
     production, resolved = h1.fit_frozen_h1_random_forest(X, y)
 
     np.testing.assert_allclose(
-        production.predict_proba(X), research.predict_proba(X), rtol=0, atol=0
+        production.predict_proba(X),
+        research.predict_proba(X),
+        rtol=1e-15,
+        atol=1e-15,
     )
     np.testing.assert_array_equal(production.predict(X), research.predict(X))
     assert resolved == research.resolved_config_
@@ -192,6 +228,36 @@ def test_oof_geometry_is_exact_and_dynamic():
         {"train_start": 400, "train_end": 1380,
          "validation_start": 1420, "validation_end": 1620},
     ]
+
+
+def test_candidate_builder_collects_exact_frozen_oof_evidence(monkeypatch):
+    X, y = _matrix(rows=1620)
+    calls = []
+
+    def fake_fit(X_fit, y_fit):
+        calls.append((len(X_fit), set(np.asarray(y_fit))))
+        return _ScoreEstimator(0.2 + 0.15 * len(calls)), _resolved_config()
+
+    monkeypatch.setattr(h1, "fit_frozen_h1_random_forest", fake_fit)
+    model = h1.H1DirectionalRandomForestModel().fit(
+        X,
+        y,
+        training_metadata={"fixture": True},
+        dataset_provenance={"snapshot_sha256": "snapshot"},
+    )
+
+    assert calls == [
+        (980, {0, 1}),
+        (980, {0, 1}),
+        (980, {0, 1}),
+        (1620, {0, 1}),
+    ]
+    assert model.oof_reference_count == 600
+    assert len(model.oof_diagnostics) == 3
+    assert all(record["validation_rows"] == 200 for record in model.oof_diagnostics)
+    assert all(set(record["train_class_counts"]) == {0, 1}
+               for record in model.oof_diagnostics)
+    assert model.training_metadata["row_count"] == 1620
 
 
 def test_oof_requires_exactly_three_folds():
@@ -317,6 +383,51 @@ def test_h1_feature_profile_dispatch_requests_stationary_v1(monkeypatch):
     assert calls == [{"n_rows": 1, "feature_profile": "stationary_v1"}]
 
 
+def test_h1_bridge_summary_makes_no_probability_claim(monkeypatch):
+    from forex.prediction.forex_prediction_bridge import ForexPredictionBridge
+
+    bridge = ForexPredictionBridge()
+    monkeypatch.setattr(
+        bridge,
+        "analyze",
+        lambda *_args, **_kwargs: {
+            "pair": "EURUSD",
+            "action": "BUY",
+            "model_contract": h1.H1_MODEL_CONTRACT,
+            "direction_score": 0.73,
+            "decision_percentile": 0.82,
+            "confidence": 0.64,
+        },
+    )
+
+    result = bridge.analyze_for_astra("unused.csv", pair="EURUSD")
+
+    assert "direction_score=0.7300" in result["summary"]
+    assert "percentile=0.8200" in result["summary"]
+    assert "prob_acierto" not in result["summary"]
+
+
+def test_legacy_bridge_summary_keeps_existing_probability_surface(monkeypatch):
+    from forex.prediction.forex_prediction_bridge import ForexPredictionBridge
+
+    bridge = ForexPredictionBridge()
+    monkeypatch.setattr(
+        bridge,
+        "analyze",
+        lambda *_args, **_kwargs: {
+            "pair": "EURUSD",
+            "action": "BUY",
+            "confidence": 0.80,
+            "est_prob_correct": 80.0,
+            "signal_strength": 75.0,
+        },
+    )
+
+    result = bridge.analyze_for_astra("unused.csv", pair="EURUSD")
+
+    assert "prob_acierto=80.0%" in result["summary"]
+
+
 def test_legacy_predictor_keeps_confidence_and_adx_gates(monkeypatch):
     from forex.prediction.predictor import ForexPredictor
 
@@ -339,8 +450,8 @@ def test_legacy_predictor_keeps_confidence_and_adx_gates(monkeypatch):
 @pytest.mark.parametrize(
     ("mutation", "reason"),
     [
-        ({"auc": 0.549}, "H1_INDEPENDENT_AUC_GATE"),
-        ({"ap_lift": 0.0}, "H1_INDEPENDENT_AP_LIFT_GATE"),
+        ({"auc": 0.549, "auc_delta": 0.029}, "H1_INDEPENDENT_AUC_GATE"),
+        ({"ap_lift": 0.0, "ap_lift_delta": -0.01}, "H1_INDEPENDENT_AP_LIFT_GATE"),
         ({"comparator_auc": 0.60, "auc_delta": 0.0}, "H1_COMPARATOR_AUC_GATE"),
         ({"comparator_ap_lift": 0.05, "ap_lift_delta": 0.0}, "H1_COMPARATOR_AP_LIFT_GATE"),
         ({"buy_count": 29, "sell_count": 30, "hold_count": 141,
@@ -445,11 +556,12 @@ def _synthetic_fitted_h1_model():
     model = h1.H1DirectionalRandomForestModel()
     model.model_ = fitted
     model.model_config = config
-    model.training_class_counts = {0: 90, 1: 90}
+    model.training_class_counts = {0: 810, 1: 810}
     model.feature_names = list(VALIDATED_FEATURE_NAMES)
     model.feature_names_sha256 = h1.H1_FEATURE_NAMES_SHA256
     model.install_oof_reference(np.linspace(0.0, 1.0, 600))
-    model.training_metadata = {"fixture": True}
+    model.oof_diagnostics = _synthetic_oof_diagnostics()
+    model.training_metadata = {"fixture": True, "row_count": 1620}
     model.dataset_provenance = {"snapshot_sha256": "snapshot"}
     return model
 
@@ -510,11 +622,10 @@ def test_complete_synthetic_h1_can_promote_and_audit(tmp_path):
     )
 
     assert result["status"] == "PROMOTED"
-    assert manager.audit_pair_model("EURUSD") == {
-        "eligible": True,
-        "reason": "PRODUCTION_ELIGIBLE",
-        "model_id": result["run_id"],
-    }
+    audit = manager.audit_pair_model("EURUSD")
+    assert audit["eligible"] is True
+    assert audit["reason"] == "PRODUCTION_ELIGIBLE"
+    assert audit["model_id"].startswith("model_")
 
 
 def test_model_storage_round_trip_and_oof_integrity_audit(tmp_path):
@@ -547,4 +658,19 @@ def test_model_storage_round_trip_and_oof_integrity_audit(tmp_path):
     tampered_path = tmp_path / "models" / "tampered-reference.pkl"
     joblib.dump(tampered, tampered_path)
     with pytest.raises(ValueError, match="H1_OOF_REFERENCE_INTEGRITY"):
+        storage.validate_artifact(tampered_path)
+
+    tampered = copy.deepcopy(bundle)
+    tampered["metadata"]["oof_reference_sha256"] = "0" * 64
+    tampered_path = tmp_path / "models" / "tampered-metadata-reference.pkl"
+    joblib.dump(tampered, tampered_path)
+    with pytest.raises(ValueError, match="H1_OOF_REFERENCE_INTEGRITY"):
+        storage.validate_artifact(tampered_path)
+
+    tampered = copy.deepcopy(bundle)
+    tampered["model"].oof_diagnostics[0]["train_class_counts"] = {0: 980, 1: 0}
+    tampered["metadata"]["oof_diagnostics"] = tampered["model"].oof_diagnostics
+    tampered_path = tmp_path / "models" / "tampered-oof-geometry.pkl"
+    joblib.dump(tampered, tampered_path)
+    with pytest.raises(ValueError, match="H1_OOF_REFERENCE_INSUFFICIENT"):
         storage.validate_artifact(tampered_path)

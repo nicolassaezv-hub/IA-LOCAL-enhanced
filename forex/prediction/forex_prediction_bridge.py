@@ -9,6 +9,7 @@ import pandas as pd
 
 from .feature_engineering import build_features
 from .dataset_builder     import DatasetBuilder
+from .h1_directional      import H1_MODEL_CONTRACT
 from .predictor           import ForexPredictor
 from .csv_adapter         import adapt_csv
 
@@ -43,13 +44,21 @@ class ForexPredictionBridge:
     def predict_from_csv(self, filepath: str, pair: str = None) -> dict:
         df   = self.load_data(filepath, pair=pair)
         pair = pair or (str(df["pair"].iloc[-1]) if "pair" in df.columns else None)
-        X    = self.prepare_features(df)
+        model = self.predictor.load_model(pair=pair)
+        if getattr(model, "model_contract", None) == H1_MODEL_CONTRACT:
+            X = self.predictor.prepare_features(build_features(df), pair=pair)
+        else:
+            X = self.prepare_features(df)
         return self.predictor.signal(X, pair=pair)
 
     def analyze(self, filepath: str, pair: str = None) -> dict:
         df   = self.load_data(filepath, pair=pair)
         pair = pair or (str(df["pair"].iloc[-1]) if "pair" in df.columns else None)
-        X    = self.prepare_features(df)
+        model = self.predictor.load_model(pair=pair)
+        if getattr(model, "model_contract", None) == H1_MODEL_CONTRACT:
+            X = self.predictor.prepare_features(build_features(df), pair=pair)
+        else:
+            X = self.prepare_features(df)
         signal = self.predictor.signal(X, pair=pair)
         return {**signal, "data_points": len(df)}
 
@@ -58,13 +67,21 @@ class ForexPredictionBridge:
         action = result.get("action", "HOLD")
         conf   = result.get("confidence", 0)
         pair_r = result.get("pair", "?")
-        strng  = result.get("signal_strength", 0)
-        prob   = result.get("est_prob_correct", 0)
-
-        summary = (
-            f"{pair_r} → {action} "
-            f"(confidence={conf:.2f}, prob_acierto={prob:.1f}%, strength={strng})"
-        )
+        if result.get("model_contract") == H1_MODEL_CONTRACT:
+            score = result.get("direction_score")
+            percentile = result.get("decision_percentile")
+            summary = (
+                f"{pair_r} → {action} "
+                f"(direction_score={score:.4f}, percentile={percentile:.4f}, "
+                f"extremeness={conf:.2f})"
+            )
+        else:
+            strng = result.get("signal_strength", 0)
+            prob = result.get("est_prob_correct", 0)
+            summary = (
+                f"{pair_r} → {action} "
+                f"(confidence={conf:.2f}, prob_acierto={prob:.1f}%, strength={strng})"
+            )
         return {
             "type":    "forex_prediction",
             "payload": result,

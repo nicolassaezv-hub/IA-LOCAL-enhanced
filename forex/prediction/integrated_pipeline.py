@@ -23,6 +23,7 @@ import pandas as pd
 from .feature_engineering  import build_features
 from .dataset_builder      import DatasetBuilder, get_pair_config, require_ml_config
 from .predictor            import ForexPredictor
+from .h1_directional       import H1_MODEL_CONTRACT
 from .backtester           import ForexBacktester
 from .xgb_trainer          import (
     ForexEnsembleTrainer,
@@ -750,15 +751,19 @@ class ForexIntegratedPipeline:
         df   = build_features(df)
 
         # Cargar feature_names guardadas junto al modelo (evita mismatch)
+        loaded_model = None
         train_columns = None
         try:
-            _, train_columns = self.storage.load_model_with_features(pair=pair)
+            loaded_model, train_columns = self.storage.load_model_with_features(pair=pair)
         except Exception as exc:
             logger.warning("No se pudieron cargar feature_names de %s: %s", pair, exc)
             train_columns = None
 
         builder = DatasetBuilder(df)
-        X_pred  = builder.predict_features(n_rows=1, train_columns=train_columns)
+        if getattr(loaded_model, "model_contract", None) == H1_MODEL_CONTRACT:
+            X_pred = self.predictor.prepare_features(df, pair=pair, n_rows=1)
+        else:
+            X_pred = builder.predict_features(n_rows=1, train_columns=train_columns)
 
         if len(X_pred) == 0:
             return {"error": "Sin filas válidas tras feature engineering."}
@@ -1037,6 +1042,17 @@ class ForexIntegratedPipeline:
                     horizon_candles=horizon,
                     model_identity=model_identity,
                     dataset_provenance=provenance,
+                    model_contract=signal.get("model_contract"),
+                    target_profile=signal.get("target_profile"),
+                    target_definition_version=signal.get(
+                        "target_definition_version"
+                    ),
+                    feature_profile=signal.get("feature_profile"),
+                    score_type=signal.get("score_type"),
+                    direction_score=signal.get("direction_score"),
+                    decision_percentile=signal.get("decision_percentile"),
+                    decision_policy=signal.get("decision_policy"),
+                    confidence_semantics=signal.get("confidence_semantics"),
                 )
                 if prediction_id in (None, "", -1):
                     raise RuntimeError("Outcome Tracker returned an invalid prediction identity")

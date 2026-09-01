@@ -281,6 +281,15 @@ class SQLiteDatabase(DatabaseAdapter):
                 horizon_candles INTEGER,
                 model_identity TEXT,
                 dataset_provenance TEXT,
+                model_contract TEXT,
+                target_profile TEXT,
+                target_definition_version INTEGER,
+                feature_profile TEXT,
+                score_type TEXT,
+                direction_score REAL,
+                decision_percentile REAL,
+                decision_policy TEXT,
+                confidence_semantics TEXT,
                 status TEXT DEFAULT 'PENDING',
                 resolved INTEGER DEFAULT 0
             );
@@ -301,7 +310,18 @@ class SQLiteDatabase(DatabaseAdapter):
                 result TEXT,
                 status TEXT,
                 model_identity TEXT,
-                dataset_provenance TEXT
+                dataset_provenance TEXT,
+                horizon_candles INTEGER,
+                model_contract TEXT,
+                target_profile TEXT,
+                target_definition_version INTEGER,
+                feature_profile TEXT,
+                score_type TEXT,
+                direction_score REAL,
+                decision_percentile REAL,
+                decision_policy TEXT,
+                confidence_semantics TEXT,
+                evaluation_semantics TEXT
             );
             CREATE TABLE IF NOT EXISTS retrain_runs (
                 run_id TEXT PRIMARY KEY,
@@ -493,6 +513,15 @@ class SQLiteDatabase(DatabaseAdapter):
             "horizon_candles": "INTEGER",
             "model_identity": "TEXT",
             "dataset_provenance": "TEXT",
+            "model_contract": "TEXT",
+            "target_profile": "TEXT",
+            "target_definition_version": "INTEGER",
+            "feature_profile": "TEXT",
+            "score_type": "TEXT",
+            "direction_score": "REAL",
+            "decision_percentile": "REAL",
+            "decision_policy": "TEXT",
+            "confidence_semantics": "TEXT",
             "status": "TEXT DEFAULT 'PENDING'",
         })
         self._add_columns(c, "outcomes", {
@@ -507,6 +536,17 @@ class SQLiteDatabase(DatabaseAdapter):
             "status": "TEXT",
             "model_identity": "TEXT",
             "dataset_provenance": "TEXT",
+            "horizon_candles": "INTEGER",
+            "model_contract": "TEXT",
+            "target_profile": "TEXT",
+            "target_definition_version": "INTEGER",
+            "feature_profile": "TEXT",
+            "score_type": "TEXT",
+            "direction_score": "REAL",
+            "decision_percentile": "REAL",
+            "decision_policy": "TEXT",
+            "confidence_semantics": "TEXT",
+            "evaluation_semantics": "TEXT",
         })
         self._add_columns(c, "retrain_runs", {
             "owner_token": "TEXT",
@@ -1023,6 +1063,15 @@ class SQLiteDatabase(DatabaseAdapter):
             "horizon_candles": pred.get("horizon_candles"),
             "model_identity": pred.get("model_identity"),
             "dataset_provenance": dataset_provenance,
+            "model_contract": pred.get("model_contract"),
+            "target_profile": pred.get("target_profile"),
+            "target_definition_version": pred.get("target_definition_version"),
+            "feature_profile": pred.get("feature_profile"),
+            "score_type": pred.get("score_type"),
+            "direction_score": pred.get("direction_score"),
+            "decision_percentile": pred.get("decision_percentile"),
+            "decision_policy": pred.get("decision_policy"),
+            "confidence_semantics": pred.get("confidence_semantics"),
         }
         with self._writable_connection() as c:
             c.execute("""
@@ -1030,8 +1079,11 @@ class SQLiteDatabase(DatabaseAdapter):
                     prediction_id, symbol, timeframe, direction, action, raw_action,
                     confidence, entry_price, stop_loss, take_profit, features_snapshot,
                     pipeline_version, predicted_at, candle_timestamp, horizon_candles,
-                    model_identity, dataset_provenance, status, resolved
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    model_identity, dataset_provenance, model_contract, target_profile,
+                    target_definition_version, feature_profile, score_type,
+                    direction_score, decision_percentile, decision_policy,
+                    confidence_semantics, status, resolved
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT DO NOTHING
             """, (
                 prediction_id, symbol, timeframe, action, action,
@@ -1044,6 +1096,11 @@ class SQLiteDatabase(DatabaseAdapter):
                 candle_timestamp, pred.get("horizon_candles"),
                 pred.get("model_identity"),
                 dataset_provenance,
+                pred.get("model_contract"), pred.get("target_profile"),
+                pred.get("target_definition_version"), pred.get("feature_profile"),
+                pred.get("score_type"), pred.get("direction_score"),
+                pred.get("decision_percentile"), pred.get("decision_policy"),
+                pred.get("confidence_semantics"),
                 status, 0,
             ))
             row = c.execute(
@@ -1053,9 +1110,12 @@ class SQLiteDatabase(DatabaseAdapter):
                 raise RuntimeError("prediction upsert did not persist evidence")
             stored = dict(row)
             stored["action"] = stored["action"] or stored["direction"]
-            float_fields = {"confidence", "entry_price", "stop_loss", "take_profit"}
+            float_fields = {
+                "confidence", "entry_price", "stop_loss", "take_profit",
+                "direction_score", "decision_percentile",
+            }
             json_fields = {"features_snapshot", "dataset_provenance"}
-            integer_fields = {"horizon_candles"}
+            integer_fields = {"horizon_candles", "target_definition_version"}
             conflicts = []
             for field, expected in immutable_evidence.items():
                 actual = stored.get(field)
@@ -1112,6 +1172,12 @@ class SQLiteDatabase(DatabaseAdapter):
             or not outcome.get("evaluation_timestamp")
         ):
             raise ValueError("finalized outcome evidence is incomplete or invalid")
+        hit_tp = None if outcome.get("hit_tp", False) is None else int(
+            outcome.get("hit_tp", False)
+        )
+        hit_sl = None if outcome.get("hit_sl", False) is None else int(
+            outcome.get("hit_sl", False)
+        )
         with self._writable_connection() as c:
             source = c.execute(
                 "SELECT * FROM predictions WHERE prediction_id=?", (prediction_id,)
@@ -1131,6 +1197,17 @@ class SQLiteDatabase(DatabaseAdapter):
             dataset_provenance = json.dumps(
                 outcome.get("dataset_provenance") or {}, sort_keys=True
             )
+            inherited_fields = (
+                "horizon_candles", "model_contract", "target_profile",
+                "target_definition_version", "feature_profile", "score_type",
+                "direction_score", "decision_percentile", "decision_policy",
+                "confidence_semantics",
+            )
+            for field in inherited_fields:
+                if field in outcome and outcome.get(field) != source[field]:
+                    raise PersistenceConflictError(
+                        f"outcome {field} conflicts with prediction {prediction_id}"
+                    )
             immutable_evidence = {
                 "prediction_id": prediction_id,
                 "outcome_key": outcome_key,
@@ -1138,8 +1215,8 @@ class SQLiteDatabase(DatabaseAdapter):
                 "timeframe": timeframe,
                 "actual_direction": outcome.get("actual_direction"),
                 "pnl_pips": outcome.get("pnl_pips", 0),
-                "hit_tp": int(outcome.get("hit_tp", False)),
-                "hit_sl": int(outcome.get("hit_sl", False)),
+                "hit_tp": hit_tp,
+                "hit_sl": hit_sl,
                 "prediction_timestamp": outcome.get("prediction_timestamp"),
                 "evaluation_timestamp": outcome.get("evaluation_timestamp"),
                 "action": requested_action,
@@ -1149,6 +1226,8 @@ class SQLiteDatabase(DatabaseAdapter):
                 "result": outcome.get("result"),
                 "model_identity": outcome.get("model_identity"),
                 "dataset_provenance": dataset_provenance,
+                **{field: source[field] for field in inherited_fields},
+                "evaluation_semantics": outcome.get("evaluation_semantics"),
             }
             row = c.execute(
                 "SELECT * FROM outcomes WHERE outcome_key=? OR prediction_id=?",
@@ -1160,13 +1239,17 @@ class SQLiteDatabase(DatabaseAdapter):
                         prediction_id, outcome_key, symbol, timeframe, actual_direction,
                         pnl_pips, hit_tp, hit_sl, resolved_at, prediction_timestamp,
                         evaluation_timestamp, action, entry_price, observed_price,
-                        observed_return, result, status, model_identity, dataset_provenance
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        observed_return, result, status, model_identity, dataset_provenance,
+                        horizon_candles, model_contract, target_profile,
+                        target_definition_version, feature_profile, score_type,
+                        direction_score, decision_percentile, decision_policy,
+                        confidence_semantics, evaluation_semantics
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT DO NOTHING
                 """, (
                     prediction_id, outcome_key, symbol, timeframe,
                     outcome.get("actual_direction"), outcome.get("pnl_pips", 0),
-                    int(outcome.get("hit_tp", False)), int(outcome.get("hit_sl", False)),
+                    hit_tp, hit_sl,
                     outcome.get("resolved_at", datetime.now(timezone.utc).isoformat()),
                     outcome.get("prediction_timestamp"), outcome.get("evaluation_timestamp"),
                     requested_action, entry_price,
@@ -1174,6 +1257,8 @@ class SQLiteDatabase(DatabaseAdapter):
                     outcome.get("result"), status,
                     outcome.get("model_identity"),
                     dataset_provenance,
+                    *[source[field] for field in inherited_fields],
+                    outcome.get("evaluation_semantics"),
                 ))
                 row = c.execute(
                     "SELECT * FROM outcomes WHERE outcome_key=? OR prediction_id=?",
@@ -1183,10 +1268,14 @@ class SQLiteDatabase(DatabaseAdapter):
                 raise RuntimeError("outcome upsert did not persist evidence")
             stored = dict(row)
             float_fields = {
-                "pnl_pips", "entry_price", "observed_price", "observed_return"
+                "pnl_pips", "entry_price", "observed_price", "observed_return",
+                "direction_score", "decision_percentile",
             }
             json_fields = {"dataset_provenance"}
-            integer_fields = {"hit_tp", "hit_sl"}
+            integer_fields = {
+                "hit_tp", "hit_sl", "horizon_candles",
+                "target_definition_version",
+            }
             conflicts = []
             for field, expected in immutable_evidence.items():
                 actual = stored.get(field)
@@ -1197,7 +1286,13 @@ class SQLiteDatabase(DatabaseAdapter):
                 elif field in json_fields:
                     matches = _json_evidence_equal(actual, expected)
                 elif field in integer_fields:
-                    matches = int(actual) == int(expected)
+                    matches = (
+                        actual is None and expected is None
+                    ) or (
+                        actual is not None
+                        and expected is not None
+                        and int(actual) == int(expected)
+                    )
                 else:
                     matches = actual == expected
                 if not matches:

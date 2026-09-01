@@ -55,6 +55,16 @@ class ModelStorage:
         model = bundle.get("model") if isinstance(bundle, dict) else bundle
         if model is None:
             raise ValueError(f"model payload is empty: {artifact}")
+        if isinstance(bundle, dict):
+            metadata = bundle.get("metadata") or {}
+            model_contract = getattr(model, "model_contract", None)
+            if (
+                model_contract == "h1_direction_rf_v1"
+                or metadata.get("model_contract") == "h1_direction_rf_v1"
+            ):
+                from .h1_directional import validate_h1_artifact_bundle
+
+                validate_h1_artifact_bundle(bundle)
         if validator is not None and validator(model) is not True:
             raise ValueError(f"model validation rejected artifact: {artifact}")
         return bundle

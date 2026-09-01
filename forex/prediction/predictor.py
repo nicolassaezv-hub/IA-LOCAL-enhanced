@@ -16,6 +16,16 @@ Filtros antes de disparar señal:
 
 import numpy as np
 import pandas as pd
+from .dataset_builder import DatasetBuilder
+from .h1_directional import (
+    H1_CONFIDENCE_SEMANTICS,
+    H1_DECISION_POLICY,
+    H1_FEATURE_PROFILE,
+    H1_MODEL_CONTRACT,
+    H1_SCORE_TYPE,
+    h1_direction_decision,
+    h1_runtime_contract_error,
+)
 from .model_storage import ModelStorage
 
 _NON_NUMERIC = {'timestamp', 'session', 'pair', 'regime', 'action', 'date', 'time'}
@@ -94,6 +104,26 @@ class ForexPredictor:
         key = (pair or "").upper().replace("/", "").replace("_", "")
         self._models.pop(key, None)
 
+    def prepare_features(
+        self, df: pd.DataFrame, *, pair: str = None, n_rows: int = 1
+    ) -> pd.DataFrame:
+        """Build the model-selected inference profile without H1 zero filling."""
+        model = self.load_model(pair=pair)
+        if getattr(model, "model_contract", None) == H1_MODEL_CONTRACT:
+            features = DatasetBuilder(df).predict_features(
+                n_rows=n_rows,
+                feature_profile=H1_FEATURE_PROFILE,
+            )
+            reason = h1_runtime_contract_error(model, features.columns)
+            if reason:
+                raise ValueError(reason)
+            return features
+        _, train_columns = self.storage.load_model_with_features(pair=pair)
+        return DatasetBuilder(df).predict_features(
+            n_rows=n_rows,
+            train_columns=train_columns,
+        )
+
     # ─────────────────────────────────────────────────────────
     # Predicción cruda (sin filtros)
     # ─────────────────────────────────────────────────────────
@@ -130,6 +160,10 @@ class ForexPredictor:
     # FIX #10: signal_strength simplificado y calibrado
     # ─────────────────────────────────────────────────────────
     def signal(self, X: pd.DataFrame, pair: str = None) -> dict:
+        model = self.load_model(pair=pair)
+        if getattr(model, "model_contract", None) == H1_MODEL_CONTRACT:
+            return self._signal_h1(X.tail(1), pair=pair, model=model)
+
         raw        = self.predict(X.tail(1), pair=pair)
         confidence = raw["confidence"]
         direction  = raw["direction"]
@@ -192,6 +226,68 @@ class ForexPredictor:
             "model_valid":      model_sufficient,
             "hold_reason":      "; ".join(reasons) if reasons else None,
             "interpretation":   _interpret(action, confidence, signal_strength, est_prob_correct),
+        }
+
+    @staticmethod
+    def _signal_h1(X: pd.DataFrame, *, pair: str, model) -> dict:
+        """Return a score-percentile decision with no probability claim or legacy veto."""
+        reason = h1_runtime_contract_error(model, X.columns)
+        base = {
+            "pair": pair,
+            "model_contract": H1_MODEL_CONTRACT,
+            "target_profile": getattr(model, "target_profile", None),
+            "target_definition_version": getattr(
+                model, "target_definition_version", None
+            ),
+            "horizon": getattr(model, "horizon", None),
+            "feature_profile": getattr(model, "feature_profile", None),
+            "score_type": H1_SCORE_TYPE,
+            "decision_policy": H1_DECISION_POLICY,
+            "confidence_semantics": H1_CONFIDENCE_SEMANTICS,
+        }
+        if reason:
+            return {
+                **base,
+                "action": "HOLD",
+                "direction": "unknown",
+                "direction_score": None,
+                "decision_percentile": None,
+                "decision_extremeness": 0.0,
+                "confidence": 0.0,
+                "model_valid": False,
+                "hold_reason": reason,
+                "interpretation": "H1 model/feature contract mismatch; prediction blocked.",
+            }
+        prepared = X.loc[:, list(model.feature_names)].astype(float)
+        direction_score = float(model.predict_proba(prepared)[0, 1])
+        decision = h1_direction_decision(direction_score, model)
+        action = decision["action"]
+        if action == "BUY":
+            interpretation = (
+                "Directional model score is in the bullish upper quartile "
+                "of its temporal OOF reference."
+            )
+            hold_reason = None
+        elif action == "SELL":
+            interpretation = (
+                "Directional model score is in the bearish lower quartile "
+                "of its temporal OOF reference."
+            )
+            hold_reason = None
+        else:
+            interpretation = "Score lies inside the temporal OOF abstention band."
+            hold_reason = "OOF_QUARTILE_ABSTENTION"
+        return {
+            **base,
+            "action": action,
+            "direction": "bullish" if direction_score >= 0.5 else "bearish",
+            "direction_score": direction_score,
+            "decision_percentile": decision["decision_percentile"],
+            "decision_extremeness": decision["decision_extremeness"],
+            "confidence": decision["decision_extremeness"],
+            "model_valid": True,
+            "hold_reason": hold_reason,
+            "interpretation": interpretation,
         }
 
     # Alias para compatibilidad

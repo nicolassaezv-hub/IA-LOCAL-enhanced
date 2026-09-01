@@ -866,6 +866,13 @@ class RetrainManager:
     @staticmethod
     def _initial_eligibility_error(metadata: dict | None) -> str:
         """Return why calibration, validation and WFV evidence is insufficient."""
+        from .h1_directional import H1_MODEL_CONTRACT
+
+        if isinstance(metadata, dict) and metadata.get("model_contract") == H1_MODEL_CONTRACT:
+            # H1 has a separate ranking/abstention evidence contract.  The
+            # complete check runs in _production_eligibility_error with symbol
+            # and dataset provenance bound.
+            return ""
         from .xgb_trainer import MIN_PRECISION_THRESHOLD, wfv_quality_passed
 
         evidence = (metadata or {}).get("eligibility")
@@ -901,6 +908,19 @@ class RetrainManager:
         dataset_provenance: dict,
     ) -> str:
         """Enforce complete production evidence at the promotion authority."""
+        from .h1_directional import (
+            H1_MODEL_CONTRACT,
+            h1_production_eligibility_error,
+        )
+
+        if isinstance(metadata, dict) and metadata.get("model_contract") == H1_MODEL_CONTRACT:
+            return h1_production_eligibility_error(
+                metadata,
+                symbol=symbol,
+                timeframe=timeframe,
+                trigger=trigger,
+                dataset_provenance=dataset_provenance,
+            )
         from .xgb_trainer import MIN_PRECISION_THRESHOLD, wfv_quality_passed
 
         if not isinstance(metadata, dict):

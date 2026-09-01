@@ -21,6 +21,17 @@ from infra.db.database import (
     stable_prediction_id,
 )
 from .dataset_builder import require_ml_config
+from .h1_directional import (
+    H1_CONFIDENCE_SEMANTICS,
+    H1_DECISION_POLICY,
+    H1_FEATURE_PROFILE,
+    H1_HORIZON,
+    H1_MODEL_CONTRACT,
+    H1_SCORE_TYPE,
+    H1_TARGET_DEFINITION_VERSION,
+    H1_TARGET_PROFILE,
+    H1_TERMINAL_DIRECTION_EVALUATION,
+)
 
 
 _TRADE_ACTIONS = ("BUY", "SELL")
@@ -128,6 +139,15 @@ class OutcomeTracker:
         model_identity: str | None = None,
         dataset_provenance: dict | None = None,
         prediction_id: str | None = None,
+        model_contract: str | None = None,
+        target_profile: str | None = None,
+        target_definition_version: int | None = None,
+        feature_profile: str | None = None,
+        score_type: str | None = None,
+        direction_score: float | None = None,
+        decision_percentile: float | None = None,
+        decision_policy: str | None = None,
+        confidence_semantics: str | None = None,
     ) -> str:
         action = str(signal).upper().strip()
         if action not in _TRADE_ACTIONS:
@@ -149,6 +169,33 @@ class OutcomeTracker:
             horizon_candles = int(require_ml_config(symbol)["horizon"])
         if int(horizon_candles) <= 0:
             raise ValueError("outcome horizon must be a positive candle count")
+        if model_contract == H1_MODEL_CONTRACT:
+            h1_identity = {
+                "target_profile": (target_profile, H1_TARGET_PROFILE),
+                "target_definition_version": (
+                    target_definition_version, H1_TARGET_DEFINITION_VERSION
+                ),
+                "horizon": (int(horizon_candles), H1_HORIZON),
+                "feature_profile": (feature_profile, H1_FEATURE_PROFILE),
+                "score_type": (score_type, H1_SCORE_TYPE),
+                "decision_policy": (decision_policy, H1_DECISION_POLICY),
+                "confidence_semantics": (
+                    confidence_semantics, H1_CONFIDENCE_SEMANTICS
+                ),
+            }
+            mismatch = next(
+                (field for field, values in h1_identity.items() if values[0] != values[1]),
+                None,
+            )
+            if mismatch is not None:
+                raise ValueError(f"H1_PREDICTION_CONTRACT_MISMATCH: {mismatch}")
+            if (
+                direction_score is None
+                or decision_percentile is None
+                or not math.isfinite(float(direction_score))
+                or not math.isfinite(float(decision_percentile))
+            ):
+                raise ValueError("H1_PREDICTION_SCORE_MISSING")
         uid = prediction_id or stable_prediction_id(symbol, tf, candle_iso, action)
         saved = self.database.save_prediction({
             "prediction_id": uid,
@@ -165,6 +212,15 @@ class OutcomeTracker:
             "candle_timestamp": candle_iso,
             "horizon_candles": int(horizon_candles),
             "model_identity": model_identity,
+            "model_contract": model_contract,
+            "target_profile": target_profile,
+            "target_definition_version": target_definition_version,
+            "feature_profile": feature_profile,
+            "score_type": score_type,
+            "direction_score": direction_score,
+            "decision_percentile": decision_percentile,
+            "decision_policy": decision_policy,
+            "confidence_semantics": confidence_semantics,
             "dataset_provenance": {
                 **(dataset_provenance or {}),
                 "regime": regime,
@@ -261,10 +317,28 @@ class OutcomeTracker:
             observed_price = float(observed_row["close"])
             price_change = observed_price - entry_price
             observed_return = price_change / entry_price
-            correct = price_change > 0 if action == "BUY" else price_change < 0
-            actual_direction = "BUY" if price_change > 0 else "SELL" if price_change < 0 else "HOLD"
+            is_h1 = prediction.get("model_contract") == H1_MODEL_CONTRACT
+            if is_h1 and (
+                prediction.get("target_profile") != H1_TARGET_PROFILE
+                or prediction.get("target_definition_version")
+                != H1_TARGET_DEFINITION_VERSION
+                or horizon != H1_HORIZON
+            ):
+                continue
+            if is_h1:
+                correct = price_change > 0 if action == "BUY" else price_change <= 0
+                actual_direction = "BUY" if price_change > 0 else "SELL"
+                evaluation_semantics = H1_TERMINAL_DIRECTION_EVALUATION
+            else:
+                correct = price_change > 0 if action == "BUY" else price_change < 0
+                actual_direction = (
+                    "BUY" if price_change > 0
+                    else "SELL" if price_change < 0
+                    else "HOLD"
+                )
+                evaluation_semantics = None
             evaluation_time = expected_timestamps[-1] + duration
-            self.database.save_outcome({
+            outcome = {
                 "prediction_id": prediction["prediction_id"],
                 "outcome_key": prediction["prediction_id"],
                 "symbol": prediction["symbol"],
@@ -281,7 +355,11 @@ class OutcomeTracker:
                 "status": "FINALIZED",
                 "model_identity": prediction.get("model_identity"),
                 "dataset_provenance": _decode_json(prediction.get("dataset_provenance")),
-            })
+                "evaluation_semantics": evaluation_semantics,
+            }
+            if is_h1:
+                outcome.update({"hit_tp": None, "hit_sl": None})
+            self.database.save_outcome(outcome)
             finalized += 1
         return finalized
 
