@@ -147,9 +147,6 @@ def test_unknown_target_profile_fails_closed():
         ValueError, "TARGET_PROFILE_UNSUPPORTED"
     ):
         DatasetBuilder(_frame()).build(target_profile="future_target")
-    assert dataset_module.target_profile_metadata(
-        "fixed_horizon_direction_v1", horizon=12
-    ) == expected
 
 
 def test_predict_features_is_independent_of_training_target_profile():

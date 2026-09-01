@@ -18,6 +18,16 @@ import numpy as np
 
 
 FEATURE_PROFILES = ("legacy", "stationary_v1")
+FIRST_TOUCH_TARGET_PROFILE = "first_touch_v1"
+FIXED_HORIZON_DIRECTION_TARGET_PROFILE = "fixed_horizon_direction_v1"
+TARGET_PROFILES = (
+    FIRST_TOUCH_TARGET_PROFILE,
+    FIXED_HORIZON_DIRECTION_TARGET_PROFILE,
+)
+TARGET_DEFINITION_VERSIONS = {
+    FIRST_TOUCH_TARGET_PROFILE: 1,
+    FIXED_HORIZON_DIRECTION_TARGET_PROFILE: 1,
+}
 
 STATIONARY_V1_EXCLUDED_FEATURES = {
     "open", "high", "low", "close", "spread",
@@ -53,6 +63,18 @@ def feature_names_sha256(feature_names) -> str:
     """Return a deterministic identity for an exact ordered feature contract."""
     payload = json.dumps(list(feature_names), separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def target_profile_metadata(target_profile: str, *, horizon: int) -> dict:
+    """Return the deterministic identity of one explicit target contract."""
+    profile = str(target_profile).strip().lower()
+    if profile not in TARGET_PROFILES:
+        raise ValueError(f"TARGET_PROFILE_UNSUPPORTED: {target_profile}")
+    return {
+        "target_profile": profile,
+        "horizon": int(horizon),
+        "target_definition_version": TARGET_DEFINITION_VERSIONS[profile],
+    }
 
 # ─────────────────────────────────────────────────────────────
 # CONFIG POR PAR
@@ -137,7 +159,18 @@ class DatasetBuilder:
     # ─────────────────────────────────────────────────────────
     # TARGET — RISK/REWARD AWARE (sin timeouts en train)
     # ─────────────────────────────────────────────────────────
-    def create_target(self, horizon: int = 10, rr_ratio: float = 1.0):
+    def create_target(
+        self,
+        horizon: int = 10,
+        rr_ratio: float = 1.0,
+        target_profile: str = FIRST_TOUCH_TARGET_PROFILE,
+    ):
+        profile = str(target_profile).strip().lower()
+        if profile not in TARGET_PROFILES:
+            raise ValueError(f"TARGET_PROFILE_UNSUPPORTED: {target_profile}")
+        if profile == FIXED_HORIZON_DIRECTION_TARGET_PROFILE:
+            return self._create_fixed_horizon_direction_target(horizon)
+
         close   = self.df["close"].values
         atr_col = self.df.get("ATR_14")
         if atr_col is None or atr_col.isna().all():
@@ -182,6 +215,19 @@ class DatasetBuilder:
                 target[i] = 0
 
         self.df["target"] = target
+        return self
+
+    def _create_fixed_horizon_direction_target(self, horizon: int):
+        """Create the frozen research-only terminal-direction target."""
+        horizon = int(horizon)
+        if horizon <= 0:
+            raise ValueError(f"TARGET_HORIZON_OUT_OF_RANGE: {horizon}")
+
+        close = self.df["close"]
+        future_close = close.shift(-horizon)
+        target = (future_close > close).astype(int)
+        target.loc[future_close.isna()] = -1
+        self.df["target"] = target.astype(int)
         return self
 
     # ─────────────────────────────────────────────────────────
@@ -391,12 +437,22 @@ class DatasetBuilder:
         horizon: int = 10,
         rr_ratio: float = 1.0,
         feature_profile: str = "legacy",
+        target_profile: str = FIRST_TOUCH_TARGET_PROFILE,
     ):
         profile = self._validate_feature_profile(feature_profile)
         self.process_time()
         self.encode_session()
         self.encode_pair()
-        self.create_target(horizon=horizon, rr_ratio=rr_ratio)
+        if target_profile == FIRST_TOUCH_TARGET_PROFILE:
+            # Preserve the exact legacy call shape for production callers and
+            # test doubles that implement the pre-profile target contract.
+            self.create_target(horizon=horizon, rr_ratio=rr_ratio)
+        else:
+            self.create_target(
+                horizon=horizon,
+                rr_ratio=rr_ratio,
+                target_profile=target_profile,
+            )
 
         X = self.build_X(feature_profile=profile)
         y = self.build_y()
