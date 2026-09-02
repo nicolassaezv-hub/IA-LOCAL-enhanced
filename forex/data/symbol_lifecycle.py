@@ -612,8 +612,29 @@ def _build_activation_contract():
 activate_qualified_symbol, is_activation_authorization = _build_activation_contract()
 
 
-def disable_symbol(database: DatabaseAdapter, symbol: str) -> dict:
-    return database.disable_symbol(get_symbol_spec(symbol).symbol_code)
+def migrate_legacy_active_to_candidate(
+    database: DatabaseAdapter,
+    symbol: str,
+    *,
+    expected_state: dict | None = None,
+) -> dict:
+    """Expose the one-way legacy retirement transition without qualification."""
+    return database.migrate_legacy_active_to_candidate(
+        get_symbol_spec(symbol).symbol_code,
+        expected_state=expected_state,
+    )
+
+
+def disable_symbol(
+    database: DatabaseAdapter,
+    symbol: str,
+    *,
+    expected_state: dict | None = None,
+) -> dict:
+    return database.disable_symbol(
+        get_symbol_spec(symbol).symbol_code,
+        expected_state=expected_state,
+    )
 
 
 __all__ = [
@@ -621,6 +642,7 @@ __all__ = [
     "activate_qualified_symbol",
     "disable_symbol",
     "load_current_evidence",
+    "migrate_legacy_active_to_candidate",
     "qualify_candidate",
     "register_candidate",
 ]

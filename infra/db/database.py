@@ -26,6 +26,9 @@ DEFAULT_SQLITE_DB_PATH = "memory_db/astra_autonomous.db"
 _PIPELINE_VERSION = f"v{ASTRA_VERSION}"
 SYMBOL_STATUSES = ("candidate", "qualified", "active", "disabled")
 ACTIVATION_ORIGINS = ("legacy", "managed")
+LEGACY_DATASET_QUARANTINE_CLASSIFICATION = (
+    "LEGACY_PROVIDER_QUARANTINED_FOR_MT5_MIGRATION"
+)
 
 
 def configured_sqlite_path() -> Path:
@@ -195,15 +198,40 @@ class DatabaseAdapter(ABC):
     @abstractmethod
     def mark_qualified(self, code: str, evidence: dict) -> dict: ...
     @abstractmethod
+    def migrate_legacy_active_to_candidate(
+        self, code: str, *, expected_state: dict | None = None
+    ) -> dict: ...
+    @abstractmethod
     def _persist_authorized_activation(
         self, authorization: object
     ) -> dict: ...
     @abstractmethod
-    def disable_symbol(self, code: str) -> dict: ...
+    def disable_symbol(
+        self, code: str, *, expected_state: dict | None = None
+    ) -> dict: ...
     @abstractmethod
     def get_dataset_registry(self, symbol: str = None, tf: str = None) -> list[dict]: ...
     @abstractmethod
     def upsert_dataset_registry(self, entry: dict) -> dict: ...
+    @abstractmethod
+    def quarantine_legacy_dataset_registry(
+        self,
+        symbol: str,
+        timeframe: str,
+        *,
+        expected_state: dict,
+        quarantine_path: str,
+    ) -> dict: ...
+    @abstractmethod
+    def restore_legacy_forex_migration_state(
+        self,
+        *,
+        symbol_before: dict[str, dict],
+        symbol_after: dict[str, dict],
+        dataset_before: dict[str, dict],
+        dataset_after: dict[str, dict],
+        allow_unchanged: bool = False,
+    ) -> None: ...
     @abstractmethod
     def save_prediction(self, pred: dict) -> dict: ...
     @abstractmethod
@@ -1074,7 +1102,55 @@ class SQLiteDatabase(DatabaseAdapter):
             ).fetchone()
         return dict(updated)
 
-    def disable_symbol(self, code: str) -> dict:
+    def migrate_legacy_active_to_candidate(
+        self, code: str, *, expected_state: dict | None = None
+    ) -> dict:
+        """Return one unqualified legacy-active row to candidate fail-closed."""
+        code, _, _, _, _ = self._catalog_metadata(code, None, None, None)
+        evidence_fields = (
+            "qualification_evidence_path",
+            "qualification_sha256",
+            "qualified_at",
+            "qualification_catalog_version",
+        )
+        with self._writable_connection() as c:
+            row = c.execute(
+                "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
+            ).fetchone()
+            if row is None:
+                raise PersistenceConflictError(f"Symbol {code} is not registered")
+            current = dict(row)
+            if expected_state is not None and current != expected_state:
+                raise PersistenceConflictError(
+                    f"Symbol {code} changed after migration precheck"
+                )
+            if current.get("status") != "active":
+                raise PersistenceConflictError(
+                    f"Cannot migrate {code} from status {current.get('status')}"
+                )
+            if current.get("activation_origin") != "legacy":
+                raise PersistenceConflictError(
+                    f"Cannot migrate {code}: activation_origin is not legacy"
+                )
+            if any(current.get(field) is not None for field in evidence_fields):
+                raise PersistenceConflictError(
+                    f"Cannot migrate {code}: qualification evidence is present"
+                )
+            c.execute(
+                "UPDATE supported_symbols SET status='candidate', "
+                "qualification_evidence_path=NULL, qualification_sha256=NULL, "
+                "qualified_at=NULL, qualification_catalog_version=NULL, "
+                "updated_at=? WHERE symbol_code=?",
+                (datetime.now(timezone.utc).isoformat(), code),
+            )
+            updated = c.execute(
+                "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
+            ).fetchone()
+        return dict(updated)
+
+    def disable_symbol(
+        self, code: str, *, expected_state: dict | None = None
+    ) -> dict:
         code, _, _, _, _ = self._catalog_metadata(code, None, None, None)
         with self._writable_connection() as c:
             row = c.execute(
@@ -1082,6 +1158,11 @@ class SQLiteDatabase(DatabaseAdapter):
             ).fetchone()
             if row is None:
                 raise PersistenceConflictError(f"Symbol {code} is not registered")
+            current = dict(row)
+            if expected_state is not None and current != expected_state:
+                raise PersistenceConflictError(
+                    f"Symbol {code} changed after migration precheck"
+                )
             if row["status"] != "disabled":
                 c.execute(
                     "UPDATE supported_symbols SET status='disabled', updated_at=? "
@@ -1161,6 +1242,252 @@ class SQLiteDatabase(DatabaseAdapter):
             result.get("acquisition_metadata")
         )
         return result
+
+    def quarantine_legacy_dataset_registry(
+        self,
+        symbol: str,
+        timeframe: str,
+        *,
+        expected_state: dict,
+        quarantine_path: str,
+    ) -> dict:
+        """Move one exact Yahoo legacy registry row to non-executable state."""
+        from forex.data.ohlc_contract import acquisition_metadata_dict
+
+        code = str(symbol or "").strip().upper()
+        normalized_timeframe = str(timeframe or "").strip().upper()
+        destination = str(Path(quarantine_path).expanduser().resolve())
+        with self._writable_connection() as c:
+            row = c.execute(
+                "SELECT * FROM dataset_registry WHERE symbol=? AND timeframe=?",
+                (code, normalized_timeframe),
+            ).fetchone()
+            if row is None:
+                raise PersistenceConflictError(
+                    f"Dataset {code}/{normalized_timeframe} is not registered"
+                )
+            current = dict(row)
+            current["acquisition_metadata"] = acquisition_metadata_dict(
+                current.get("acquisition_metadata")
+            )
+            if current != expected_state:
+                raise PersistenceConflictError(
+                    f"Dataset {code}/{normalized_timeframe} changed after precheck"
+                )
+            if (
+                current.get("status") != "ready"
+                or current.get("provider_used") != "Yahoo"
+                or current.get("provider_class") != "FX_REFERENCE"
+                or not current.get("source_sha256")
+                or not current.get("blob_path")
+            ):
+                raise PersistenceConflictError(
+                    f"Dataset {code}/{normalized_timeframe} is not eligible for "
+                    "legacy quarantine"
+                )
+            c.execute(
+                "UPDATE dataset_registry SET blob_path=?, status='quarantined', "
+                "last_error=?, last_updated=? WHERE symbol=? AND timeframe=?",
+                (
+                    destination,
+                    LEGACY_DATASET_QUARANTINE_CLASSIFICATION,
+                    datetime.now(timezone.utc).isoformat(),
+                    code,
+                    normalized_timeframe,
+                ),
+            )
+            updated = c.execute(
+                "SELECT * FROM dataset_registry WHERE symbol=? AND timeframe=?",
+                (code, normalized_timeframe),
+            ).fetchone()
+        result = dict(updated)
+        result["acquisition_metadata"] = acquisition_metadata_dict(
+            result.get("acquisition_metadata")
+        )
+        return result
+
+    def restore_legacy_forex_migration_state(
+        self,
+        *,
+        symbol_before: dict[str, dict],
+        symbol_after: dict[str, dict],
+        dataset_before: dict[str, dict],
+        dataset_after: dict[str, dict],
+        allow_unchanged: bool = False,
+    ) -> None:
+        """Restore exact migration snapshots only while their state still matches."""
+        from forex.data.ohlc_contract import (
+            acquisition_metadata_dict,
+            encode_acquisition_metadata,
+        )
+
+        target_symbols = {"EURUSD", "USDJPY", "GBPUSD", "AUDUSD"}
+        target_datasets = {
+            f"{symbol}:{timeframe}"
+            for symbol in target_symbols
+            for timeframe in ("H1", "H4", "D1")
+        }
+        if set(symbol_before) != target_symbols or set(dataset_before) != target_datasets:
+            raise PersistenceConflictError("ROLLBACK_MANIFEST_SCOPE_INVALID")
+        if not allow_unchanged and (
+            set(symbol_after) != target_symbols
+            or set(dataset_after) != target_datasets
+        ):
+            raise PersistenceConflictError("ROLLBACK_MANIFEST_AFTER_STATE_INCOMPLETE")
+        target_statuses = {
+            "EURUSD": "candidate",
+            "USDJPY": "candidate",
+            "GBPUSD": "disabled",
+            "AUDUSD": "disabled",
+        }
+        evidence_fields = (
+            "qualification_evidence_path",
+            "qualification_sha256",
+            "qualified_at",
+            "qualification_catalog_version",
+        )
+        for code, before in symbol_before.items():
+            after = symbol_after.get(code)
+            if (
+                before.get("status") != "active"
+                or before.get("activation_origin") != "legacy"
+                or any(before.get(field) is not None for field in evidence_fields)
+            ):
+                raise PersistenceConflictError("ROLLBACK_SYMBOL_BEFORE_STATE_INVALID")
+            if after is None and allow_unchanged:
+                continue
+            if (
+                after is None
+                or after.get("status") != target_statuses[code]
+                or after.get("activation_origin") != "legacy"
+                or any(after.get(field) is not None for field in evidence_fields)
+                or {
+                    key: value for key, value in before.items()
+                    if key not in {"status", "updated_at"}
+                }
+                != {
+                    key: value for key, value in after.items()
+                    if key not in {"status", "updated_at"}
+                }
+            ):
+                raise PersistenceConflictError("ROLLBACK_SYMBOL_AFTER_STATE_INVALID")
+
+        for key, before in dataset_before.items():
+            after = dataset_after.get(key)
+            if (
+                before.get("status") != "ready"
+                or before.get("provider_used") != "Yahoo"
+                or before.get("provider_class") != "FX_REFERENCE"
+            ):
+                raise PersistenceConflictError("ROLLBACK_DATASET_BEFORE_STATE_INVALID")
+            if after is None and allow_unchanged:
+                continue
+            if (
+                after is None
+                or after.get("status") != "quarantined"
+                or after.get("last_error")
+                != LEGACY_DATASET_QUARANTINE_CLASSIFICATION
+                or {
+                    item_key: value for item_key, value in before.items()
+                    if item_key not in {
+                        "blob_path", "status", "last_error", "last_updated"
+                    }
+                }
+                != {
+                    item_key: value for item_key, value in after.items()
+                    if item_key not in {
+                        "blob_path", "status", "last_error", "last_updated"
+                    }
+                }
+            ):
+                raise PersistenceConflictError("ROLLBACK_DATASET_AFTER_STATE_INVALID")
+
+        with self._writable_connection() as c:
+            for code in sorted(target_symbols):
+                row = c.execute(
+                    "SELECT * FROM supported_symbols WHERE symbol_code=?", (code,)
+                ).fetchone()
+                current = dict(row) if row is not None else None
+                allowed = [symbol_after[code]] if code in symbol_after else []
+                if allow_unchanged:
+                    allowed.append(symbol_before[code])
+                if current not in allowed:
+                    raise PersistenceConflictError(
+                        f"ROLLBACK_DATABASE_CONFLICT: symbol {code}"
+                    )
+
+            for key in sorted(target_datasets):
+                code, timeframe = key.split(":", 1)
+                row = c.execute(
+                    "SELECT * FROM dataset_registry WHERE symbol=? AND timeframe=?",
+                    (code, timeframe),
+                ).fetchone()
+                current = dict(row) if row is not None else None
+                if current is not None:
+                    current["acquisition_metadata"] = acquisition_metadata_dict(
+                        current.get("acquisition_metadata")
+                    )
+                allowed = [dataset_after[key]] if key in dataset_after else []
+                if allow_unchanged:
+                    allowed.append(dataset_before[key])
+                if current not in allowed:
+                    raise PersistenceConflictError(
+                        f"ROLLBACK_DATABASE_CONFLICT: dataset {key}"
+                    )
+
+            for code, before in symbol_before.items():
+                c.execute(
+                    "UPDATE supported_symbols SET display_name=?, asset_class=?, "
+                    "pip_value=?, status=?, added_at=?, updated_at=?, "
+                    "qualification_evidence_path=?, qualification_sha256=?, "
+                    "qualified_at=?, qualification_catalog_version=?, "
+                    "activation_origin=? WHERE symbol_code=?",
+                    (
+                        before["display_name"],
+                        before["asset_class"],
+                        before["pip_value"],
+                        before["status"],
+                        before["added_at"],
+                        before.get("updated_at"),
+                        before.get("qualification_evidence_path"),
+                        before.get("qualification_sha256"),
+                        before.get("qualified_at"),
+                        before.get("qualification_catalog_version"),
+                        before["activation_origin"],
+                        code,
+                    ),
+                )
+
+            for key, before in dataset_before.items():
+                code, timeframe = key.split(":", 1)
+                c.execute(
+                    "UPDATE dataset_registry SET candle_count=?, "
+                    "rolling_window_size=?, last_candle_timestamp=?, blob_path=?, "
+                    "status=?, last_error=?, last_updated=?, provider_used=?, "
+                    "external_ticker=?, provider_class=?, source_fetched_at=?, "
+                    "source_sha256=?, acquisition_metadata=?, "
+                    "legacy_provenance_pending=? WHERE symbol=? AND timeframe=?",
+                    (
+                        before.get("candle_count"),
+                        before.get("rolling_window_size"),
+                        before.get("last_candle_timestamp"),
+                        before.get("blob_path"),
+                        before.get("status"),
+                        before.get("last_error"),
+                        before.get("last_updated"),
+                        before.get("provider_used"),
+                        before.get("external_ticker"),
+                        before.get("provider_class"),
+                        before.get("source_fetched_at"),
+                        before.get("source_sha256"),
+                        encode_acquisition_metadata(
+                            before.get("acquisition_metadata")
+                        ),
+                        before.get("legacy_provenance_pending", 0),
+                        code,
+                        timeframe,
+                    ),
+                )
 
     def save_prediction(self, pred: dict) -> dict:
         symbol = str(pred.get("symbol") or pred.get("pair") or "").upper().strip()
@@ -2036,10 +2363,20 @@ class PostgreSQLDatabase(DatabaseAdapter):
     def get_symbols_by_status(self, status): raise NotImplementedError()
     def register_candidate(self, code, name, asset_class, pip): raise NotImplementedError()
     def mark_qualified(self, code, evidence): raise NotImplementedError()
+    def migrate_legacy_active_to_candidate(
+        self, code, *, expected_state=None
+    ): raise NotImplementedError()
     def _persist_authorized_activation(self, authorization): raise NotImplementedError()
-    def disable_symbol(self, code): raise NotImplementedError()
+    def disable_symbol(self, code, *, expected_state=None): raise NotImplementedError()
     def get_dataset_registry(self, symbol=None, tf=None): raise NotImplementedError()
     def upsert_dataset_registry(self, entry): raise NotImplementedError()
+    def quarantine_legacy_dataset_registry(
+        self, symbol, timeframe, *, expected_state, quarantine_path
+    ): raise NotImplementedError()
+    def restore_legacy_forex_migration_state(
+        self, *, symbol_before, symbol_after, dataset_before, dataset_after,
+        allow_unchanged=False
+    ): raise NotImplementedError()
     def save_prediction(self, pred): raise NotImplementedError()
     def get_predictions(self, symbol=None, tf=None, limit=50): raise NotImplementedError()
     def save_outcome(self, outcome): raise NotImplementedError()
