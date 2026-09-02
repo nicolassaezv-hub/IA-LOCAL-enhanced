@@ -12,8 +12,13 @@ import numpy as np
 import pandas as pd
 
 from forex.data.mt5_provider import MT5Provider
+from forex.data.ifc_session_authority import (
+    IFC_QUOTE_SESSION_EFFECTIVE_FROM,
+    IFC_SESSION_TIMEZONE,
+)
 from forex.data.rolling_dataset import ROLLING_WINDOW, RollingDataset, normalize_dataset
 from forex.data.symbol_catalog import get_symbol_spec, route_for_provider
+from forex.prediction.csv_adapter import filter_weekend_gaps
 from forex.prediction.shadow_runtime import (
     SHADOW_EXECUTION_MODE,
     SHADOW_HORIZON,
@@ -25,6 +30,7 @@ from forex.prediction.shadow_runtime import (
     shadow_retrain_due,
 )
 from infra.db.database import SQLiteDatabase
+from scheduler.autonomous_scheduler import registry_entry_readiness
 
 
 REPLAY_EXECUTION_MODE = "shadow_replay"
@@ -477,6 +483,9 @@ class HistoricalReplay:
         self.datasets: dict[tuple[str, str], RollingDataset] = {}
         self.revealed_h1: dict[str, pd.DataFrame] = {}
         self.generations: dict[str, list[dict]] = {symbol: [] for symbol in config.symbols}
+        self.initial_datasets: dict[str, dict[str, dict]] = {
+            symbol: {} for symbol in config.symbols
+        }
         self.event_counts = {
             symbol: {timeframe: 0 for timeframe in ("H1", "H4", "D1")}
             for symbol in config.symbols
@@ -484,6 +493,8 @@ class HistoricalReplay:
         self.duplicate_attempts = 0
         self.lookahead_violations = 0
         self.post_window_candles = 0
+        self.eligible_h1_events = {symbol: 0 for symbol in config.symbols}
+        self.ineligible_h1_events = {symbol: 0 for symbol in config.symbols}
 
     def _qualify_temp_symbol(self, symbol: str) -> None:
         spec = get_symbol_spec(symbol)
@@ -554,7 +565,59 @@ class HistoricalReplay:
             **causal,
         })
 
+    def _validate_initial_registry(
+        self, symbol: str, timeframe: str, registry: dict
+    ) -> dict:
+        dataset = self.datasets[(symbol, timeframe)]
+        frame = dataset.get_df()
+        if frame is None:
+            dataset.load()
+            frame = dataset.get_df()
+        earliest = _utc(frame["timestamp"].iloc[0])
+        latest = _utc(frame["timestamp"].iloc[-1])
+        authority_window_covered = None
+        if timeframe == "H1":
+            earliest_local = earliest.tz_convert(IFC_SESSION_TIMEZONE)
+            authority_window_covered = earliest_local >= IFC_QUOTE_SESSION_EFFECTIVE_FROM
+            if not authority_window_covered:
+                raise ValueError(
+                    "FOREX AUGUST REPLAY NOT READY — "
+                    f"INITIAL_DATASET_{symbol}_{timeframe}_"
+                    "SESSION_EVIDENCE_OUTSIDE_AUTHORITY_WINDOW"
+                )
+
+        readiness = registry_entry_readiness(
+            registry, project_root=self.config.root
+        )
+        evidence = {
+            "ready": readiness.get("ready") is True,
+            "rows": len(frame),
+            "earliest": earliest.isoformat(),
+            "latest": latest.isoformat(),
+            "readiness_reasons": list(readiness.get("reasons") or []),
+            "readiness_warnings": list(readiness.get("warnings") or []),
+            "h1_authority_effective_from": (
+                IFC_QUOTE_SESSION_EFFECTIVE_FROM.isoformat()
+                if timeframe == "H1"
+                else None
+            ),
+            "h1_authority_window_covered": authority_window_covered,
+        }
+        if (
+            evidence["ready"] is not True
+            or registry.get("status") != "ready"
+            or registry.get("candle_count") != ROLLING_WINDOW
+            or len(frame) != ROLLING_WINDOW
+        ):
+            raise ValueError(
+                "FOREX AUGUST REPLAY NOT READY — "
+                f"INITIAL_DATASET_{symbol}_{timeframe}_REGISTRY_NOT_READY"
+            )
+        self.initial_datasets[symbol][timeframe] = evidence
+        return evidence
+
     def prepare(self) -> None:
+        registries: dict[tuple[str, str], dict] = {}
         for symbol in self.config.symbols:
             self._qualify_temp_symbol(symbol)
             for timeframe in ("H1", "H4", "D1"):
@@ -569,9 +632,17 @@ class HistoricalReplay:
                 )
                 dataset.apply(initial, include_existing=False, now=self.config.start)
                 self.datasets[(symbol, timeframe)] = dataset
-                registry = self._upsert_registry(symbol, timeframe, self.config.start)
-                if registry.get("status") != "ready" or registry.get("candle_count") != 2000:
-                    raise ValueError(f"REPLAY_INITIAL_DATASET_NOT_READY: {symbol}/{timeframe}")
+                registries[(symbol, timeframe)] = self._upsert_registry(
+                    symbol, timeframe, self.config.start
+                )
+
+        for symbol in self.config.symbols:
+            for timeframe in ("H1", "H4", "D1"):
+                self._validate_initial_registry(
+                    symbol, timeframe, registries[(symbol, timeframe)]
+                )
+
+        for symbol in self.config.symbols:
             self.revealed_h1[symbol] = initial_rolling_cut(
                 self.sources[(symbol, "H1")], "H1", self.config.start
             )
@@ -614,6 +685,13 @@ class HistoricalReplay:
         current = self.runtime.storage.load(symbol)["metadata"]
         h1 = self.datasets[(symbol, "H1")].get_df()
         candle = _utc(h1["timestamp"].iloc[-1])
+        eligible_h1 = filter_weekend_gaps(
+            h1, gap_hours=4.0, n_candles_after=3
+        )
+        if eligible_h1.empty or _utc(eligible_h1["timestamp"].iloc[-1]) != candle:
+            self.ineligible_h1_events[symbol] += 1
+            return
+        self.eligible_h1_events[symbol] += 1
         prediction_id = replay_prediction_id(symbol, candle, current["model_generation"])
         if self.database.get_prediction(prediction_id) is not None:
             self.duplicate_attempts += 1
@@ -709,6 +787,8 @@ class HistoricalReplay:
                     for timeframe in ("H1", "H4", "D1")
                 },
                 "events": self.event_counts[symbol],
+                "eligible_h1_events": self.eligible_h1_events[symbol],
+                "ineligible_h1_events": self.ineligible_h1_events[symbol],
                 "predictions_generated": len(predictions),
                 "generations": self.generations[symbol],
                 "retrain_count": max(0, len(self.generations[symbol]) - 1),
@@ -724,7 +804,22 @@ class HistoricalReplay:
             "end": self.config.end.isoformat(),
             "source_provider": "MT5",
             "source_fallback_used": False,
-            "initial_rolling_datasets_all_2000": True,
+            "initial_datasets": self.initial_datasets,
+            "authority_preflight_pass": all(
+                evidence.get("ready") is True
+                and evidence.get("rows") == ROLLING_WINDOW
+                and (
+                    timeframe != "H1"
+                    or evidence.get("h1_authority_window_covered") is True
+                )
+                for timeframes in self.initial_datasets.values()
+                for timeframe, evidence in timeframes.items()
+            ) and sum(len(value) for value in self.initial_datasets.values()) == 6,
+            "initial_rolling_datasets_all_2000": all(
+                evidence.get("rows") == ROLLING_WINDOW
+                for timeframes in self.initial_datasets.values()
+                for evidence in timeframes.values()
+            ) and sum(len(value) for value in self.initial_datasets.values()) == 6,
             "lookahead_violations": self.lookahead_violations,
             "duplicate_predictions": self.duplicate_attempts,
             "post_window_candles_used_only_for_maturity": self.post_window_candles,

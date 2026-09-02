@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import forex.replay.historical_replay as replay_module
 from forex.prediction.shadow_runtime import (
     SHADOW_FEATURE_PROFILE,
     SHADOW_HORIZON,
@@ -257,6 +258,67 @@ def test_retrain_is_due_at_exactly_168_new_h1_and_not_performance_driven():
     assert retrain_due(cutoff, timestamps[:167], cadence=168) is False
     assert retrain_due(cutoff, timestamps, cadence=168) is True
     assert "accuracy" not in retrain_due.__code__.co_varnames
+
+
+def test_post_gap_filtered_h1_does_not_repeat_previous_prediction(
+    monkeypatch,
+):
+    friday = _frame("2026-08-07T18:00:00Z", 3, "1h")
+    monday = _frame("2026-08-10T00:00:00Z", 4, "1h")
+
+    class Dataset:
+        frame = pd.concat([friday, monday.iloc[:1]], ignore_index=True)
+
+        def get_df(self):
+            return self.frame
+
+    class Database:
+        @staticmethod
+        def get_prediction(_prediction_id):
+            return None
+
+    calls = []
+
+    class Storage:
+        @staticmethod
+        def load(_symbol):
+            return {"metadata": {"model_generation": 1}}
+
+    class Runtime:
+        storage = Storage()
+
+        @staticmethod
+        def train(_symbol, *, available_at):
+            return {"action": "not_due"}
+
+        @staticmethod
+        def run_shadow_prediction(symbol, *, execution_mode, predicted_at):
+            calls.append((symbol, predicted_at))
+            return {"prediction": {"execution_mode": execution_mode}}
+
+    replay = HistoricalReplay.__new__(HistoricalReplay)
+    replay.database = Database()
+    replay.runtime = Runtime()
+    replay.datasets = {("EURUSD", "H1"): Dataset()}
+    replay.revealed_h1 = {"EURUSD": Dataset.frame}
+    replay.generations = {"EURUSD": []}
+    replay.duplicate_attempts = 0
+    replay.eligible_h1_events = {"EURUSD": 0}
+    replay.ineligible_h1_events = {"EURUSD": 0}
+    monkeypatch.setattr(replay_module, "mature_shadow_outcomes", lambda *_a, **_k: 0)
+
+    replay._process_h1("EURUSD", "2026-08-10T01:00:00Z")
+    assert calls == []
+    assert replay.ineligible_h1_events["EURUSD"] == 1
+
+    replay.datasets[("EURUSD", "H1")].frame = pd.concat(
+        [friday, monday], ignore_index=True
+    )
+    replay.revealed_h1["EURUSD"] = replay.datasets[("EURUSD", "H1")].frame
+    replay._process_h1("EURUSD", "2026-08-10T04:00:00Z")
+
+    assert calls == [("EURUSD", "2026-08-10T04:00:00Z")]
+    assert replay.eligible_h1_events["EURUSD"] == 1
 
 
 def test_generations_and_old_prediction_identity_are_preserved():

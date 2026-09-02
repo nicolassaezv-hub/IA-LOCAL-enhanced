@@ -152,13 +152,19 @@ def main(argv=None) -> int:
     result["operational_pass"] = bool(
         result["lookahead_violations"] == 0
         and result["duplicate_predictions"] == 0
+        and result["authority_preflight_pass"]
         and result["initial_rolling_datasets_all_2000"]
         and not changed
         and result["real_state_isolation"]["canaries_unchanged"]
         and result["real_state_isolation"]["lifecycle_unchanged"]
         and result["real_state_isolation"]["production_aliases_absent"]
         and all(
-            item["pending_directional"] == 0 and item["predictions_generated"] == item["events"]["H1"]
+            item["pending_directional"] == 0
+            and item["predictions_generated"] == item["eligible_h1_events"]
+            and item["eligible_h1_events"] + item["ineligible_h1_events"]
+            == item["events"]["H1"]
+            and item["generations"]
+            and item["generations"][0]["generation"] == 1
             for item in result["symbols"].values()
         )
     )
