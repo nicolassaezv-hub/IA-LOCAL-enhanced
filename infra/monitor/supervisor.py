@@ -10,10 +10,12 @@ Monitors the health of ASTRA workspace components without supervising them:
 systemd remains the sole production restart authority.
 """
 
+import argparse
 import sys
 import os
 import time
 import signal
+import socket
 import sqlite3
 import urllib.request
 import urllib.error
@@ -71,91 +73,197 @@ signal.signal(signal.SIGINT, handle_shutdown)
 signal.signal(signal.SIGTERM, handle_shutdown)
 
 
+def _api_failure_classification(exc: Exception) -> str:
+    """Return a safe classification without serializing request evidence."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"HTTP_STATUS_{exc.code}"
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return "TIMEOUT"
+    if isinstance(exc, urllib.error.URLError):
+        reason = exc.reason
+        if isinstance(reason, (TimeoutError, socket.timeout)):
+            return "TIMEOUT"
+        if isinstance(reason, ConnectionRefusedError):
+            return "CONNECTION_REFUSED"
+        return "URL_NETWORK_ERROR"
+    if isinstance(exc, ConnectionRefusedError):
+        return "CONNECTION_REFUSED"
+    return f"OTHER_{type(exc).__name__}"
+
+
 def check_api_health() -> bool:
-    """Verifies that the FastAPI workspace server is responding on health or status endpoints."""
-    urls = [
-        f"http://{API_HOST}:{API_PORT}/health",
-        f"http://{API_HOST}:{API_PORT}/api/status",
-    ]
-    
-    for url in urls:
+    """Verify API health while retaining safe endpoint diagnostics."""
+    endpoints = ("/health", "/api/status")
+    failures = []
+
+    for endpoint in endpoints:
+        url = f"http://{API_HOST}:{API_PORT}{endpoint}"
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "ASTRA-Supervisor/1.0"})
             with urllib.request.urlopen(req, timeout=5) as response:
                 if response.status in (200, 201):
                     logger.debug(f"[health] API responded OK at {url}")
                     return True
-        except Exception:
-            continue
+                classification = f"HTTP_STATUS_{response.status}"
+        except Exception as exc:
+            classification = _api_failure_classification(exc)
+        failures.append(f"{endpoint}={classification}")
+        logger.debug(
+            "[health] HTTP_HEALTH_ENDPOINT_FAILED endpoint=%s class=%s",
+            endpoint,
+            classification,
+        )
 
     # Socket fallback check
-    import socket
     try:
         with socket.create_connection((API_HOST, API_PORT), timeout=3):
-            logger.debug(f"[health] API socket check connected at {API_HOST}:{API_PORT}")
+            logger.warning(
+                "[health] HTTP_HEALTH_FAILED_SOCKET_REACHABLE host=%s port=%s "
+                "failures=%s",
+                API_HOST,
+                API_PORT,
+                ",".join(failures),
+            )
             return True
-    except Exception as e:
-        logger.warning(f"[health] API port check failed on {API_HOST}:{API_PORT}: {e}")
+    except Exception as exc:
+        logger.warning(
+            "[health] API_HEALTH_FAILED host=%s port=%s failures=%s socket=%s",
+            API_HOST,
+            API_PORT,
+            ",".join(failures),
+            _api_failure_classification(exc),
+        )
         return False
+
+
+def _resolved_database_path() -> Path:
+    path = Path(DB_PATH)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    return path.resolve()
+
+
+def _connect_database_read_only(path: Path, *, timeout: float):
+    return sqlite3.connect(path.as_uri() + "?mode=ro", timeout=timeout, uri=True)
 
 
 def check_database_health() -> bool:
-    """Verifies SQLite database is accessible and not corrupt or locked."""
-    abs_db = Path(DB_PATH)
-    if not abs_db.is_absolute():
-        abs_db = PROJECT_ROOT / abs_db
+    """Verify live SQLite integrity without requesting write access."""
+    abs_db = _resolved_database_path()
+    parent = abs_db.parent
 
-    if not abs_db.exists():
-        logger.warning(f"[database] DB file does not exist at {abs_db}. Will be initialized on first write.")
+    if not parent.is_dir() or not os.access(parent, os.R_OK | os.X_OK):
+        logger.critical(
+            "[database] DB_PARENT_INACCESSIBLE path=%s parent=%s",
+            abs_db,
+            parent,
+        )
+        return False
+
+    if not abs_db.is_file():
+        logger.warning(
+            "[database] DB_FILE_MISSING path=%s; initialization remains the "
+            "responsibility of the first writer",
+            abs_db,
+        )
         return True
 
+    connection = None
+    phase = "connect"
     try:
-        conn = sqlite3.connect(str(abs_db), timeout=5.0)
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA quick_check;")
-        res = cursor.fetchone()
-        conn.close()
-
-        if res and res[0].lower() == "ok":
-            logger.debug("[database] SQLite PRAGMA quick_check PASSED.")
-            return True
-        else:
-            logger.critical(f"[database] SQLite quick_check failed: {res}")
+        connection = _connect_database_read_only(abs_db, timeout=5.0)
+        cursor = connection.cursor()
+        phase = "query_only"
+        cursor.execute("PRAGMA query_only = ON;")
+        cursor.execute("PRAGMA query_only;")
+        query_only = cursor.fetchone()
+        if not query_only or int(query_only[0]) != 1:
+            logger.critical(
+                "[database] SQLITE_QUERY_ONLY_FAILED path=%s result=%r",
+                abs_db,
+                query_only,
+            )
             return False
-    except sqlite3.OperationalError as oe:
-        logger.critical(f"[database] SQLite operational error (DB locked or inaccessible): {oe}")
+        phase = "quick_check"
+        cursor.execute("PRAGMA quick_check;")
+        results = cursor.fetchall()
+
+        if len(results) == 1 and str(results[0][0]).lower() == "ok":
+            logger.debug("[database] SQLite read-only PRAGMA quick_check PASSED path=%s", abs_db)
+            return True
+        logger.critical(
+            "[database] SQLITE_QUICK_CHECK_FAILED path=%s result_count=%s",
+            abs_db,
+            len(results),
+        )
         return False
-    except sqlite3.DatabaseError as de:
-        logger.critical(f"[database] SQLite database corrupt: {de}")
+    except sqlite3.OperationalError as exc:
+        classification = (
+            "SQLITE_READ_ONLY_CONNECT_FAILED "
+            if phase == "connect"
+            else ""
+        )
+        logger.critical(
+            "[database] %sSQLITE_OPERATIONAL_LOCK_OR_ACCESS_ERROR "
+            "path=%s phase=%s detail=%s",
+            classification,
+            abs_db,
+            phase,
+            exc,
+        )
         return False
-    except Exception as e:
-        logger.critical(f"[database] Unexpected error accessing SQLite DB: {e}")
+    except sqlite3.DatabaseError as exc:
+        logger.critical(
+            "[database] SQLITE_DATABASE_CORRUPTION path=%s phase=%s detail=%s",
+            abs_db,
+            phase,
+            exc,
+        )
         return False
+    except Exception as exc:
+        classification = (
+            "SQLITE_READ_ONLY_CONNECT_FAILED"
+            if phase == "connect"
+            else "SQLITE_HEALTHCHECK_EXCEPTION"
+        )
+        logger.critical(
+            "[database] %s path=%s phase=%s exception_type=%s",
+            classification,
+            abs_db,
+            phase,
+            type(exc).__name__,
+        )
+        return False
+    finally:
+        if connection is not None:
+            connection.close()
 
 
 def get_last_scheduler_run_time(timeframe: str) -> datetime | None:
     """Gets the timestamp of the last successful run for a timeframe."""
     # 1. Check SQLite DB
-    abs_db = Path(DB_PATH)
-    if not abs_db.is_absolute():
-        abs_db = PROJECT_ROOT / abs_db
+    abs_db = _resolved_database_path()
 
-    if abs_db.exists():
+    if abs_db.is_file():
+        connection = None
         try:
-            conn = sqlite3.connect(str(abs_db), timeout=3.0)
-            cursor = conn.cursor()
+            connection = _connect_database_read_only(abs_db, timeout=3.0)
+            cursor = connection.cursor()
+            cursor.execute("PRAGMA query_only = ON;")
             cursor.execute("""
                 SELECT timestamp FROM scheduler_runs 
                 WHERE timeframe=? AND status='SUCCESS' 
                 ORDER BY id DESC LIMIT 1
             """, (timeframe,))
             row = cursor.fetchone()
-            conn.close()
 
             if row and row[0]:
                 return datetime.fromisoformat(row[0])
         except Exception:
             pass
+        finally:
+            if connection is not None:
+                connection.close()
 
     # 2. Check marker file /var/log/astra/scheduler_<tf>.last
     marker = LOG_DIR / f"scheduler_{timeframe}.last"
@@ -237,5 +345,40 @@ def run_supervisor():
     logger.info("ASTRA Supervisor Process Monitor stopped.")
 
 
-if __name__ == "__main__":
+def run_check_once() -> int:
+    """Run one observational cycle; scheduler freshness is advisory only."""
+    api_ok = check_api_health()
+    db_ok = check_database_health()
+    try:
+        check_scheduler_freshness()
+    except Exception as exc:
+        logger.warning(
+            "[check-once] SCHEDULER_FRESHNESS_CHECK_FAILED exception_type=%s",
+            type(exc).__name__,
+        )
+    exit_code = 0 if api_ok and db_ok else 1
+    logger.info(
+        "[check-once] API=%s DB=%s scheduler=advisory exit=%s",
+        "PASS" if api_ok else "FAIL",
+        "PASS" if db_ok else "FAIL",
+        exit_code,
+    )
+    return exit_code
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="ASTRA diagnostic health monitor")
+    parser.add_argument(
+        "--check-once",
+        action="store_true",
+        help="run one API/DB/scheduler diagnostic cycle and exit",
+    )
+    args = parser.parse_args(argv)
+    if args.check_once:
+        return run_check_once()
     run_supervisor()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
