@@ -11,6 +11,8 @@ systemd remains the sole production restart authority.
 """
 
 import argparse
+import json
+import re
 import sys
 import os
 import time
@@ -20,7 +22,7 @@ import sqlite3
 import urllib.request
 import urllib.error
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Ensure project root is in sys.path
@@ -35,6 +37,17 @@ if API_HOST == "0.0.0.0":
     API_HOST = "127.0.0.1"
 API_PORT = int(os.environ.get("ASTRA_API_PORT", 8000))
 DB_PATH = os.environ.get("ASTRA_DB_PATH", "memory_db/astra_autonomous.db")
+STARTUP_GRACE_SECONDS = max(
+    30,
+    min(60, int(os.environ.get("ASTRA_MONITOR_STARTUP_GRACE_SECONDS", 45))),
+)
+DELEGATED_DB_HEALTH_ENDPOINT = "/api/health/database"
+_DB_HEALTH_STATES = frozenset({
+    "DB_HEALTH_PASS",
+    "DB_HEALTH_FAILED",
+    "DB_HEALTH_UNAVAILABLE",
+})
+_SAFE_CLASSIFICATION = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 
 # Thresholds for scheduler runs (in seconds)
 SCHEDULER_THRESHOLDS = {
@@ -61,6 +74,7 @@ c_handler.setFormatter(formatter)
 logger.addHandler(c_handler)
 
 _running = True
+_scheduler_disabled_logged = False
 
 
 def handle_shutdown(signum, frame):
@@ -91,7 +105,7 @@ def _api_failure_classification(exc: Exception) -> str:
     return f"OTHER_{type(exc).__name__}"
 
 
-def check_api_health() -> bool:
+def check_api_health(*, startup_grace: bool = False) -> bool:
     """Verify API health while retaining safe endpoint diagnostics."""
     endpoints = ("/health", "/api/status")
     failures = []
@@ -126,14 +140,69 @@ def check_api_health() -> bool:
             )
             return True
     except Exception as exc:
-        logger.warning(
-            "[health] API_HEALTH_FAILED host=%s port=%s failures=%s socket=%s",
+        log = logger.info if startup_grace else logger.warning
+        classification = _api_failure_classification(exc)
+        log(
+            "[health] %s host=%s port=%s failures=%s socket=%s",
+            (
+                "API_STARTUP_GRACE"
+                if startup_grace
+                else "API_HEALTH_FAILED"
+            ),
             API_HOST,
             API_PORT,
             ",".join(failures),
-            _api_failure_classification(exc),
+            classification,
         )
         return False
+
+
+def check_delegated_database_health() -> dict[str, str]:
+    """Consume the API-owned DB probe without exposing response evidence."""
+    url = (
+        f"http://{API_HOST}:{API_PORT}"
+        f"{DELEGATED_DB_HEALTH_ENDPOINT}"
+    )
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "ASTRA-Supervisor/1.0"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            body = response.read(4097)
+    except urllib.error.HTTPError as exc:
+        body = exc.read(4097)
+    except Exception:
+        return {
+            "state": "DB_HEALTH_UNAVAILABLE",
+            "classification": "API_UNREACHABLE",
+        }
+
+    if len(body) > 4096:
+        return {
+            "state": "DB_HEALTH_UNAVAILABLE",
+            "classification": "INVALID_HEALTH_RESPONSE",
+        }
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {
+            "state": "DB_HEALTH_UNAVAILABLE",
+            "classification": "INVALID_HEALTH_RESPONSE",
+        }
+    state = payload.get("state") if isinstance(payload, dict) else None
+    classification = (
+        payload.get("classification") if isinstance(payload, dict) else None
+    )
+    if (
+        state not in _DB_HEALTH_STATES
+        or not isinstance(classification, str)
+        or _SAFE_CLASSIFICATION.fullmatch(classification) is None
+    ):
+        return {
+            "state": "DB_HEALTH_UNAVAILABLE",
+            "classification": "INVALID_HEALTH_RESPONSE",
+        }
+    return {"state": state, "classification": classification}
 
 
 def _resolved_database_path() -> Path:
@@ -288,6 +357,16 @@ def get_last_scheduler_run_time(timeframe: str) -> datetime | None:
 
 def check_scheduler_freshness():
     """Checks whether H1, H4, and D1 schedulers have executed within expected thresholds."""
+    global _scheduler_disabled_logged
+    scheduler_enabled = os.environ.get(
+        "ASTRA_SCHEDULER_ENABLED", "true"
+    ).strip().lower() not in {"0", "false", "no", "off"}
+    if not scheduler_enabled:
+        if not _scheduler_disabled_logged:
+            logger.info("[scheduler] SCHEDULER_MONITORING_DISABLED")
+            _scheduler_disabled_logged = True
+        return
+    _scheduler_disabled_logged = False
     now = datetime.now()
 
     for tf, threshold in SCHEDULER_THRESHOLDS.items():
@@ -308,30 +387,63 @@ def check_scheduler_freshness():
             logger.debug(f"[scheduler] {tf} scheduler fresh (last run {elapsed/60.0:.1f}m ago).")
 
 
+def run_monitor_cycle(*, startup_grace: bool) -> dict[str, str]:
+    """Run one daemon cycle using only delegated database evidence."""
+    api_ok = check_api_health(startup_grace=startup_grace)
+    if not api_ok:
+        if startup_grace:
+            logger.info(
+                "[startup] API_STARTUP_GRACE API_UNREACHABLE; "
+                "database health unavailable until API startup completes"
+            )
+        else:
+            logger.error(
+                "[alert] API_UNREACHABLE; astra-api appears DOWN or "
+                "unresponsive; systemd restart policy remains authoritative."
+            )
+        result = {
+            "api": "API_UNREACHABLE",
+            "database": "DB_HEALTH_UNAVAILABLE",
+        }
+    else:
+        database_health = check_delegated_database_health()
+        state = database_health["state"]
+        classification = database_health["classification"]
+        result = {"api": "API_HEALTH_PASS", "database": state}
+        if state == "DB_HEALTH_PASS":
+            logger.debug(
+                "[database] DB_HEALTH_PASS classification=%s",
+                classification,
+            )
+        elif state == "DB_HEALTH_FAILED":
+            logger.critical(
+                "[alert] DB_HEALTH_FAILED classification=%s; no automatic "
+                "database or service mutation was attempted.",
+                classification,
+            )
+        else:
+            logger.warning(
+                "[database] DB_HEALTH_UNAVAILABLE classification=%s; "
+                "database health was not declared healthy.",
+                classification,
+            )
+
+    check_scheduler_freshness()
+    return result
+
+
 def run_supervisor():
     logger.info("Starting ASTRA Supervisor Process Monitor...")
     logger.info(f"Target API: http://{API_HOST}:{API_PORT} | Interval: {INTERVAL_SECONDS}s | DB: {DB_PATH}")
+    started_at = time.monotonic()
 
     while _running:
         try:
-            # 1. API Health Check
-            api_ok = check_api_health()
-            if not api_ok:
-                logger.error(
-                    "[alert] astra-api appears DOWN or unresponsive; "
-                    "systemd restart policy remains authoritative."
+            run_monitor_cycle(
+                startup_grace=(
+                    time.monotonic() - started_at < STARTUP_GRACE_SECONDS
                 )
-
-            # 2. Database Health Check
-            db_ok = check_database_health()
-            if not db_ok:
-                logger.critical(
-                    "[alert] SQLite database issue detected; no automatic "
-                    "database or service mutation was attempted."
-                )
-
-            # 3. Scheduler Freshness Check
-            check_scheduler_freshness()
+            )
 
         except Exception as e:
             logger.error(f"[supervisor] Unhandled exception in main monitor loop: {e}", exc_info=True)

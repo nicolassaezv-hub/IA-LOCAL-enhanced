@@ -33,6 +33,77 @@ def configured_sqlite_path() -> Path:
     return configured_project_path("ASTRA_DB_PATH", DEFAULT_SQLITE_DB_PATH)
 
 
+def probe_database_health(db_path: Path | str | None = None) -> dict[str, str]:
+    """Inspect the live SQLite database without initializing or mutating schema.
+
+    This probe is intended for a trusted ASTRA process with normal database
+    filesystem access.  ``mode=rw`` prevents accidental database creation;
+    ``query_only`` prevents SQL writes while allowing SQLite to observe live
+    WAL/SHM state through its normal connection semantics.
+    """
+    path = Path(db_path) if db_path is not None else configured_sqlite_path()
+    path = path.expanduser().resolve()
+    if not path.is_file():
+        return {
+            "state": "DB_HEALTH_UNAVAILABLE",
+            "classification": "DB_FILE_MISSING",
+        }
+
+    connection = None
+    phase = "connect"
+    try:
+        connection = sqlite3.connect(
+            path.as_uri() + "?mode=rw", timeout=5.0, uri=True
+        )
+        cursor = connection.cursor()
+        phase = "query_only"
+        cursor.execute("PRAGMA query_only = ON;")
+        cursor.execute("PRAGMA query_only;")
+        query_only = cursor.fetchone()
+        if not query_only or int(query_only[0]) != 1:
+            return {
+                "state": "DB_HEALTH_FAILED",
+                "classification": "SQLITE_QUERY_ONLY_FAILED",
+            }
+
+        phase = "quick_check"
+        cursor.execute("PRAGMA quick_check;")
+        results = cursor.fetchall()
+        if len(results) == 1 and str(results[0][0]).lower() == "ok":
+            return {
+                "state": "DB_HEALTH_PASS",
+                "classification": "SQLITE_QUICK_CHECK_OK",
+            }
+        return {
+            "state": "DB_HEALTH_FAILED",
+            "classification": "SQLITE_QUICK_CHECK_FAILED",
+        }
+    except sqlite3.OperationalError:
+        return {
+            "state": (
+                "DB_HEALTH_UNAVAILABLE" if phase == "connect" else "DB_HEALTH_FAILED"
+            ),
+            "classification": (
+                "SQLITE_CONNECT_FAILED"
+                if phase == "connect"
+                else "SQLITE_OPERATIONAL_ERROR"
+            ),
+        }
+    except sqlite3.DatabaseError:
+        return {
+            "state": "DB_HEALTH_FAILED",
+            "classification": "SQLITE_DATABASE_CORRUPTION",
+        }
+    except Exception:
+        return {
+            "state": "DB_HEALTH_UNAVAILABLE",
+            "classification": "DATABASE_HEALTH_PROBE_ERROR",
+        }
+    finally:
+        if connection is not None:
+            connection.close()
+
+
 class PersistenceConflictError(RuntimeError):
     """Raised when one stable identity is reused for conflicting evidence."""
 

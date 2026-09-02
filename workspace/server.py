@@ -107,6 +107,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from astra_version import ASTRA_VERSION
+from infra.db.database import probe_database_health
 from runtime_security import AuthResult, authenticate_headers, configured_bind_host
 from workspace.path_safety import UnsafePathError, resolve_user_path_in_roots
 from workspace.upload_storage import store_upload
@@ -142,7 +143,11 @@ _UPLOAD_DIR = str(_UPLOAD_ROOT)
 _CSV_BASE = str(_CSV_ROOT)
 _UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
 
-_PUBLIC_MINIMAL_PATHS = frozenset({"/health", "/api/health"})
+_PUBLIC_MINIMAL_PATHS = frozenset({
+    "/health",
+    "/api/health",
+    "/api/health/database",
+})
 _AUTHENTICATED_METADATA_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
 
 
@@ -386,6 +391,19 @@ def _run_sentinel_scans() -> None:
 @app.get("/api/health")
 def get_health() -> JSONResponse:
     return JSONResponse({"status": "ok"})
+
+
+@app.get("/api/health/database")
+def get_database_health() -> JSONResponse:
+    evidence = probe_database_health()
+    payload = {
+        "state": evidence.get("state", "DB_HEALTH_UNAVAILABLE"),
+        "classification": evidence.get(
+            "classification", "INVALID_HEALTH_RESPONSE"
+        ),
+    }
+    status_code = 200 if payload["state"] == "DB_HEALTH_PASS" else 503
+    return JSONResponse(payload, status_code=status_code)
 
 
 @app.get("/api/status")
