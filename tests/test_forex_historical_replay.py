@@ -17,6 +17,7 @@ from forex.prediction.shadow_runtime import (
 )
 from forex.replay.historical_replay import (
     EVENT_PRIORITY,
+    HistoricalReplay,
     HistoricalReplayConfig,
     ReplayDuplicateError,
     ReplayLookaheadError,
@@ -53,6 +54,27 @@ def _frame(start: str, periods: int, frequency: str, symbol: str = "EURUSD"):
         "volume": 1.0,
         "pair": symbol,
     })
+
+
+def _preflight_sources():
+    sources = {}
+    metadata = {}
+    for symbol in ("EURUSD", "USDJPY"):
+        for timeframe, frequency, duration in (
+            ("H1", "1h", pd.Timedelta(hours=1)),
+            ("H4", "4h", pd.Timedelta(hours=4)),
+            ("D1", "1D", pd.Timedelta(days=1)),
+        ):
+            end = pd.Timestamp("2026-08-01T00:00:00Z") - duration
+            frame = _frame(
+                (end - (2000 * pd.Timedelta(frequency))).isoformat(),
+                2001,
+                frequency,
+                symbol,
+            )
+            sources[(symbol, timeframe)] = frame
+            metadata[(symbol, timeframe)] = {}
+    return sources, metadata
 
 
 @pytest.mark.parametrize(
@@ -264,6 +286,104 @@ def test_replay_configuration_is_temporary_and_has_no_production_override(tmp_pa
     assert config.model_root.is_relative_to(tmp_path)
     assert config.dataset_root.is_relative_to(tmp_path)
     assert "production" not in HistoricalReplayConfig.__dataclass_fields__
+
+
+def test_all_six_initial_datasets_are_validated_before_any_training(tmp_path, monkeypatch):
+    sources, metadata = _preflight_sources()
+    replay = HistoricalReplay(
+        HistoricalReplayConfig(
+            start="2026-08-01T00:00:00Z",
+            end="2026-09-01T00:00:00Z",
+            symbols=("EURUSD", "USDJPY"),
+            root=tmp_path,
+        ),
+        sources,
+        metadata,
+    )
+    events = []
+    monkeypatch.setattr(replay, "_qualify_temp_symbol", lambda symbol: None)
+    monkeypatch.setattr(
+        replay,
+        "_upsert_registry",
+        lambda symbol, timeframe, clock: {
+            "status": "ready",
+            "candle_count": 2000,
+            "symbol": symbol,
+            "timeframe": timeframe,
+        },
+    )
+    monkeypatch.setattr(
+        replay,
+        "_validate_initial_registry",
+        lambda symbol, timeframe, registry: events.append(
+            ("validated", symbol, timeframe)
+        ) or {"ready": True},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        replay.runtime,
+        "train",
+        lambda symbol, available_at: events.append(("trained", symbol)) or {
+            "action": "not_due"
+        },
+    )
+
+    replay.prepare()
+
+    assert events[:6] == [
+        ("validated", symbol, timeframe)
+        for symbol in ("EURUSD", "USDJPY")
+        for timeframe in ("H1", "H4", "D1")
+    ]
+    assert events[6:] == [("trained", "EURUSD"), ("trained", "USDJPY")]
+
+
+def test_failed_initial_dataset_preflight_prevents_all_training(tmp_path, monkeypatch):
+    sources, metadata = _preflight_sources()
+    replay = HistoricalReplay(
+        HistoricalReplayConfig(
+            start="2026-08-01T00:00:00Z",
+            end="2026-09-01T00:00:00Z",
+            symbols=("EURUSD", "USDJPY"),
+            root=tmp_path,
+        ),
+        sources,
+        metadata,
+    )
+    trained = []
+    monkeypatch.setattr(replay, "_qualify_temp_symbol", lambda symbol: None)
+    monkeypatch.setattr(
+        replay,
+        "_upsert_registry",
+        lambda symbol, timeframe, clock: {
+            "status": "ready",
+            "candle_count": 2000,
+            "symbol": symbol,
+            "timeframe": timeframe,
+        },
+    )
+
+    def validate(symbol, timeframe, registry):
+        if (symbol, timeframe) == ("USDJPY", "H4"):
+            raise ValueError(
+                "FOREX AUGUST REPLAY NOT READY — "
+                "INITIAL_DATASET_USDJPY_H4_REGISTRY_NOT_READY"
+            )
+        return {"ready": True}
+
+    monkeypatch.setattr(
+        replay, "_validate_initial_registry", validate, raising=False
+    )
+    monkeypatch.setattr(
+        replay.runtime,
+        "train",
+        lambda symbol, available_at: trained.append(symbol) or {"action": "not_due"},
+    )
+
+    with pytest.raises(ValueError, match="INITIAL_DATASET_USDJPY_H4_REGISTRY_NOT_READY"):
+        replay.prepare()
+
+    assert trained == []
 
 
 def test_source_hash_is_deterministic_and_content_bound():
