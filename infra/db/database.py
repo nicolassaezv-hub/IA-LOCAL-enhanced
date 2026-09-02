@@ -340,7 +340,8 @@ class SQLiteDatabase(DatabaseAdapter):
                 direction_correct INTEGER NOT NULL,
                 model_identity TEXT NOT NULL,
                 model_generation INTEGER NOT NULL,
-                execution_mode TEXT NOT NULL CHECK(execution_mode='shadow'),
+                execution_mode TEXT NOT NULL
+                    CHECK(execution_mode IN ('shadow','shadow_replay')),
                 status TEXT NOT NULL CHECK(status='FINALIZED'),
                 finalized_at TEXT NOT NULL
             );
@@ -630,7 +631,8 @@ class SQLiteDatabase(DatabaseAdapter):
                 direction_correct INTEGER NOT NULL,
                 model_identity TEXT NOT NULL,
                 model_generation INTEGER NOT NULL,
-                execution_mode TEXT NOT NULL CHECK(execution_mode='shadow'),
+                execution_mode TEXT NOT NULL
+                    CHECK(execution_mode IN ('shadow','shadow_replay')),
                 status TEXT NOT NULL CHECK(status='FINALIZED'),
                 finalized_at TEXT NOT NULL
             );
@@ -1441,6 +1443,9 @@ class SQLiteDatabase(DatabaseAdapter):
             or not outcome.get("model_identity")
         ):
             raise ValueError("shadow outcome evidence is invalid")
+        execution_mode = str(outcome.get("execution_mode") or "shadow").lower()
+        if execution_mode not in ("shadow", "shadow_replay"):
+            raise ValueError("shadow outcome execution mode is invalid")
         immutable = {
             "prediction_id": prediction_id,
             "symbol": str(outcome.get("symbol") or "").upper(),
@@ -1454,7 +1459,7 @@ class SQLiteDatabase(DatabaseAdapter):
             "direction_correct": int(outcome["direction_correct"]),
             "model_identity": str(outcome["model_identity"]),
             "model_generation": generation,
-            "execution_mode": "shadow",
+            "execution_mode": execution_mode,
             "status": "FINALIZED",
         }
         with self._writable_connection() as c:
@@ -1464,7 +1469,7 @@ class SQLiteDatabase(DatabaseAdapter):
             if source is None:
                 raise ValueError(f"source prediction does not exist: {prediction_id}")
             if (
-                source["execution_mode"] != "shadow"
+                source["execution_mode"] != execution_mode
                 or str(source["action"] or source["direction"] or "").upper() != action
                 or source["model_identity"] != immutable["model_identity"]
                 or int(source["model_generation"] or 0) != generation
@@ -1512,10 +1517,16 @@ class SQLiteDatabase(DatabaseAdapter):
         return stored
 
     def get_shadow_outcomes(
-        self, symbol: str = None, model_identity: str = None
+        self,
+        symbol: str = None,
+        model_identity: str = None,
+        execution_mode: str = "shadow",
     ) -> list[dict]:
-        query = "SELECT * FROM shadow_outcomes WHERE execution_mode='shadow'"
-        params: list = []
+        mode = str(execution_mode).lower()
+        if mode not in ("shadow", "shadow_replay"):
+            raise ValueError("shadow outcome execution mode is invalid")
+        query = "SELECT * FROM shadow_outcomes WHERE execution_mode=?"
+        params: list = [mode]
         if symbol:
             query += " AND symbol=?"
             params.append(symbol.upper())

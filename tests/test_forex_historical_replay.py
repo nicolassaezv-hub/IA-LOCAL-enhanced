@@ -7,6 +7,14 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from forex.prediction.shadow_runtime import (
+    SHADOW_FEATURE_PROFILE,
+    SHADOW_HORIZON,
+    SHADOW_MODEL_CONTRACT,
+    SHADOW_TARGET_PROFILE,
+    mature_shadow_outcomes,
+    persist_shadow_prediction,
+)
 from forex.replay.historical_replay import (
     EVENT_PRIORITY,
     HistoricalReplayConfig,
@@ -26,6 +34,7 @@ from forex.replay.historical_replay import (
     verify_snapshots,
     visible_source,
 )
+from infra.db.database import SQLiteDatabase
 
 
 START = pd.Timestamp("2026-07-01T00:00:00Z")
@@ -48,19 +57,19 @@ def _frame(start: str, periods: int, frequency: str, symbol: str = "EURUSD"):
 
 @pytest.mark.parametrize(
     ("timeframe", "delta"),
-    (("H1", "1h"), ("H4", "4h"), ("D1", "1d")),
+    (("H1", "1h"), ("H4", "4h"), ("D1", "1D")),
 )
 def test_future_candles_hidden_before_available_at(timeframe, delta):
     timestamp = pd.Timestamp("2026-07-01T00:00:00Z")
     assert candle_available_at(timestamp, timeframe) == timestamp + pd.Timedelta(delta)
-    frame = _frame("2026-07-01", 2, {"H1": "1h", "H4": "4h", "D1": "1d"}[timeframe])
+    frame = _frame("2026-07-01", 2, {"H1": "1h", "H4": "4h", "D1": "1D"}[timeframe])
     assert visible_source(frame, timeframe, timestamp).empty
 
 
 def test_same_time_event_order_is_d1_h4_h1():
     timestamp = pd.Timestamp("2026-07-01T00:00:00Z")
     sources = {
-        ("EURUSD", timeframe): pd.DataFrame({"timestamp": [timestamp - pd.Timedelta({"D1": "1d", "H4": "4h", "H1": "1h"}[timeframe])]})
+        ("EURUSD", timeframe): pd.DataFrame({"timestamp": [timestamp - pd.Timedelta({"D1": "1D", "H4": "4h", "H1": "1h"}[timeframe])]})
         for timeframe in ("H1", "H4", "D1")
     }
     queue = build_event_queue(sources, timestamp, timestamp + pd.Timedelta(seconds=1))
@@ -137,6 +146,55 @@ def test_hold_is_persisted_but_never_creates_directional_outcome():
     finalized = book.mature("EURUSD", _frame(START.isoformat(), 13, "1h"), START + pd.Timedelta(hours=13))
     assert finalized == []
     assert len(book.predictions) == 1
+
+
+def test_real_shadow_persistence_primitives_support_isolated_replay_mode(tmp_path):
+    database = SQLiteDatabase(str(tmp_path / "replay.sqlite"))
+    database.add_symbol("EURUSD", "EUR/USD", 0.0001)
+    with database._writable_connection() as connection:
+        connection.execute(
+            "UPDATE supported_symbols SET status='qualified' WHERE symbol_code='EURUSD'"
+        )
+    metadata = {
+        "symbol": "EURUSD",
+        "mode": "shadow",
+        "model_contract": SHADOW_MODEL_CONTRACT,
+        "target_profile": SHADOW_TARGET_PROFILE,
+        "horizon": SHADOW_HORIZON,
+        "feature_profile": SHADOW_FEATURE_PROFILE,
+        "model_generation": 1,
+        "model_identity": "shadow_EURUSD_g0001_test",
+    }
+    saved = persist_shadow_prediction(
+        database,
+        symbol="EURUSD",
+        candle_timestamp=START,
+        entry_price=100.0,
+        decision={
+            "action": "BUY",
+            "direction_score": 0.8,
+            "decision_percentile": 0.9,
+            "decision_extremeness": 0.8,
+        },
+        model_metadata=metadata,
+        dataset_provenance={},
+        execution_mode="shadow_replay",
+        predicted_at=START + pd.Timedelta(hours=1),
+    )
+    candles = _frame(START.isoformat(), 13, "1h")
+    assert saved["execution_mode"] == "shadow_replay"
+    assert mature_shadow_outcomes(
+        database,
+        "EURUSD",
+        candles,
+        available_at=START + pd.Timedelta(hours=13),
+        execution_mode="shadow_replay",
+    ) == 1
+    outcome = database.get_shadow_outcomes(
+        "EURUSD", execution_mode="shadow_replay"
+    )[0]
+    assert outcome["evaluation_candle"] == (START + pd.Timedelta(hours=12)).isoformat()
+    assert outcome["execution_mode"] == "shadow_replay"
 
 
 @pytest.mark.parametrize(

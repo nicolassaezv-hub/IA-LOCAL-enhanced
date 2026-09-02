@@ -528,12 +528,17 @@ def persist_shadow_prediction(
     decision: dict,
     model_metadata: dict,
     dataset_provenance: dict,
+    execution_mode: str = SHADOW_EXECUTION_MODE,
+    predicted_at: Any = None,
 ) -> dict:
     code = _clean_symbol(symbol)
     _require_qualified(database, code)
     action = str(decision.get("action") or "").upper()
     if action not in ("BUY", "SELL", "HOLD"):
         raise ValueError("SHADOW_ACTION_INVALID")
+    mode = str(execution_mode).strip().lower()
+    if mode not in (SHADOW_EXECUTION_MODE, "shadow_replay"):
+        raise ValueError("SHADOW_EXECUTION_MODE_INVALID")
     exact = {
         "symbol": code,
         "mode": "shadow",
@@ -573,7 +578,9 @@ def persist_shadow_prediction(
         "direction": action,
         "confidence": extremeness,
         "entry_price": price,
-        "predicted_at": datetime.now(timezone.utc).isoformat(),
+        "predicted_at": _utc_iso(
+            datetime.now(timezone.utc) if predicted_at is None else predicted_at
+        ),
         "candle_timestamp": candle_iso,
         "horizon_candles": SHADOW_HORIZON,
         "model_identity": identity,
@@ -586,7 +593,7 @@ def persist_shadow_prediction(
         "decision_percentile": percentile,
         "decision_policy": SHADOW_DECISION_POLICY,
         "confidence_semantics": SHADOW_CONFIDENCE_SEMANTICS,
-        "execution_mode": SHADOW_EXECUTION_MODE,
+        "execution_mode": mode,
         "model_stage": SHADOW_MODEL_STAGE,
         "model_generation": generation,
         "dataset_provenance": dict(dataset_provenance),
@@ -616,8 +623,12 @@ def mature_shadow_outcomes(
     candles: pd.DataFrame,
     *,
     available_at: Any,
+    execution_mode: str = SHADOW_EXECUTION_MODE,
 ) -> int:
     code = _clean_symbol(symbol)
+    mode = str(execution_mode).strip().lower()
+    if mode not in (SHADOW_EXECUTION_MODE, "shadow_replay"):
+        raise ValueError("SHADOW_EXECUTION_MODE_INVALID")
     frame = candles.loc[:, ["timestamp", "close"]].copy()
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
     frame["close"] = pd.to_numeric(frame["close"], errors="coerce")
@@ -629,13 +640,14 @@ def mature_shadow_outcomes(
         cutoff = cutoff.tz_convert("UTC")
     closed = frame.loc[frame["timestamp"] + timedelta(hours=1) <= cutoff]
     existing = {
-        row["prediction_id"] for row in database.get_shadow_outcomes(code)
+        row["prediction_id"]
+        for row in database.get_shadow_outcomes(code, execution_mode=mode)
     }
     finalized = 0
     predictions = database.get_predictions(code, "H1", limit=100000)
     for prediction in reversed(predictions):
         if (
-            prediction.get("execution_mode") != "shadow"
+            prediction.get("execution_mode") != mode
             or prediction.get("status") != "PENDING"
             or str(prediction.get("action") or "").upper() not in ("BUY", "SELL")
             or prediction["prediction_id"] in existing
@@ -676,10 +688,10 @@ def mature_shadow_outcomes(
             "direction_correct": correct,
             "model_identity": prediction["model_identity"],
             "model_generation": int(prediction["model_generation"]),
-            "execution_mode": "shadow",
+            "execution_mode": mode,
             "status": "FINALIZED",
             "evaluation_semantics": SHADOW_EVALUATION_SEMANTICS,
-            "finalized_at": datetime.now(timezone.utc).isoformat(),
+            "finalized_at": _utc_iso(cutoff),
         })
         existing.add(prediction["prediction_id"])
         finalized += 1
@@ -782,7 +794,7 @@ class ShadowForexRuntime:
         frame = pd.read_csv(_entry_path(entry, self.project_root), usecols=["timestamp"])
         return frame["timestamp"]
 
-    def train(self, symbol: str) -> dict:
+    def train(self, symbol: str, *, available_at: Any = None) -> dict:
         code = _clean_symbol(symbol)
         _require_shadow_eligible(self.database, code, self.config)
         entries = self._entries(code)
@@ -806,6 +818,37 @@ class ShadowForexRuntime:
         )
         if len(X) <= 0 or set(pd.Series(y).unique()) != {0, 1}:
             raise ValueError("SHADOW_TRAINING_BINARY_EVIDENCE_INSUFFICIENT")
+        positions = builder.df.index.get_indexer(X.index)
+        terminal_positions = positions + SHADOW_HORIZON
+        if (
+            np.any(positions < 0)
+            or np.any(terminal_positions >= len(builder.df))
+        ):
+            raise ValueError("SHADOW_TRAINING_TIMESTAMP_ALIGNMENT_INVALID")
+        feature_timestamps = pd.to_datetime(
+            builder.df.iloc[positions]["timestamp"], utc=True, errors="coerce"
+        )
+        target_timestamps = pd.to_datetime(
+            builder.df.iloc[terminal_positions]["timestamp"],
+            utc=True,
+            errors="coerce",
+        )
+        if feature_timestamps.isna().any() or target_timestamps.isna().any():
+            raise ValueError("SHADOW_TRAINING_TIMESTAMPS_INVALID")
+        max_feature_timestamp = feature_timestamps.max()
+        max_target_timestamp = target_timestamps.max()
+        if available_at is not None:
+            clock = pd.Timestamp(available_at)
+            clock = (
+                clock.tz_localize("UTC")
+                if clock.tzinfo is None
+                else clock.tz_convert("UTC")
+            )
+            if (
+                max_feature_timestamp + pd.Timedelta(hours=1) > clock
+                or max_target_timestamp + pd.Timedelta(hours=1) > clock
+            ):
+                raise ValueError("SHADOW_TRAINING_LOOKAHEAD")
         positions = h1_oof_positions(len(X))
         oof_scores: list[float] = []
         diagnostics: list[dict] = []
@@ -860,8 +903,12 @@ class ShadowForexRuntime:
                 }
                 for timeframe in REQUIRED_TIMEFRAMES
             },
-            "training_timestamp": datetime.now(timezone.utc).isoformat(),
+            "training_timestamp": _utc_iso(
+                datetime.now(timezone.utc) if available_at is None else available_at
+            ),
             "training_last_candle": _utc_iso(entries["H1"]["last_candle_timestamp"]),
+            "max_training_feature_timestamp": _utc_iso(max_feature_timestamp),
+            "max_training_target_timestamp": _utc_iso(max_target_timestamp),
             "training_rows": len(X),
             "training_class_counts": {
                 0: int(np.sum(np.asarray(y) == 0)),
@@ -878,7 +925,13 @@ class ShadowForexRuntime:
         })
         return {"action": "trained", **saved["metadata"]}
 
-    def run_shadow_prediction(self, symbol: str) -> dict:
+    def run_shadow_prediction(
+        self,
+        symbol: str,
+        *,
+        execution_mode: str = SHADOW_EXECUTION_MODE,
+        predicted_at: Any = None,
+    ) -> dict:
         code = _clean_symbol(symbol)
         _require_shadow_eligible(self.database, code, self.config)
         entries = self._entries(code)
@@ -921,6 +974,8 @@ class ShadowForexRuntime:
             decision=decision,
             model_metadata=bundle["metadata"],
             dataset_provenance=provenance,
+            execution_mode=execution_mode,
+            predicted_at=predicted_at,
         )
         return {"action": "predicted", "prediction": saved}
 
