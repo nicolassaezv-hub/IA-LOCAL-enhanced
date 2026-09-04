@@ -18,9 +18,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+SOURCE_CHECKOUT_ROOT = Path(__file__).resolve().parents[1]
+if str(SOURCE_CHECKOUT_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_CHECKOUT_ROOT))
 
 from forex.data.symbol_lifecycle import (  # noqa: E402
     disable_symbol,
@@ -79,9 +79,11 @@ def _source_git_sha(explicit: str | None) -> str:
     if explicit is not None:
         value = str(explicit).strip().lower()
     else:
+        if not (SOURCE_CHECKOUT_ROOT / ".git").exists():
+            raise PersistenceConflictError("SOURCE_GIT_CHECKOUT_UNAVAILABLE")
         completed = subprocess.run(
             ["git", "rev-parse", "HEAD"],
-            cwd=PROJECT_ROOT,
+            cwd=SOURCE_CHECKOUT_ROOT,
             check=True,
             capture_output=True,
             text=True,
@@ -90,6 +92,35 @@ def _source_git_sha(explicit: str | None) -> str:
     if _GIT_SHA.fullmatch(value) is None:
         raise PersistenceConflictError("SOURCE_GIT_SHA_INVALID")
     return value
+
+
+def _resolve_runtime_project_root(project_root: Path | str) -> Path:
+    raw_root = Path(project_root).expanduser()
+    try:
+        root = raw_root.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise PersistenceConflictError("RUNTIME_PROJECT_ROOT_NOT_FOUND") from exc
+    if not root.is_dir():
+        raise PersistenceConflictError("RUNTIME_PROJECT_ROOT_NOT_FOUND")
+
+    required = (
+        root / "data" / "forex",
+        root / "models" / "forex",
+        root / "memory_db",
+    )
+    missing = [str(path) for path in required if not path.is_dir()]
+    if missing:
+        raise PersistenceConflictError("RUNTIME_PROJECT_STRUCTURE_MISSING")
+
+    configured_home = os.environ.get("ASTRA_HOME")
+    if configured_home:
+        home_path = Path(configured_home).expanduser()
+        if not home_path.is_absolute():
+            raise PersistenceConflictError("ASTRA_HOME_INVALID")
+        configured_root = home_path.resolve()
+        if configured_root != root:
+            raise PersistenceConflictError("ASTRA_HOME_ROOT_MISMATCH")
+    return root
 
 
 def _scheduler_is_disabled() -> bool:
@@ -289,6 +320,7 @@ def _build_manifest(
         "schema_version": SCHEMA_VERSION,
         "migration_id": migration_id,
         "timestamp": now.isoformat(),
+        "runtime_project_root": str(project_root.resolve()),
         "source_git_sha": source_git_sha,
         "mode": mode,
         "phase": "PRECHECK",
@@ -463,13 +495,13 @@ def _automatic_rollback(
 def run_migration(
     *,
     database: DatabaseAdapter,
-    project_root: Path | str = PROJECT_ROOT,
+    project_root: Path | str,
     apply: bool = False,
     now: datetime | None = None,
     source_git_sha: str | None = None,
 ) -> dict[str, Any]:
     """Precheck the exact legacy state and optionally apply its quarantine."""
-    root = Path(project_root).expanduser().resolve()
+    root = _resolve_runtime_project_root(project_root)
     timestamp = _timestamp(now)
     git_sha = _source_git_sha(source_git_sha)
     if apply:
@@ -748,15 +780,17 @@ def rollback_migration(
     *,
     database: DatabaseAdapter,
     manifest_path: Path | str,
-    project_root: Path | str = PROJECT_ROOT,
+    project_root: Path | str,
     now: datetime | None = None,
     source_git_sha: str | None = None,
 ) -> dict[str, Any]:
     """Restore a successful migration only if no later state conflicts."""
     _require_scheduler_disabled()
-    root = Path(project_root).expanduser().resolve()
+    root = _resolve_runtime_project_root(project_root)
     source = Path(manifest_path).expanduser().resolve()
     manifest = _load_apply_manifest(source)
+    if manifest.get("runtime_project_root") != str(root):
+        raise PersistenceConflictError("ROLLBACK_RUNTIME_ROOT_MISMATCH")
     _validate_rollback_paths(manifest, root)
     _validate_rollback_state_contract(manifest)
     if not _database_matches(
@@ -770,6 +804,7 @@ def rollback_migration(
         "schema_version": SCHEMA_VERSION,
         "migration_id": manifest["migration_id"],
         "timestamp": timestamp.isoformat(),
+        "runtime_project_root": str(root),
         "source_git_sha": _source_git_sha(source_git_sha),
         "mode": "ROLLBACK",
         "phase": "PRECHECK",
@@ -855,6 +890,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Dry-run or apply the exact Oracle legacy Forex migration"
     )
+    parser.add_argument(
+        "--project-root",
+        required=True,
+        type=Path,
+        help="explicit deployed ASTRA runtime root (for Oracle: /opt/astra)",
+    )
+    parser.add_argument(
+        "--source-git-sha",
+        help="exact 40-character Git SHA of the deployed migration code",
+    )
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--apply", action="store_true", help="apply quarantine")
     action.add_argument(
@@ -866,18 +911,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        runtime_root = _resolve_runtime_project_root(args.project_root)
         database = get_database()
         if args.rollback is not None:
             result = rollback_migration(
                 database=database,
                 manifest_path=args.rollback,
-                project_root=PROJECT_ROOT,
+                project_root=runtime_root,
+                source_git_sha=args.source_git_sha,
             )
         else:
             result = run_migration(
                 database=database,
-                project_root=PROJECT_ROOT,
+                project_root=runtime_root,
                 apply=args.apply,
+                source_git_sha=args.source_git_sha,
             )
     except Exception as exc:
         print(json.dumps({
