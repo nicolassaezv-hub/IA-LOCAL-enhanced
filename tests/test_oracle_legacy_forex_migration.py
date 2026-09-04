@@ -60,6 +60,7 @@ def _insert_symbol(
 
 
 def _legacy_state(tmp_path: Path, monkeypatch):
+    (tmp_path / "memory_db").mkdir(parents=True, exist_ok=True)
     database = SQLiteDatabase(str(tmp_path / "astra.db"))
     for symbol in SYMBOLS:
         _insert_symbol(database, symbol)
@@ -106,6 +107,7 @@ def _legacy_state(tmp_path: Path, monkeypatch):
         },
     )
     monkeypatch.setenv("ASTRA_SCHEDULER_ENABLED", "false")
+    monkeypatch.setenv("ASTRA_HOME", str(tmp_path.resolve()))
     return database, dataset_bytes, alias_bytes
 
 
@@ -134,6 +136,10 @@ def _apply(database: SQLiteDatabase, tmp_path: Path) -> dict:
 def test_dry_run_is_default_and_changes_no_database_or_files(tmp_path, monkeypatch):
     database, dataset_bytes, alias_bytes = _legacy_state(tmp_path, monkeypatch)
     before = _database_snapshot(database)
+    before_paths = {
+        path.relative_to(tmp_path).as_posix()
+        for path in tmp_path.rglob("*")
+    }
 
     result = migration.run_migration(
         database=database,
@@ -145,6 +151,10 @@ def test_dry_run_is_default_and_changes_no_database_or_files(tmp_path, monkeypat
     assert result["mode"] == "DRY_RUN"
     assert result["result"] == "DRY_RUN"
     assert _database_snapshot(database) == before
+    assert {
+        path.relative_to(tmp_path).as_posix()
+        for path in tmp_path.rglob("*")
+    } == before_paths
     assert not (tmp_path / "reports").exists()
     for (symbol, timeframe), content in dataset_bytes.items():
         assert forex_dataset_path(symbol, timeframe, project_root=tmp_path).read_bytes() == content
@@ -313,6 +323,7 @@ def test_apply_manifest_is_complete_durable_and_secret_free(tmp_path, monkeypatc
 
     assert persisted == {key: value for key, value in result.items() if key != "manifest_path"}
     assert persisted["schema_version"] == 1
+    assert persisted["runtime_project_root"] == str(tmp_path.resolve())
     assert persisted["source_git_sha"] == "a" * 40
     assert persisted["mode"] == "APPLY"
     assert persisted["phase"] == "VERIFY"
@@ -340,6 +351,7 @@ def test_rollback_restores_exact_prestate_and_all_file_bytes(tmp_path, monkeypat
     )
 
     assert rolled_back["result"] == "ROLLED_BACK"
+    assert rolled_back["runtime_project_root"] == str(tmp_path.resolve())
     assert _database_snapshot(database) == before
     for (symbol, timeframe), content in dataset_bytes.items():
         assert forex_dataset_path(symbol, timeframe, project_root=tmp_path).read_bytes() == content
@@ -432,9 +444,188 @@ def test_migration_performs_no_network_or_productive_actions(tmp_path, monkeypat
     assert "save_outcome" not in source
 
 
-def test_cli_defaults_to_dry_run_and_rollback_is_mutually_exclusive():
-    args = migration.parse_args([])
+def test_explicit_runtime_without_git_uses_only_runtime_root_and_skips_git(
+    tmp_path, monkeypatch
+):
+    runtime_root = tmp_path / "opt" / "astra"
+    database, _, _ = _legacy_state(runtime_root, monkeypatch)
+    assert not (runtime_root / ".git").exists()
+
+    def forbidden_git(*_args, **_kwargs):
+        raise AssertionError("git must not run for an explicit source SHA")
+
+    monkeypatch.setattr(migration.subprocess, "run", forbidden_git)
+    result = migration.run_migration(
+        database=database,
+        project_root=runtime_root,
+        source_git_sha="A" * 40,
+        now=FIXED_NOW,
+    )
+
+    assert result["runtime_project_root"] == str(runtime_root.resolve())
+    assert result["source_git_sha"] == "a" * 40
+    assert all(
+        Path(record["original_path"]).is_relative_to(runtime_root.resolve())
+        for record in result["files"]
+    )
+
+
+@pytest.mark.parametrize(
+    "source_sha",
+    ["", "a" * 39, "a" * 41, "g" * 40, "abc-not-a-git-sha"],
+)
+def test_malformed_explicit_source_sha_is_rejected_without_git(
+    tmp_path, monkeypatch, source_sha
+):
+    database, _, _ = _legacy_state(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        migration.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("git must not run")
+        ),
+    )
+
+    with pytest.raises(PersistenceConflictError, match="SOURCE_GIT_SHA_INVALID"):
+        migration.run_migration(
+            database=database,
+            project_root=tmp_path,
+            source_git_sha=source_sha,
+            now=FIXED_NOW,
+        )
+
+
+def test_nonexistent_runtime_project_root_is_rejected(tmp_path, monkeypatch):
+    valid_root = tmp_path / "valid"
+    database, _, _ = _legacy_state(valid_root, monkeypatch)
+    missing = tmp_path / "does-not-exist"
+    monkeypatch.setenv("ASTRA_HOME", str(missing))
+
+    with pytest.raises(
+        PersistenceConflictError, match="RUNTIME_PROJECT_ROOT_NOT_FOUND"
+    ):
+        migration.run_migration(
+            database=database,
+            project_root=missing,
+            source_git_sha="a" * 40,
+            now=FIXED_NOW,
+        )
+    assert not missing.exists()
+
+
+@pytest.mark.parametrize("missing_relative", ["data/forex", "models/forex", "memory_db"])
+def test_runtime_project_root_requires_existing_structures(
+    tmp_path, monkeypatch, missing_relative
+):
+    root = tmp_path / "runtime"
+    for relative in ("data/forex", "models/forex", "memory_db"):
+        if relative != missing_relative:
+            (root / relative).mkdir(parents=True, exist_ok=True)
+    database = SQLiteDatabase(str(tmp_path / "outside.db"))
+    monkeypatch.setenv("ASTRA_HOME", str(root.resolve()))
+
+    with pytest.raises(
+        PersistenceConflictError, match="RUNTIME_PROJECT_STRUCTURE_MISSING"
+    ):
+        migration.run_migration(
+            database=database,
+            project_root=root,
+            source_git_sha="a" * 40,
+            now=FIXED_NOW,
+        )
+
+
+def test_astra_home_runtime_root_mismatch_fails_closed(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    database, _, _ = _legacy_state(runtime_root, monkeypatch)
+    other_home = tmp_path / "other-astra"
+    for relative in ("data/forex", "models/forex", "memory_db"):
+        (other_home / relative).mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("ASTRA_HOME", str(other_home.resolve()))
+
+    with pytest.raises(PersistenceConflictError, match="ASTRA_HOME_ROOT_MISMATCH"):
+        migration.run_migration(
+            database=database,
+            project_root=runtime_root,
+            source_git_sha="a" * 40,
+            now=FIXED_NOW,
+        )
+
+
+def test_apply_binds_datasets_models_quarantine_and_manifest_to_runtime_root(
+    tmp_path, monkeypatch
+):
+    runtime_root = tmp_path / "deployed-runtime"
+    database, _, _ = _legacy_state(runtime_root, monkeypatch)
+
+    result = _apply(database, runtime_root)
+
+    root = runtime_root.resolve()
+    assert result["runtime_project_root"] == str(root)
+    assert Path(result["manifest_path"]).is_relative_to(
+        root / "reports" / "deployment"
+    )
+    for record in result["files"]:
+        original = Path(record["original_path"])
+        quarantine = Path(record["quarantine_path"])
+        assert original.is_relative_to(root)
+        assert quarantine.is_relative_to(root)
+        if record["kind"] == "alias":
+            assert original.is_relative_to(root / "models" / "forex")
+            assert quarantine.is_relative_to(
+                root / "models" / "forex" / "legacy_quarantine"
+            )
+        else:
+            assert original.is_relative_to(root / "data" / "forex")
+            assert quarantine.is_relative_to(root / "data" / "forex_legacy_quarantine")
+
+
+def test_rollback_rejects_different_runtime_root_before_file_changes(
+    tmp_path, monkeypatch
+):
+    runtime_root = tmp_path / "runtime-a"
+    database, _, _ = _legacy_state(runtime_root, monkeypatch)
+    applied = _apply(database, runtime_root)
+    other_root = tmp_path / "runtime-b"
+    for relative in ("data/forex", "models/forex", "memory_db"):
+        (other_root / relative).mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("ASTRA_HOME", str(other_root.resolve()))
+    quarantined_before = {
+        record["quarantine_path"]: _sha256(Path(record["quarantine_path"]))
+        for record in applied["files"]
+    }
+
+    with pytest.raises(
+        PersistenceConflictError, match="ROLLBACK_RUNTIME_ROOT_MISMATCH"
+    ):
+        migration.rollback_migration(
+            database=database,
+            manifest_path=Path(applied["manifest_path"]),
+            project_root=other_root,
+            source_git_sha="a" * 40,
+            now=FIXED_NOW,
+        )
+
+    assert {
+        path: _sha256(Path(path)) for path in quarantined_before
+    } == quarantined_before
+    assert database.get_active_symbols() == []
+
+
+def test_cli_requires_runtime_root_and_accepts_explicit_source_sha():
+    with pytest.raises(SystemExit):
+        migration.parse_args([])
+    args = migration.parse_args([
+        "--project-root", "/opt/astra",
+        "--source-git-sha", "A" * 40,
+    ])
     assert args.apply is False
     assert args.rollback is None
+    assert args.project_root == Path("/opt/astra")
+    assert args.source_git_sha == "A" * 40
     with pytest.raises(SystemExit):
-        migration.parse_args(["--apply", "--rollback", "manifest.json"])
+        migration.parse_args([
+            "--project-root", "/opt/astra",
+            "--apply",
+            "--rollback", "manifest.json",
+        ])
