@@ -54,7 +54,7 @@ Asignacion maxima de 6GB VRAM
 
 -  name: NICO'S LOCAL AI
 
--  ID: "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"
+ID: "gsk_xxyykk"
 
 -  model= "openai/gpt-oss-120"
 
