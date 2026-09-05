@@ -52,9 +52,9 @@ Asignacion maxima de 6GB VRAM
 
 ## Actualmente el funcionamiento de esta IA es gracias a la conexion por GroqCloud
 
--  name: NICO'S LOCAL AI
+-  name: NICO 
 
-ID: "gsk_xxyykk"
+ID: ____
 
 -  model= "openai/gpt-oss-120"
 
