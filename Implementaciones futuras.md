@@ -289,7 +289,7 @@ Evolution target
 ○ Prediction Lab
 ○ Workspace
 ○ Personalization
-○ Business (cuando la rama esté integrada)
+○ Business
 ```
 
 Flujo obligatorio:
@@ -415,6 +415,479 @@ A futuro, si se requiere enforcement fuerte:
 
 No tratar “RAM mínima” como una reserva física obligatoria si el sistema no la necesita.
 
+# BUSINESS
+
+## ✅ Rama Business — Sistema de asistencia IA para PyMEs chilenas (PROTOTIPO)
+
+Integrar dentro de la rama `Business` una sección `PyMEs` destinada inicialmente a representar de forma estructurada la operación de una pequeña o mediana empresa chilena. Este prototipo será la base de un futuro **ASTRA PyME Export Advisor**, capaz de analizar producción, costos, ventas, capacidad disponible y mercados de exportación.
+
+La primera etapa **no consiste en entrenar una IA nueva**. Primero ASTRA debe disponer de datos internos consistentes y auditables sobre la empresa para que posteriormente las capas de analytics, predicción y asesoría puedan trabajar sobre información real.
+
+### Arquitectura propuesta
+
+```text
+ASTRA
+└─ Business
+   └─ PyMEs
+      ├─ Company Setup
+      ├─ Products
+      ├─ Materials / Resources
+      ├─ Production
+      ├─ Sales
+      ├─ Costs
+      ├─ Promotions
+      ├─ Export Markets
+      ├─ Analytics
+      └─ AI Advisor (fase posterior)
+```
+
+### Configuración inicial de la PyME
+
+Registrar como mínimo:
+
+- Nombre de empresa.
+- País base (Chile en el prototipo inicial).
+- Moneda base (`CLP`).
+- Industria/rubro.
+- Región cuando corresponda.
+- Tipo de producción.
+
+Menú inicial sugerido:
+
+```text
+ASTRA BUSINESS — PyME Setup
+
+[1] Buscar producto
+[2] Modificar producto
+[3] Lista completa de productos
+[4] Registrar producto
+[5] Confirmar catálogo/productos
+[6] Seleccionar mercado objetivo
+[7] Configurar producción
+[8] Salir
+```
+
+La interfaz inicial puede implementarse primero en Python/CLI y posteriormente exponerse en Workspace sin cambiar el modelo de datos.
+
+### Productos
+
+Cada producto debe tener una representación estructurada similar a:
+
+```text
+Product
+├─ id
+├─ name
+├─ abbreviation
+├─ unit_price
+├─ currency
+├─ active
+├─ created_at
+└─ updated_at
+```
+
+Tipos recomendados en Python:
+
+```text
+name          → str
+abbreviation  → str
+quantity      → int / Decimal según caso
+price         → Decimal
+unit          → str normalizado
+timestamp     → datetime
+```
+
+Usar `Decimal` para dinero; evitar `float` en precios, costos y totales.
+
+### Abreviaciones
+
+La abreviación se genera automáticamente a partir del nombre:
+
+```text
+Trufa               → Tr
+Bombón               → Bo
+Bombón Chocolate     → BoCh
+Bombón Coco          → BoCo
+```
+
+Si una abreviación ya existe, ASTRA debe detectar la colisión y generar una alternativa o pedir confirmación; nunca sobrescribir silenciosamente otro producto.
+
+La abreviación es una referencia útil, pero el `product_id` será la identidad canónica.
+
+### Materiales, recursos y gasto productivo
+
+Cada producto puede requerir X ingredientes/recursos de forma unitaria.
+
+ASTRA debe aceptar entradas flexibles:
+
+```text
+50gr
+50 gr
+50 GR
+0.5 kg
+2 litros
+```
+
+pero normalizarlas internamente:
+
+```text
+50 GR    → quantity=50, unit=g
+0.5 kg   → quantity=500, unit=g
+2 litros → quantity=2000, unit=ml
+```
+
+Modelo recomendado:
+
+```text
+Material
+├─ id
+├─ name
+├─ canonical_unit
+└─ unit_cost
+
+ProductMaterial
+├─ product_id
+├─ material_id
+├─ quantity
+└─ unit
+```
+
+Esto debe permitir calcular posteriormente:
+
+```text
+Costo unitario estimado
+= Σ(costo material × cantidad requerida)
+```
+
+### Precios y promociones
+
+Cada producto tendrá precio base y podrá asociar descuentos/promociones.
+
+Tipos iniciales:
+
+```text
+Promotion
+├─ percentage
+├─ fixed_amount
+├─ 2x1
+├─ NxM
+└─ custom
+```
+
+Con:
+
+- fecha/hora de inicio;
+- fecha/hora de término;
+- productos aplicables;
+- estado activo/inactivo.
+
+Las promociones por temporada deben conservar explícitamente su rango temporal.
+
+### Persistencia: SQLite canónico, CSV como interoperabilidad
+
+Para el prototipo, **SQLite será la fuente canónica de datos**.
+
+No usar CSV como base de datos principal porque las relaciones entre productos, materiales, ventas, promociones y producción requieren integridad y consultas estructuradas.
+
+Los CSV se mantienen como:
+
+- exportación;
+- importación controlada;
+- reportes;
+- respaldo interoperable;
+- análisis externo.
+
+Arquitectura:
+
+```text
+SQLite / Business DB
+       ↓
+Business Services
+       ↓
+CLI / Workspace / Analytics
+       ↓
+CSV / TXT export when requested
+```
+
+### Producción
+
+No mantener cuatro bases separadas para diario/semanal/mensual/anual. Guardar eventos productivos con timestamps y calcular las agregaciones después.
+
+Modelo sugerido:
+
+```text
+ProductionRecord
+├─ id
+├─ timestamp
+├─ product_id
+├─ produced_quantity
+├─ production_cost
+├─ calculated_priority
+├─ producer_priority
+└─ notes
+```
+
+ASTRA puede presentar/filtrar:
+
+- Diario.
+- Semanal.
+- Mensual.
+- Anual.
+
+CSV de exportación sugerido:
+
+```csv
+date,product,quantity,production_cost,calculated_priority,producer_priority
+2026-09-08,Trufa,120,38400,2,1
+2026-09-08,Bombon,75,27000,1,2
+```
+
+No se necesitan filas `NULL` para representar días sin registro. La ausencia de evento significa que no existe un registro para ese período; si se necesita diferenciar `0 producido` de `dato desconocido`, guardarlo explícitamente.
+
+### Ventas / ganancias
+
+No guardar internamente una venta como un string compuesto del tipo:
+
+```text
+Bomb.C(3),Truf.C(5)
+```
+
+Ese formato puede existir como representación de salida, pero el almacenamiento debe ser relacional:
+
+```text
+Sale
+├─ id
+├─ datetime
+├─ status
+├─ total
+└─ currency
+
+SaleItem
+├─ sale_id
+├─ product_id
+├─ quantity
+├─ unit_price
+├─ discount
+└─ subtotal
+```
+
+Estados iniciales:
+
+```text
+PENDING_PAYMENT
+PAID
+CANCELLED (si posteriormente se requiere)
+```
+
+Esto permitirá calcular posteriormente:
+
+- revenue diario/semanal/mensual;
+- producto más vendido;
+- margen;
+- ticket promedio;
+- estacionalidad;
+- demanda;
+- capacidad ociosa.
+
+### Diccionario TXT de referencia
+
+Mantener un archivo exportable de referencia:
+
+```text
+Trufa:Tr
+Bombón:Bo
+Bombón Chocolate:BoCh
+```
+
+pero generarlo desde SQLite. El TXT no es la fuente canónica.
+
+Ejemplo de archivo:
+
+`product_dictionary.txt`
+
+### Búsqueda y eficiencia
+
+No es necesario implementar una tabla hash manual desde cero. Python ya ofrece hash tables mediante `dict`.
+
+Se pueden mantener índices temporales en memoria:
+
+```text
+products_by_id
+products_by_name
+products_by_abbreviation
+```
+
+SQLite debe incluir índices adecuados para las consultas persistentes más frecuentes.
+
+### UTF-8, tildes y Ñ
+
+Todo el módulo Business debe usar UTF-8.
+
+Los nombres reales deben conservar acentos y `ñ`:
+
+```text
+Piñón Orgánico
+```
+
+Para búsqueda se puede crear una forma normalizada adicional:
+
+```text
+Piñón Orgánico → pinon organico
+```
+
+De este modo búsquedas como:
+
+```text
+pinon
+PIÑÓN
+Piñón
+```
+
+pueden resolver el mismo producto sin alterar el nombre mostrado al usuario.
+
+### Mercados objetivo
+
+Crear una entidad/configuración `SupportedExportMarkets` en vez de incrustar la lista directamente en la lógica del programa.
+
+El prototipo comienza con mercados sudamericanos y debe permitir ampliar la lista posteriormente sin modificar el esquema central.
+
+La selección de país no implica aún recomendar exportación; solo define uno o más mercados a evaluar.
+
+Modelo conceptual:
+
+```text
+ExportMarket
+├─ country_code
+├─ country_name
+├─ enabled
+├─ currency
+└─ metadata/provenance
+```
+
+### Analytics Business
+
+Una vez que exista información interna suficiente, ASTRA Business podrá calcular de manera determinística antes de involucrar un modelo IA:
+
+- costo unitario;
+- margen bruto;
+- ventas por período;
+- capacidad productiva;
+- capacidad ociosa;
+- producción vs demanda;
+- estacionalidad;
+- rendimiento por producto;
+- impacto de promociones.
+
+### Fase futura: ASTRA PyME Export Advisor
+
+La asesoría de exportación se construirá **encima del Operational Core**, no mezclada con él.
+
+Flujo objetivo:
+
+```text
+DATOS INTERNOS PyME
+        │
+        ├─ productos
+        ├─ ventas
+        ├─ costos
+        ├─ producción
+        ├─ promociones
+        └─ capacidad
+        │
+        ▼
+Business Analytics
+        │
+        ▼
+Export Feasibility Engine
+        │
+        ├─ mercado objetivo
+        ├─ tipo de cambio
+        ├─ logística
+        ├─ requisitos/regulación
+        ├─ demanda
+        └─ riesgo
+        │
+        ▼
+Ranking / Viabilidad
+        │
+        ▼
+AI Advisor
+```
+
+Ejemplo de salida futura:
+
+```text
+ASTRA BUSINESS
+
+Producto: Trufa Chocolate
+Mercado evaluado: Perú
+Capacidad exportable estimada: 420 unidades/mes
+Margen doméstico: 54.7 %
+Margen exportación estimado: 41.2 %
+Principal riesgo: costo logístico
+Recomendación: VIABLE PARA PRUEBA PILOTO
+```
+
+Las cifras mostradas por el sistema deben proceder de datos reales o de cálculos trazables; nunca inventarse para presentarlas como análisis productivo real.
+
+### Integración futura con fuentes externas
+
+En fases posteriores el `Export Feasibility Engine` podrá consumir fuentes reales para:
+
+- tipos de cambio;
+- costos logísticos;
+- requisitos de entrada;
+- aranceles;
+- datos de mercado/demanda;
+- indicadores económicos;
+- riesgo cambiario.
+
+Cada dato externo debe guardar fuente, fecha y procedencia.
+
+### Fases de implementación
+
+```text
+PHASE 1
+Company + Product Registry
+             ↓
+PHASE 2
+Materials + Production + Sales
+             ↓
+PHASE 3
+Costs + Promotions + Business Analytics
+             ↓
+PHASE 4
+Country / Export Market selection
+             ↓
+PHASE 5
+Export Feasibility Engine
+             ↓
+PHASE 6
+AI Advisor
+             ↓
+PHASE 7
+Prediction / recommendations avanzadas
+```
+
+### Alcance del prototipo inicial
+
+El primer prototipo se considera terminado cuando pueda:
+
+- registrar una PyME;
+- registrar/modificar/buscar productos;
+- generar abreviaciones sin colisiones silenciosas;
+- registrar materiales y costos unitarios;
+- registrar producción;
+- registrar ventas y estados de pago;
+- registrar promociones;
+- seleccionar mercado objetivo;
+- persistir todo en SQLite;
+- exportar producción/ventas a CSV;
+- exportar diccionario de abreviaciones a TXT;
+- realizar métricas Business básicas;
+- funcionar correctamente con UTF-8, tildes y `ñ`.
+
+El prototipo **no requiere todavía un modelo ML ni una recomendación automática de exportación**.
+
 # ORDEN RECOMENDADO DE IMPLEMENTACIÓN
 
 Mientras Shadow Forex siga acumulando evidencia, priorizar cambios de bajo riesgo y desacoplados del predictor:
@@ -430,9 +903,12 @@ Mientras Shadow Forex siga acumulando evidencia, priorizar cambios de bajo riesg
 8. Forex Auto/Manual
 9. Kernel Lab
 10. Evolution Engine por scope
+11. Business / PyMEs Operational Core (prototipo)
 ```
 
 `Manejo de procesos múltiples` y `RAM + modalidad de rendimiento` deben compartir un único Resource Manager central y no convertirse en dos subsistemas incompatibles.
+
+La rama Business/PyMEs puede desarrollarse de forma paralela al período Shadow siempre que no modifique ni consuma recursos críticos del pipeline Forex desplegado. Su primera implementación debe centrarse en el **Operational Core**, no en entrenar un nuevo modelo predictivo.
 
 # REGLA DE ESTABILIDAD DURANTE SHADOW
 
