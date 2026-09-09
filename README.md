@@ -15,8 +15,8 @@ En Shadow mode:
 - Actualiza constantemente
 
 
-- Configura el servidor VM  de Oracle Cloud a usar, aplica tests end-to-end para verificar viabilidad y finalizar la consolidacion del proyecto (Version Final)
-
+- Revisar constantemente Azure hasta que se agoten creditos (Planea semana de revision 19/10)
+- 
 - Usa herramientas para avanzar
 
    - ### Base44 (Integracion y testeo)
@@ -25,7 +25,7 @@ En Shadow mode:
    - ### Lovable (Integracion y Planificacion)
    - ### Github Copilot (Diagnostico y Planificacion)
    - ### Claude (solo de diagnostico)
-   - ### Codex CLI/Chatgpt (Integracion y testeo)
+   - ### Chatgpt (Consultas)
 
 - Para comprobaciones de calidad de usuario (UX) o estetica consulta con Base44, asegurate de mencionar que la estetica es propia del Workspace en servidor (modificar HTML constantemente)
   
@@ -66,7 +66,9 @@ ID: ____
 -  model= "openai/gpt-oss-120"
 
  # Configuracion VM
-   
+
+ ## Oracle VM
+ 
 Para automatizar la rama FOREX de forma activa y crear la base del display grafico se logro migrar el Workspace a una VM (Virtual Machine) para optimizar tiempos de ejecucion del Pipeline
 
   - Imagen: Ubuntu 24.04
@@ -76,6 +78,8 @@ Para automatizar la rama FOREX de forma activa y crear la base del display grafi
   - Memoria: 12GB RAM
   
   - Almacenamiento: 57 GB
+
+  ## VM Windows
 
 En la comparativa practica se demostro que la "prediccion completa" de un solo simbolo tomaba entre 7-15 minutos, hubo una rebaja a 9 minutos usando una implementacion caché.
 
