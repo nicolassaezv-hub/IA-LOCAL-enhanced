@@ -1,12 +1,19 @@
 # ASTRA
 
+# Estado actual
+
+Funcional en ramas:
+
+✅ Core, Memory Engine, Personalizacion
+
+En Shadow mode:
+
+■ Forex Pipeline 
+
 # Peticiones Personales
 
 - Actualiza constantemente
 
-- Sigue avanzando con la rama forex, consigue como minimo:
-
-  - Integrar informe automatico en primera iteracion entre la rama forex y el servidor de flujo automatizado
 
 - Configura el servidor VM  de Oracle Cloud a usar, aplica tests end-to-end para verificar viabilidad y finalizar la consolidacion del proyecto (Version Final)
 
