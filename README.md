@@ -16,7 +16,7 @@ En Shadow mode:
 
 
 - Revisar constantemente Azure hasta que se agoten creditos (Planea semana de revision 19/10)
-- 
+
 - Usa herramientas para avanzar
 
    - ### Base44 (Integracion y testeo)
@@ -80,14 +80,29 @@ Para automatizar la rama FOREX de forma activa y crear la base del display grafi
   - Almacenamiento: 57 GB
 
   ## VM Windows
+  
+ - Imagen: Windows 2022 Server Datacenter Azure Edition
+
+ - Sistema Operativo: Windows 10
+
+ - Memoria: 4GB RAM
+   
+ - Almacenamiento: 127 GB
+   
+
 
 En la comparativa practica se demostro que la "prediccion completa" de un solo simbolo tomaba entre 7-15 minutos, hubo una rebaja a 9 minutos usando una implementacion caché.
 
 Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cuenta que en hay mas de 50 Simbolos (Divisa,Commodities y Cripto)
 
-### *HASTA EL MOMENTO SOLO HAY TESTS. NINGUNA ACTIVIDAD 24/7 HASTA COMPROBAR LA FIABILIDAD PRODUCTIVA*
+*HASTA EL MOMENTO SOLO HAY TESTS. NINGUNA ACTIVIDAD 24/7 HASTA COMPROBAR LA FIABILIDAD PRODUCTIVA*
 
-### *(Scheduler,Rolling Dataset y Watcher desactivados)*
+
+
+
+### *SOLO LAS SIGUIENTES DIVISAS ESTAN DISPONIBLES EN SHADOW MODE:*
+
+### *USDJPY; GBPUSD*
 
 # Estructura
 
