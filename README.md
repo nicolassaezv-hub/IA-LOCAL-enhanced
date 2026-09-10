@@ -108,7 +108,7 @@ Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cu
 
 *Se solicita verificar la integridad y los resultados de aquellas predicciones (ya sean en estado de proceso o finalizadas) mediante el siguiente comando*
 
-``bash
+''bash
 
 sudo python3 - <<'PY'
 import sqlite3
@@ -153,6 +153,7 @@ print(f"Progreso hacia 100  : {resolved}/100")
 
 con.close()
 PY
+
 ''
 
 # Estructura
