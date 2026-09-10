@@ -102,7 +102,58 @@ Sin embargo no es una optimizacion acertada al sistema completo si tomamos en cu
 
 ### *SOLO LAS SIGUIENTES DIVISAS ESTAN DISPONIBLES EN SHADOW MODE:*
 
-### *USDJPY; GBPUSD*
+### *USDJPY; EURUSD*
+
+*Actualmente estan en Shadow Mode los procesos de generacion de datos acumulados por Timeframes, el pipeline esta cortado en accionar y las predicciones se guardan dentro de la VM Oracle Cloud en opt/astra_autonomous.db*
+
+*Se solicita verificar la integridad y los resultados de aquellas predicciones (ya sean en estado de proceso o finalizadas) mediante el siguiente comando*
+
+``bash
+
+sudo python3 - <<'PY'
+import sqlite3
+
+db = "/opt/astra/memory_db/astra_autonomous.db"
+con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+cur = con.cursor()
+
+total = cur.execute("""
+    SELECT COUNT(*)
+    FROM predictions
+    WHERE UPPER(action) IN ('BUY','SELL')
+""").fetchone()[0]
+
+resolved = cur.execute("""
+    SELECT COUNT(*)
+    FROM shadow_outcomes
+    WHERE UPPER(action) IN ('BUY','SELL')
+""").fetchone()[0]
+
+correct = cur.execute("""
+    SELECT COUNT(*)
+    FROM shadow_outcomes
+    WHERE UPPER(action) IN ('BUY','SELL')
+      AND direction_correct = 1
+""").fetchone()[0]
+
+incorrect = cur.execute("""
+    SELECT COUNT(*)
+    FROM shadow_outcomes
+    WHERE UPPER(action) IN ('BUY','SELL')
+      AND direction_correct = 0
+""").fetchone()[0]
+
+print("=== ASTRA FOREX SHADOW ===")
+print(f"BUY/SELL generadas : {total}")
+print(f"BUY/SELL evaluadas  : {resolved}")
+print(f"Correctas           : {correct}")
+print(f"Incorrectas         : {incorrect}")
+print(f"Pendientes          : {total - resolved}")
+print(f"Progreso hacia 100  : {resolved}/100")
+
+con.close()
+PY
+''
 
 # Estructura
 
