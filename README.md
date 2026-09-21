@@ -264,15 +264,15 @@ Una vez cumplido los requisitos obligatorios se puede correr el workspace las ve
 
 ## a. Inicializar astra.py (CLI)
 
-'''bash
+```bash
 python astra.py
-'''
+```
 
 ## b. Inicializar server (HTML)
 
-'''bash
+```bash
 python workspace/server.py
-'''
+```
 
 A continuacion se dan las caracteristicas y detalles del programa principal mas los anexos.
 
