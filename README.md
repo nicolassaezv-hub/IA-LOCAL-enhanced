@@ -225,9 +225,11 @@ Para correr el sistema Workspace ASTRA se debe OBLIGATORIAMENTE seguir estos pas
 
 ## 0. Instalar Python y Pip
 
-'''bash
+~bash
+
 pip install
-'''
+
+~
 
 ## 1.Instalar localmente el proyecto:
 
