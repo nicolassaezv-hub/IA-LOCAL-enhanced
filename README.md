@@ -173,11 +173,16 @@ Las ramas actuales son las siguientes:
 ## FOREX
 
 - Principal Prediction Pipeline
---CSV builder
---MTF Fuser (H1/H4/D1)
---TUNER
---TRAINER
---DOUBLE ACTION VERIFIER
+  
+  - CSV builder
+  
+  - MTF Fuser (H1/H4/D1)
+
+  - TUNER
+
+  - TRAINER
+
+  - DOUBLE ACTION VERIFIER
 
 - Scheduler
 
