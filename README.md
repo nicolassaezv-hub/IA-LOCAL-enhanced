@@ -15,7 +15,7 @@ En Shadow mode:
 - Actualiza constantemente
 
 
-- Revisar constantemente Azure hasta que se agoten creditos (Planea semana de revision 19/10)
+- Revisar constantemente Azure hasta que se agoten creditos (Planea dia de revision 20/10)
 
 - Usa herramientas para avanzar
 
@@ -29,7 +29,7 @@ En Shadow mode:
 
 - Para comprobaciones de calidad de usuario (UX) o estetica consulta con Base44, asegurate de mencionar que la estetica es propia del Workspace en servidor (modificar HTML constantemente)
   
-[Ir a integrar las nuevas implemetaciones listadas](Implementaciones%20futuras.md) una vez completado los test End-to-End de produccion
+[Ir a integrar las nuevas implemetaciones listadas](Implementaciones%20futuras.md) una vez completado los test E2E (End-to-End) de produccion
 
 - Las actualizaciones ya NO SON por Roadmaps, se ingresan al listado de registro de integraciones
 
