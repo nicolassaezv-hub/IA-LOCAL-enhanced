@@ -225,11 +225,11 @@ Para correr el sistema Workspace ASTRA se debe OBLIGATORIAMENTE seguir estos pas
 
 ## 0. Instalar Python y Pip
 
-~bash
+```bash
 
 pip install
 
-~
+```
 
 ## 1.Instalar localmente el proyecto:
 
@@ -248,9 +248,9 @@ python -m venv venv
 ```
 Una vez completado procede a activarlo
 
-'''bash
+```bash
 venv/venv activate.bat
-'''
+```
 
 ## 3.Descargar dependencias:
 
