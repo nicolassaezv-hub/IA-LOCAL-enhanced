@@ -35,7 +35,7 @@
 
 - ✅ Estimacion interna de uso de tokens por peticion
 
-    -Conteo por codigo del input del usuario para evitar cortes en el Chat de interaccion
+    - Conteo por codigo del input del usuario para evitar cortes en el Chat de interaccion
 
 - ✅ Modulo de analisis CSV adaptativo para la rama Business:
 
