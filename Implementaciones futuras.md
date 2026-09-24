@@ -13,7 +13,7 @@
 - ✅ Grafica mas amplia para el Shadow Forex:
 
     - La grafica debe comprender el win/rate general y particular
-      
+    - DEBE mostrar la grafica general y en la tabla todas las predicciones hechas, sin excepcion
     - Permite interaccion con grafica
         - opción de arrastrar el mouse por encima o para visualizar mini boxes con la info de la fecha)
           
