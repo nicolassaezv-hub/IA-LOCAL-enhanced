@@ -29,19 +29,25 @@
 
 - ✅ Asignacion de modelo IA personalizado con:
 
+
     - Maximo 8 modelos IA
     - Memoria de chat compartida
     - Ventana de contexto general
 
-- ✅ Estimacion interna de uso de tokens por peticion
+- ✅ Estimacion interna de uso de tokens por peticion hecha:
+
 
     - Conteo por codigo del input del usuario para evitar cortes en el Chat de interaccion
 
 - ✅ Modulo de analisis CSV adaptativo para la rama Business:
+    
+
 
     - Previamente debe verificar el formato de cofificacion (Encoding) del archivo para evitar problemas en el procesamiento sintaxico de los datos
+
+
     - Se prepara internamente para cada caso variable de dataset osea, sabe diferenciar si en una columna hay:
-        
+
         - Fechas
         - Timestamps
         - Separadores
@@ -55,5 +61,11 @@
         - Diccionario
         - Boleano
 
+- Entrenamiento mixeado entre datasets del Prediction Lab
 
-# BORRADORES:
+      - Por cada dataset ingresado y validado por el sistema se debe encargar de evaluar posibles relaciones lineales basado en:
+
+         - Min de 4 variables logicas que mantengan constancia
+
+         - Establecimiento de contexto y relacion por investigacion de max 3 peticiones, en caso que no se logre se establece en un modo de pausa hasta ser respaldado por el usuario con fuentes fidedignas
+         
